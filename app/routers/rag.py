@@ -47,6 +47,7 @@ def ingest(req: IngestRequest):
 @router.post("/ingest_all")
 def ingest_all():
     """載入所有內建 SOP 知識庫（管理員用，可重複執行）"""
+    import sys, os
     from app.database import SessionLocal
     from app.models.knowledge import KnowledgeChunk
 
@@ -56,11 +57,20 @@ def ingest_all():
     db.commit()
     db.close()
 
-    import sys, os
-    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    import ingest_kb
-    total = ingest_kb.run()
-    return {"message": f"知識庫載入完成", "chunks": total}
+    # 確保根目錄在 sys.path
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+
+    try:
+        import importlib
+        ingest_kb = importlib.import_module("ingest_kb")
+        importlib.reload(ingest_kb)
+        total = ingest_kb.run()
+        return {"message": "知識庫載入完成", "chunks": total}
+    except Exception as e:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/stats")
