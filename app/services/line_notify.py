@@ -211,6 +211,17 @@ def send_task_message(
 
 
 # ──────────────────────────────────────────────
+# 取得用戶 LINE 顯示名稱
+# ──────────────────────────────────────────────
+def get_display_name(line_uid: str) -> str:
+    try:
+        profile = _get_api().get_profile(line_uid)
+        return profile.display_name
+    except Exception:
+        return f"用戶_{line_uid[-6:]}"
+
+
+# ──────────────────────────────────────────────
 # 純文字訊息（fallback）
 # ──────────────────────────────────────────────
 def send_text(line_uid: str, text: str) -> None:

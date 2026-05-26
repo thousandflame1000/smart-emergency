@@ -98,9 +98,18 @@ def handle_text(event: MessageEvent):
     user = db.query(User).filter(User.line_uid == line_uid).first()
 
     if not user:
+        # 自動建立帳號，抓 LINE 顯示名稱
+        from app.models.user import User as U
+        from app.services.line_notify import get_display_name
+        display_name = get_display_name(line_uid)
+        new_user = U(name=display_name, roles=["elderly"], line_uid=line_uid)
+        db.add(new_user)
+        db.commit()
         reply_text(event.reply_token,
-                   "👋 您好！請聯絡管理員將您加入系統。\n\n"
-                   "（志工/家屬請告知您的姓名，管理員會協助綁定）")
+                   f"👋 {display_name}，歡迎加入鄰里守望！\n\n"
+                   f"您已自動註冊為系統成員 🎉\n"
+                   f"管理員會協助確認您的角色。\n\n"
+                   f"傳「幫助」查看可用指令 😊")
         return
 
     if text in ["我很好", "好", "OK", "ok", "沒事"]:

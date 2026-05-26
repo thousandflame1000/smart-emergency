@@ -8,185 +8,264 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  body { background: #f4f6fb; font-family: 'Segoe UI', sans-serif; }
-  .navbar { background: #1a5276 !important; }
-  .card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
-  .metric-card { text-align: center; padding: 20px; }
-  .metric-num  { font-size: 2.4rem; font-weight: 700; }
-  .metric-label{ color: #666; font-size: .9rem; }
-  .status-ok         { color: #27ae60; font-weight: 600; }
-  .status-no_response{ color: #e74c3c; font-weight: 600; }
-  .status-pending    { color: #e67e22; }
-  .status-help_needed{ color: #e74c3c; font-weight: 600; }
-  .mode-badge-normal    { background:#27ae60; color:#fff; }
-  .mode-badge-emergency { background:#e74c3c; color:#fff; animation: blink 1s step-start infinite; }
-  @keyframes blink { 50%{opacity:.5} }
-  #map { height: 420px; border-radius: 10px; }
-  .resource-badge { font-size: .75rem; }
-  tr:hover { background: #eaf0fb; }
+:root {
+  --primary: #1a5276;
+  --success: #27ae60;
+  --danger: #e74c3c;
+  --warning: #e67e22;
+  --light-bg: #f0f4f8;
+}
+* { box-sizing: border-box; }
+body { background: var(--light-bg); font-family: 'Segoe UI', sans-serif; margin: 0; }
+
+/* Navbar */
+.navbar {
+  background: linear-gradient(135deg, #1a5276 0%, #1f618d 100%) !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,.2);
+  padding: .75rem 1.5rem;
+}
+.navbar-brand { font-size: 1.2rem; letter-spacing: .5px; }
+
+/* Cards */
+.card {
+  border: none;
+  border-radius: 16px;
+  box-shadow: 0 2px 12px rgba(0,0,0,.07);
+  transition: box-shadow .2s;
+}
+.card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.12); }
+
+/* Metric cards */
+.metric-card { text-align: center; padding: 1.25rem 1rem; }
+.metric-num  { font-size: 2.6rem; font-weight: 800; line-height: 1; }
+.metric-label{ color: #666; font-size: .82rem; margin-top: .3rem; }
+.metric-icon { font-size: 1.6rem; margin-bottom: .3rem; }
+
+/* Status */
+.status-ok          { color: #27ae60; font-weight: 700; }
+.status-no_response { color: #e74c3c; font-weight: 700; }
+.status-pending     { color: #e67e22; font-weight: 600; }
+.status-help_needed { color: #c0392b; font-weight: 700; }
+.status-confirmed_safe { color: #27ae60; font-weight: 600; }
+
+/* Mode badge */
+.mode-normal    { background: linear-gradient(135deg,#27ae60,#2ecc71); color:#fff; }
+.mode-emergency { background: linear-gradient(135deg,#e74c3c,#c0392b); color:#fff;
+                  animation: pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
+
+/* Map */
+#map { height: 400px; border-radius: 12px; }
+
+/* Section headers */
+.section-title {
+  font-size: .95rem; font-weight: 700; color: var(--primary);
+  margin-bottom: 1rem; display: flex; align-items: center; gap: .5rem;
+}
+
+/* Table */
+.table td, .table th { vertical-align: middle; font-size: .88rem; }
+.table tbody tr:hover { background: #eaf4fb; cursor: pointer; }
+
+/* Resource badges */
+.res-badge { font-size: .72rem; padding: .25rem .6rem; border-radius: 20px; }
+
+/* Alert items */
+.alert-item {
+  border-left: 4px solid;
+  border-radius: 0 8px 8px 0;
+  padding: .6rem 1rem;
+  margin-bottom: .5rem;
+  background: #fff;
+  font-size: .88rem;
+}
+.alert-item.danger { border-color: #e74c3c; }
+.alert-item.warning { border-color: #e67e22; }
+
+/* RAG */
+.rag-box { background: #f8fafc; border-radius: 12px; padding: 1rem; }
+.rag-answer { white-space: pre-wrap; line-height: 1.8; font-size: .92rem; }
+.quick-btn {
+  font-size: .78rem; padding: .3rem .7rem; border-radius: 20px;
+  border: 1px solid #c8d6e5; color: #2c3e50; background: #fff;
+  cursor: pointer; transition: all .15s;
+}
+.quick-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* Footer */
+.footer { text-align: center; color: #aaa; font-size: .78rem; padding: 2rem 0 1rem; }
 </style>
 </head>
 <body>
 
 <!-- Navbar -->
-<nav class="navbar navbar-dark mb-4">
-  <div class="container-fluid px-4">
-    <span class="navbar-brand fw-bold fs-5">🏘️ 鄰里守望平台</span>
-    <div class="d-flex align-items-center gap-3">
+<nav class="navbar navbar-dark">
+  <div class="container-fluid">
+    <span class="navbar-brand fw-bold">🏘️ 鄰里守望平台</span>
+    <div class="d-flex align-items-center gap-2">
       <span id="mode-badge" class="badge rounded-pill px-3 py-2 fs-6"></span>
       <button id="toggle-mode" class="btn btn-sm btn-outline-light">切換模式</button>
-      <span id="last-updated" class="text-light opacity-75 small"></span>
+      <a href="/admin" class="btn btn-sm btn-outline-light">⚙️ 管理</a>
+      <span id="last-updated" class="text-light opacity-50 small d-none d-md-block"></span>
     </div>
   </div>
 </nav>
 
-<div class="container-fluid px-4">
+<div class="container-fluid px-3 px-md-4 py-3">
 
-  <!-- Metrics Row -->
-  <div class="row g-3 mb-4" id="metrics-row">
+  <!-- Metrics -->
+  <div class="row g-3 mb-3">
     <div class="col-6 col-md-2">
       <div class="card metric-card">
+        <div class="metric-icon">✅</div>
         <div class="metric-num text-success" id="m-ok">—</div>
-        <div class="metric-label">✅ 已回應</div>
+        <div class="metric-label">已回應</div>
       </div>
     </div>
     <div class="col-6 col-md-2">
       <div class="card metric-card">
+        <div class="metric-icon">🚨</div>
         <div class="metric-num text-danger" id="m-no-resp">—</div>
-        <div class="metric-label">🚨 未回應</div>
+        <div class="metric-label">未回應</div>
       </div>
     </div>
     <div class="col-6 col-md-2">
       <div class="card metric-card">
+        <div class="metric-icon">⏳</div>
         <div class="metric-num text-warning" id="m-pending">—</div>
-        <div class="metric-label">⏳ 等待中</div>
+        <div class="metric-label">等待中</div>
       </div>
     </div>
     <div class="col-6 col-md-2">
       <div class="card metric-card">
+        <div class="metric-icon">🔔</div>
         <div class="metric-num text-danger" id="m-alerts">—</div>
-        <div class="metric-label">🔔 未解警報</div>
+        <div class="metric-label">未解警報</div>
       </div>
     </div>
     <div class="col-6 col-md-2">
       <div class="card metric-card">
+        <div class="metric-icon">📦</div>
         <div class="metric-num text-primary" id="m-resources">—</div>
-        <div class="metric-label">📦 可用物資</div>
+        <div class="metric-label">可用物資</div>
       </div>
     </div>
     <div class="col-6 col-md-2">
       <div class="card metric-card">
+        <div class="metric-icon">🆘</div>
         <div class="metric-num text-info" id="m-needs">—</div>
-        <div class="metric-label">🆘 待處理需求</div>
+        <div class="metric-label">待處理需求</div>
       </div>
     </div>
   </div>
 
-  <!-- Main Content -->
-  <div class="row g-3">
-
-    <!-- 長者狀態 -->
-    <div class="col-12 col-lg-6">
-      <div class="card p-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="fw-bold mb-0">👴 今日長者狀態</h6>
+  <!-- Row 1: 長者 + 地圖 -->
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-lg-5">
+      <div class="card p-3 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div class="section-title mb-0">👴 今日長者狀態</div>
           <input type="text" id="search-elderly" class="form-control form-control-sm w-50"
                  placeholder="搜尋姓名...">
         </div>
         <div class="table-responsive">
           <table class="table table-sm align-middle mb-0">
             <thead class="table-light">
-              <tr><th>姓名</th><th>電話</th><th>今日狀態</th><th>回應時間</th></tr>
+              <tr><th>姓名</th><th>電話</th><th>狀態</th><th>時間</th></tr>
             </thead>
             <tbody id="elderly-table"></tbody>
           </table>
         </div>
       </div>
     </div>
-
-    <!-- 地圖 -->
-    <div class="col-12 col-lg-6">
-      <div class="card p-3">
-        <h6 class="fw-bold mb-3">🗺️ 社區地圖</h6>
+    <div class="col-12 col-lg-7">
+      <div class="card p-3 h-100">
+        <div class="section-title">🗺️ 社區地圖</div>
         <div id="map"></div>
-        <div class="mt-2 small text-muted">
-          🟢已回應　🔴未回應　🟠等待中　📍社區物資
+        <div class="mt-2 small text-muted d-flex gap-3 flex-wrap">
+          <span>🟢 已回應</span><span>🔴 未回應</span>
+          <span>🟠 等待中</span><span>📍 物資點</span>
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- 物資清單 -->
+  <!-- Row 2: 物資 + 警報 -->
+  <div class="row g-3 mb-3">
     <div class="col-12 col-lg-6">
       <div class="card p-3">
-        <h6 class="fw-bold mb-3">📦 社區物資</h6>
+        <div class="section-title">📦 社區物資</div>
         <div id="resources-list"></div>
       </div>
     </div>
-
-    <!-- 警報 -->
     <div class="col-12 col-lg-6">
       <div class="card p-3">
-        <h6 class="fw-bold mb-3">🔔 警報記錄</h6>
+        <div class="section-title">🔔 警報記錄</div>
         <div id="alerts-list"></div>
       </div>
     </div>
+  </div>
 
-    <!-- RAG 助手 -->
+  <!-- RAG 助手 -->
+  <div class="row g-3 mb-3">
     <div class="col-12">
       <div class="card p-3">
-        <h6 class="fw-bold mb-3">🤖 志工 AI 助手 <small class="text-muted fw-normal">（長照 SOP · 急救指引 · 災時應變）</small></h6>
-        <div class="row g-2 align-items-end">
+        <div class="section-title">
+          🤖 志工 AI 助手
+          <span class="text-muted fw-normal" style="font-size:.8rem">長照 SOP · 急救指引 · 災時應變</span>
+        </div>
+        <div class="row g-2 align-items-end mb-2">
           <div class="col">
             <input type="text" id="rag-input" class="form-control"
-              placeholder="輸入問題，例如：老人跌倒怎麼辦？CPR 步驟？颱風來了要做什麼？"
+              placeholder="例如：老人跌倒怎麼辦？CPR 步驟？颱風來了要做什麼？"
               onkeydown="if(event.key==='Enter') ragQuery()">
           </div>
           <div class="col-auto">
-            <button class="btn btn-primary" onclick="ragQuery()" id="rag-btn">送出</button>
+            <button class="btn btn-primary px-4" onclick="ragQuery()" id="rag-btn">送出</button>
           </div>
         </div>
-        <div id="rag-quick" class="mt-2 d-flex flex-wrap gap-2">
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('心肺復甦術 CPR 步驟')">CPR 步驟</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('老人失溫怎麼辦')">老人失溫</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('中風怎麼辨識')">辨識中風</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('異物哽塞怎麼處理')">哈姆立克法</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('地震來了怎麼辦')">地震應變</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('颱風前要準備什麼')">颱風準備</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('低血糖緊急處理')">低血糖急救</button>
-          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('志工訪視流程')">志工訪視</button>
+        <div class="d-flex flex-wrap gap-2 mb-2">
+          <button class="quick-btn" onclick="setRagQ('心肺復甦術 CPR 步驟')">CPR 步驟</button>
+          <button class="quick-btn" onclick="setRagQ('老人失溫怎麼辦')">老人失溫</button>
+          <button class="quick-btn" onclick="setRagQ('中風怎麼辨識')">辨識中風</button>
+          <button class="quick-btn" onclick="setRagQ('異物哽塞怎麼處理')">哈姆立克法</button>
+          <button class="quick-btn" onclick="setRagQ('地震來了怎麼辦')">地震應變</button>
+          <button class="quick-btn" onclick="setRagQ('颱風前要準備什麼')">颱風準備</button>
+          <button class="quick-btn" onclick="setRagQ('低血糖緊急處理')">低血糖急救</button>
+          <button class="quick-btn" onclick="setRagQ('志工訪視流程')">志工訪視</button>
         </div>
-        <div id="rag-result" class="mt-3" style="display:none">
-          <div class="border rounded p-3 bg-light">
-            <div id="rag-answer" class="mb-2" style="white-space:pre-wrap;line-height:1.7"></div>
-            <div id="rag-sources" class="text-muted small"></div>
-          </div>
+        <div id="rag-result" class="rag-box" style="display:none">
+          <div id="rag-answer" class="rag-answer mb-2"></div>
+          <div id="rag-sources" class="text-muted small"></div>
         </div>
-        <div id="rag-error" class="mt-3 alert alert-danger py-2" style="display:none"></div>
+        <div id="rag-error" class="alert alert-danger py-2 mt-2" style="display:none"></div>
       </div>
     </div>
-
   </div>
+
 </div>
 
+<div class="footer">鄰里守望平台 · 平時照顧長者，災時守護社區 · 2026 慈悲科技創新競賽</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-const BASE = '';  // same origin
 let map, allElderly = [];
 
 const STATUS = {
-  ok:            ['✅ 已回應',   'status-ok'],
-  no_response:   ['🚨 未回應',   'status-no_response'],
-  pending:       ['⏳ 等待中',   'status-pending'],
-  help_needed:   ['🆘 需要幫忙', 'status-help_needed'],
-  confirmed_safe:['✅ 確認安全', 'status-ok'],
-  not_sent:      ['－ 未發送',   'text-muted'],
+  ok:             ['✅ 已回應',   'status-ok'],
+  no_response:    ['🚨 未回應',   'status-no_response'],
+  pending:        ['⏳ 等待中',   'status-pending'],
+  help_needed:    ['🆘 需要幫忙', 'status-help_needed'],
+  confirmed_safe: ['✅ 確認安全', 'status-confirmed_safe'],
+  not_sent:       ['－ 未發送',   'text-muted'],
 };
 
-const RESOURCE_ICON = {
+const RES_ICON = {
   water:'💧', food:'🍱', first_aid:'🩹',
   shelter:'🏠', vehicle:'🚗', tool:'🔧', other:'📦'
 };
 
-// ── 初始化地圖 ───────────────────────────────
+// ── 地圖 ─────────────────────────────────────
 function initMap() {
   map = L.map('map').setView([24.125, 120.678], 14);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -194,85 +273,77 @@ function initMap() {
   }).addTo(map);
 }
 
-// ── 更新地圖標記 ─────────────────────────────
 function updateMap(elderly, resources) {
-  // 清除舊標記
-  map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l); });
-
-  const colors = { ok:'#27ae60', no_response:'#e74c3c', pending:'#e67e22', help_needed:'#e74c3c' };
-
+  map.eachLayer(l => {
+    if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l);
+  });
+  const colors = { ok:'#27ae60', no_response:'#e74c3c', pending:'#e67e22', help_needed:'#c0392b' };
   elderly.forEach(e => {
     if (!e.lat || !e.lng) return;
     const color = colors[e.today_status] || '#95a5a6';
-    const [label] = STATUS[e.today_status] || ['—', ''];
+    const [label] = STATUS[e.today_status] || ['—',''];
     L.circleMarker([e.lat, e.lng], {
-      radius: 10, color, fillColor: color, fillOpacity: 0.85, weight: 2
-    }).bindPopup(`<b>${e.name}</b><br>${label}<br>${e.address || ''}`).addTo(map);
+      radius:11, color:'#fff', fillColor:color, fillOpacity:.9, weight:2
+    }).bindPopup(`<b>${e.name}</b><br>${label}<br><small>${e.address||''}</small>`).addTo(map);
   });
-
   resources.forEach(r => {
     if (!r.lat || !r.lng) return;
-    const icon = RESOURCE_ICON[r.resource_type] || '📦';
+    const icon = RES_ICON[r.resource_type] || '📦';
     L.marker([r.lat, r.lng]).bindPopup(
       `<b>${icon} ${r.name}</b><br>數量：${r.quantity||'—'}<br>登記人：${r.owner||'—'}`
     ).addTo(map);
   });
 }
 
-// ── 渲染長者表格 ─────────────────────────────
+// ── 長者表格 ─────────────────────────────────
 function renderElderly(data, filter='') {
-  const tbody = document.getElementById('elderly-table');
   const rows = data.filter(e => !filter ||
     e.name.includes(filter) || (e.address||'').includes(filter));
-  tbody.innerHTML = rows.map(e => {
+  document.getElementById('elderly-table').innerHTML = rows.map(e => {
     const [label, cls] = STATUS[e.today_status] || ['—',''];
     const time = e.responded_at ? e.responded_at.slice(11,16) : '—';
     return `<tr>
       <td class="fw-semibold">${e.name}</td>
-      <td>${e.phone||'—'}</td>
+      <td class="text-muted">${e.phone||'—'}</td>
       <td class="${cls}">${label}</td>
-      <td class="text-muted small">${time}</td>
+      <td class="text-muted">${time}</td>
     </tr>`;
-  }).join('');
+  }).join('') || '<tr><td colspan="4" class="text-center text-muted py-3">暫無長者資料</td></tr>';
 }
 
-// ── 渲染物資 ─────────────────────────────────
+// ── 物資 ─────────────────────────────────────
 function renderResources(data) {
   const el = document.getElementById('resources-list');
-  if (!data.length) { el.innerHTML = '<p class="text-muted">暫無物資資料</p>'; return; }
-  el.innerHTML = data.map(r => {
-    const icon = RESOURCE_ICON[r.resource_type] || '📦';
-    const avail = r.is_available
-      ? '<span class="badge bg-success resource-badge">可用</span>'
-      : '<span class="badge bg-secondary resource-badge">不可用</span>';
-    return `<div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+  if (!data.length) { el.innerHTML = '<p class="text-muted text-center py-2">暫無物資資料</p>'; return; }
+  el.innerHTML = data.map(r => `
+    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
       <div>
-        <span class="fw-semibold">${icon} ${r.name}</span>
+        <span class="fw-semibold">${RES_ICON[r.resource_type]||'📦'} ${r.name}</span>
         <span class="text-muted small ms-2">${r.quantity||''}</span><br>
         <span class="text-muted small">${r.address||''}</span>
       </div>
-      <div>${avail}</div>
-    </div>`;
-  }).join('');
+      <span class="res-badge ${r.is_available?'bg-success text-white':'bg-light text-muted'}">
+        ${r.is_available?'可用':'不可用'}
+      </span>
+    </div>`).join('');
 }
 
-// ── 渲染警報 ─────────────────────────────────
+// ── 警報 ─────────────────────────────────────
 function renderAlerts(data) {
   const el = document.getElementById('alerts-list');
   if (!data.length) {
-    el.innerHTML = '<div class="alert alert-success py-2">目前沒有未解決的警報 👍</div>';
-    return;
+    el.innerHTML = '<div class="text-success text-center py-3">👍 目前沒有未解決的警報</div>'; return;
   }
   el.innerHTML = data.map(a => {
     const cls = a.alert_type.includes('3h') ? 'danger' : 'warning';
-    const time = (a.created_at||'').slice(0,16);
-    return `<div class="alert alert-${cls} py-2 mb-2">
-      <b>${a.elderly}</b> — ${a.alert_type} <span class="float-end small">${time}</span>
+    return `<div class="alert-item ${cls}">
+      <b>${a.elderly}</b> — <span class="text-muted">${a.alert_type}</span>
+      <span class="float-end text-muted small">${(a.created_at||'').slice(0,16)}</span>
     </div>`;
   }).join('');
 }
 
-// ── 主要資料載入 ─────────────────────────────
+// ── 載入資料 ─────────────────────────────────
 async function loadAll() {
   try {
     const [summary, elderly, resources, alerts] = await Promise.all([
@@ -282,7 +353,6 @@ async function loadAll() {
       fetch('/api/dashboard/alerts').then(r=>r.json()),
     ]);
 
-    // Metrics
     const cs = summary.checkin_summary || {};
     document.getElementById('m-ok').textContent       = cs.ok || 0;
     document.getElementById('m-no-resp').textContent  = cs.no_response || 0;
@@ -291,17 +361,15 @@ async function loadAll() {
     document.getElementById('m-resources').textContent= summary.available_resources || 0;
     document.getElementById('m-needs').textContent    = summary.open_needs || 0;
 
-    // Mode badge
     const badge = document.getElementById('mode-badge');
     if (summary.mode === 'emergency') {
       badge.textContent = '🚨 緊急模式';
-      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-badge-emergency';
+      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-emergency';
     } else {
       badge.textContent = '🟢 日常模式';
-      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-badge-normal';
+      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-normal';
     }
 
-    // Timestamp
     document.getElementById('last-updated').textContent =
       '更新：' + new Date().toLocaleTimeString('zh-TW');
 
@@ -310,19 +378,15 @@ async function loadAll() {
     renderResources(resources);
     renderAlerts(alerts);
     updateMap(elderly, resources);
-
-  } catch(e) {
-    console.error(e);
-  }
+  } catch(e) { console.error(e); }
 }
 
 // ── 模式切換 ─────────────────────────────────
 document.getElementById('toggle-mode').addEventListener('click', async () => {
-  const badge = document.getElementById('mode-badge');
-  const isEmergency = badge.textContent.includes('緊急');
+  const isEmergency = document.getElementById('mode-badge').textContent.includes('緊急');
   const newMode = isEmergency ? 'normal' : 'emergency';
-  if (!confirm(`確定切換為${newMode === 'emergency' ? '緊急' : '日常'}模式？`)) return;
-  await fetch(`/api/dashboard/mode?mode=${newMode}`, { method: 'POST' });
+  if (!confirm(`確定切換為${newMode==='emergency'?'緊急':'日常'}模式？`)) return;
+  await fetch(`/api/dashboard/mode?mode=${newMode}`, { method:'POST' });
   loadAll();
 });
 
@@ -331,7 +395,7 @@ document.getElementById('search-elderly').addEventListener('input', e => {
   renderElderly(allElderly, e.target.value.trim());
 });
 
-// ── RAG 查詢 ─────────────────────────────────
+// ── RAG ──────────────────────────────────────
 function setRagQ(q) {
   document.getElementById('rag-input').value = q;
   ragQuery();
@@ -341,44 +405,34 @@ async function ragQuery() {
   const input = document.getElementById('rag-input');
   const q = input.value.trim();
   if (!q) return;
-
   const btn = document.getElementById('rag-btn');
-  btn.disabled = true;
-  btn.textContent = '查詢中…';
+  btn.disabled = true; btn.textContent = '查詢中…';
   document.getElementById('rag-result').style.display = 'none';
   document.getElementById('rag-error').style.display  = 'none';
-
   try {
     const res = await fetch('/api/rag/query', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ question: q }),
     });
     const data = await res.json();
-
     if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
-
-    const resultBox = document.getElementById('rag-result');
     document.getElementById('rag-answer').textContent = data.answer || '（無回答）';
     document.getElementById('rag-sources').textContent =
-      data.sources && data.sources.length
-        ? '📚 來源：' + data.sources.join('、')
-        : '';
-    resultBox.style.display = 'block';
+      data.sources?.length ? '📚 來源：' + data.sources.join('、') : '';
+    document.getElementById('rag-result').style.display = 'block';
   } catch(e) {
-    const errBox = document.getElementById('rag-error');
-    errBox.textContent = '查詢失敗：' + e.message;
-    errBox.style.display = 'block';
+    const err = document.getElementById('rag-error');
+    err.textContent = '查詢失敗：' + e.message;
+    err.style.display = 'block';
   } finally {
-    btn.disabled = false;
-    btn.textContent = '送出';
+    btn.disabled = false; btn.textContent = '送出';
   }
 }
 
 // ── 啟動 ─────────────────────────────────────
 initMap();
 loadAll();
-setInterval(loadAll, 30000);  // 30 秒自動重整
+setInterval(loadAll, 30000);
 </script>
 </body>
 </html>

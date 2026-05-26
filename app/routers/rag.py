@@ -44,6 +44,25 @@ def ingest(req: IngestRequest):
     return {"message": f"成功載入 {inserted} 個 chunks", "inserted": inserted}
 
 
+@router.post("/ingest_all")
+def ingest_all():
+    """載入所有內建 SOP 知識庫（管理員用，可重複執行）"""
+    from app.database import SessionLocal
+    from app.models.knowledge import KnowledgeChunk
+
+    # 先清空舊的
+    db = SessionLocal()
+    db.query(KnowledgeChunk).delete()
+    db.commit()
+    db.close()
+
+    import sys, os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+    import ingest_kb
+    total = ingest_kb.run()
+    return {"message": f"知識庫載入完成", "chunks": total}
+
+
 @router.get("/stats")
 def rag_stats():
     """

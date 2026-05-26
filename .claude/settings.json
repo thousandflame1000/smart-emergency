@@ -41,7 +41,29 @@
       "PowerShell(cd d:\\\\Smart_Emergency; $env:PYTHONIOENCODING=\"utf-8\"; $env:PYTHONUTF8=\"1\"; Start-Process -FilePath \".\\\\venv\\\\Scripts\\\\python.exe\" -ArgumentList \"-m\",\"uvicorn\",\"app.main:app\",\"--port\",\"8080\" -WindowStyle Hidden; Start-Sleep -Seconds 4; curl.exe -s http://localhost:8080/health)",
       "PowerShell(curl.exe -s http://localhost:8080/api/dashboard/summary)",
       "PowerShell(curl.exe -s -X POST http://localhost:8080/api/rag/query -H \"Content-Type: application/json\" --data-binary \"@.\\\\test_q.json\")",
-      "PowerShell(Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; cd d:\\\\Smart_Emergency; $env:PYTHONIOENCODING=\"utf-8\"; $env:PYTHONUTF8=\"1\"; Start-Process -FilePath \".\\\\venv\\\\Scripts\\\\python.exe\" -ArgumentList \"-m\",\"uvicorn\",\"app.main:app\",\"--port\",\"8080\" -WindowStyle Hidden; Start-Sleep -Seconds 4; curl.exe -s http://localhost:8080/health; Write-Host \"\"; curl.exe -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/admin; Write-Host \" /admin\"; curl.exe -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/api/dashboard/users; Write-Host \" /api/dashboard/users\")"
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; cd d:\\\\Smart_Emergency; $env:PYTHONIOENCODING=\"utf-8\"; $env:PYTHONUTF8=\"1\"; Start-Process -FilePath \".\\\\venv\\\\Scripts\\\\python.exe\" -ArgumentList \"-m\",\"uvicorn\",\"app.main:app\",\"--port\",\"8080\" -WindowStyle Hidden; Start-Sleep -Seconds 4; curl.exe -s http://localhost:8080/health; Write-Host \"\"; curl.exe -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/admin; Write-Host \" /admin\"; curl.exe -s -o /dev/null -w \"%{http_code}\" http://localhost:8080/api/dashboard/users; Write-Host \" /api/dashboard/users\")",
+      "PowerShell(gh auth status 2>&1)",
+      "PowerShell(winget install --id GitHub.cli -e --silent 2>&1)",
+      "PowerShell(npm install -g gh 2>&1 | Select-Object -Last 3; \\(Get-Command git\\).Source)",
+      "PowerShell(git config --global credential.helper)",
+      "PowerShell(cd \"$env:APPDATA\\\\..\\\\Local\\\\GitHubDesktop\" -ErrorAction SilentlyContinue; Get-ChildItem . -ErrorAction SilentlyContinue | Select-Object Name -First 5; Write-Host \"---\"; Test-Path \"$env:LOCALAPPDATA\\\\GitHubDesktop\")",
+      "PowerShell($ghUrl = \"https://github.com/cli/cli/releases/download/v2.63.2/gh_2.63.2_windows_amd64.zip\"; $dest = \"$env:TEMP\\\\gh.zip\"; Invoke-WebRequest -Uri $ghUrl -OutFile $dest -UseBasicParsing; Expand-Archive -Path $dest -DestinationPath \"$env:TEMP\\\\gh_bin\" -Force; $ghExe = Get-ChildItem \"$env:TEMP\\\\gh_bin\" -Recurse -Filter \"gh.exe\" | Select-Object -First 1; Copy-Item $ghExe.FullName \"$env:LOCALAPPDATA\\\\Microsoft\\\\WindowsApps\\\\gh.exe\"; gh --version)",
+      "PowerShell($ghExe = Get-ChildItem \"$env:TEMP\\\\gh_bin\" -Recurse -Filter \"gh.exe\" | Select-Object -First 1 -ExpandProperty FullName; Write-Host $ghExe; & $ghExe --version)",
+      "PowerShell($gh = \"C:\\\\Users\\\\20050\\\\AppData\\\\Local\\\\Temp\\\\gh_bin\\\\bin\\\\gh.exe\"; & $gh auth login --web --git-protocol https 2>&1 | Select-Object -First 10)",
+      "PowerShell($gh = \"C:\\\\Users\\\\20050\\\\AppData\\\\Local\\\\Temp\\\\gh_bin\\\\bin\\\\gh.exe\"; cd d:\\\\Smart_Emergency; & $gh repo create smart-emergency --public --description \"鄰里守望平台：平時照顧長者，災時守護社區\" --source . --remote origin --push 2>&1)",
+      "PowerShell(npm install -g @railway/cli 2>&1)",
+      "PowerShell(railway --version 2>&1)",
+      "PowerShell($railwayBin = \\(npm root -g\\).Replace\\(\"node_modules\", \"\"\\) + \"railway.cmd\"; Test-Path $railwayBin; & $railwayBin --version 2>&1)",
+      "PowerShell($railway = \\(npm root -g\\).Replace\\(\"node_modules\", \"\"\\) + \"railway.cmd\"; & $railway login --browserless 2>&1)",
+      "PowerShell($railway = \\(npm root -g\\).Replace\\(\"node_modules\", \"\"\\) + \"railway.cmd\"; & $railway login 2>&1 | Select-Object -First 5)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue | Stop-Process -Force; Start-Sleep -Seconds 1; cd d:\\\\Smart_Emergency; $env:PYTHONIOENCODING=\"utf-8\"; $env:PYTHONUTF8=\"1\"; Start-Process -FilePath \".\\\\venv\\\\Scripts\\\\python.exe\" -ArgumentList \"-m\",\"uvicorn\",\"app.main:app\",\"--port\",\"8080\" -WindowStyle Hidden; Start-Sleep -Seconds 4; curl.exe -s http://localhost:8080/health)",
+      "PowerShell(\\(Get-Command ngrok -ErrorAction SilentlyContinue\\).Source)",
+      "PowerShell(curl.exe -s -X POST \"http://localhost:8080/api/dashboard/users?name=%E5%8D%9A%E6%9F%B3%E5%99%A3&roles=elderly&line_uid=U6cbaafb42a8a80808aed2793332a9339&phone=0000000000\" 2>&1)",
+      "PowerShell(curl.exe -s -X POST \"http://localhost:8080/api/dashboard/users?name=%E5%8D%9A%E6%9F%B3%E5%99%A3&roles=elderly&line_uid=U6cbaafb42a8a80808aed2793332a9339\")",
+      "PowerShell($body = \"name=%E5%8D%9A%E6%9F%B3%E5%99%A3&roles=elderly&line_uid=U6cbaafb42a8a80808aed2793332a9339\")",
+      "PowerShell(curl.exe -s https://smart-emergency-production-d744.up.railway.app/health)",
+      "PowerShell(curl.exe -s https://smart-emergency-production-d744.up.railway.app/api/dashboard/summary)",
+      "PowerShell(curl.exe -s https://smart-emergency-production-d744.up.railway.app/api/rag/stats)"
     ]
   }
 }
