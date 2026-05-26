@@ -13,8 +13,8 @@ engine = create_engine(
     _db_url,
     connect_args={"check_same_thread": False} if _is_sqlite else {},
     pool_pre_ping=not _is_sqlite,
-    # SQLite: 關閉 insertmanyvalues 避免自訂 UUID type 的 sentinel 衝突
-    use_insertmanyvalues=not _is_sqlite,
+    # 關閉 insertmanyvalues 避免自訂 UUID TypeDecorator 的 sentinel 衝突
+    use_insertmanyvalues=False,
     **({} if _is_sqlite else {"pool_size": 5, "max_overflow": 10}),
 )
 
