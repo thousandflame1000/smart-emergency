@@ -63,14 +63,13 @@ def ingest_all():
         sys.path.insert(0, root)
 
     try:
-        import importlib
+        import importlib, traceback
         ingest_kb = importlib.import_module("ingest_kb")
         importlib.reload(ingest_kb)
         total = ingest_kb.run()
         return {"message": "知識庫載入完成", "chunks": total}
     except Exception as e:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=500, detail=str(e))
+        return {"error": str(e), "traceback": traceback.format_exc()[-1000:]}
 
 
 @router.get("/stats")
