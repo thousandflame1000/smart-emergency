@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鄰里守望平台</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body { background: #f4f6fb; font-family: 'Segoe UI', sans-serif; }
+  .navbar { background: #1a5276 !important; }
+  .card { border: none; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .metric-card { text-align: center; padding: 20px; }
+  .metric-num  { font-size: 2.4rem; font-weight: 700; }
+  .metric-label{ color: #666; font-size: .9rem; }
+  .status-ok         { color: #27ae60; font-weight: 600; }
+  .status-no_response{ color: #e74c3c; font-weight: 600; }
+  .status-pending    { color: #e67e22; }
+  .status-help_needed{ color: #e74c3c; font-weight: 600; }
+  .mode-badge-normal    { background:#27ae60; color:#fff; }
+  .mode-badge-emergency { background:#e74c3c; color:#fff; animation: blink 1s step-start infinite; }
+  @keyframes blink { 50%{opacity:.5} }
+  #map { height: 420px; border-radius: 10px; }
+  .resource-badge { font-size: .75rem; }
+  tr:hover { background: #eaf0fb; }
+</style>
+</head>
+<body>
+
+<!-- Navbar -->
+<nav class="navbar navbar-dark mb-4">
+  <div class="container-fluid px-4">
+    <span class="navbar-brand fw-bold fs-5">🏘️ 鄰里守望平台</span>
+    <div class="d-flex align-items-center gap-3">
+      <span id="mode-badge" class="badge rounded-pill px-3 py-2 fs-6"></span>
+      <button id="toggle-mode" class="btn btn-sm btn-outline-light">切換模式</button>
+      <span id="last-updated" class="text-light opacity-75 small"></span>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid px-4">
+
+  <!-- Metrics Row -->
+  <div class="row g-3 mb-4" id="metrics-row">
+    <div class="col-6 col-md-2">
+      <div class="card metric-card">
+        <div class="metric-num text-success" id="m-ok">—</div>
+        <div class="metric-label">✅ 已回應</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card metric-card">
+        <div class="metric-num text-danger" id="m-no-resp">—</div>
+        <div class="metric-label">🚨 未回應</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card metric-card">
+        <div class="metric-num text-warning" id="m-pending">—</div>
+        <div class="metric-label">⏳ 等待中</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card metric-card">
+        <div class="metric-num text-danger" id="m-alerts">—</div>
+        <div class="metric-label">🔔 未解警報</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card metric-card">
+        <div class="metric-num text-primary" id="m-resources">—</div>
+        <div class="metric-label">📦 可用物資</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-2">
+      <div class="card metric-card">
+        <div class="metric-num text-info" id="m-needs">—</div>
+        <div class="metric-label">🆘 待處理需求</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="row g-3">
+
+    <!-- 長者狀態 -->
+    <div class="col-12 col-lg-6">
+      <div class="card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0">👴 今日長者狀態</h6>
+          <input type="text" id="search-elderly" class="form-control form-control-sm w-50"
+                 placeholder="搜尋姓名...">
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0">
+            <thead class="table-light">
+              <tr><th>姓名</th><th>電話</th><th>今日狀態</th><th>回應時間</th></tr>
+            </thead>
+            <tbody id="elderly-table"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- 地圖 -->
+    <div class="col-12 col-lg-6">
+      <div class="card p-3">
+        <h6 class="fw-bold mb-3">🗺️ 社區地圖</h6>
+        <div id="map"></div>
+        <div class="mt-2 small text-muted">
+          🟢已回應　🔴未回應　🟠等待中　📍社區物資
+        </div>
+      </div>
+    </div>
+
+    <!-- 物資清單 -->
+    <div class="col-12 col-lg-6">
+      <div class="card p-3">
+        <h6 class="fw-bold mb-3">📦 社區物資</h6>
+        <div id="resources-list"></div>
+      </div>
+    </div>
+
+    <!-- 警報 -->
+    <div class="col-12 col-lg-6">
+      <div class="card p-3">
+        <h6 class="fw-bold mb-3">🔔 警報記錄</h6>
+        <div id="alerts-list"></div>
+      </div>
+    </div>
+
+    <!-- RAG 助手 -->
+    <div class="col-12">
+      <div class="card p-3">
+        <h6 class="fw-bold mb-3">🤖 志工 AI 助手 <small class="text-muted fw-normal">（長照 SOP · 急救指引 · 災時應變）</small></h6>
+        <div class="row g-2 align-items-end">
+          <div class="col">
+            <input type="text" id="rag-input" class="form-control"
+              placeholder="輸入問題，例如：老人跌倒怎麼辦？CPR 步驟？颱風來了要做什麼？"
+              onkeydown="if(event.key==='Enter') ragQuery()">
+          </div>
+          <div class="col-auto">
+            <button class="btn btn-primary" onclick="ragQuery()" id="rag-btn">送出</button>
+          </div>
+        </div>
+        <div id="rag-quick" class="mt-2 d-flex flex-wrap gap-2">
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('心肺復甦術 CPR 步驟')">CPR 步驟</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('老人失溫怎麼辦')">老人失溫</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('中風怎麼辨識')">辨識中風</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('異物哽塞怎麼處理')">哈姆立克法</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('地震來了怎麼辦')">地震應變</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('颱風前要準備什麼')">颱風準備</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('低血糖緊急處理')">低血糖急救</button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="setRagQ('志工訪視流程')">志工訪視</button>
+        </div>
+        <div id="rag-result" class="mt-3" style="display:none">
+          <div class="border rounded p-3 bg-light">
+            <div id="rag-answer" class="mb-2" style="white-space:pre-wrap;line-height:1.7"></div>
+            <div id="rag-sources" class="text-muted small"></div>
+          </div>
+        </div>
+        <div id="rag-error" class="mt-3 alert alert-danger py-2" style="display:none"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const BASE = '';  // same origin
+let map, allElderly = [];
+
+const STATUS = {
+  ok:            ['✅ 已回應',   'status-ok'],
+  no_response:   ['🚨 未回應',   'status-no_response'],
+  pending:       ['⏳ 等待中',   'status-pending'],
+  help_needed:   ['🆘 需要幫忙', 'status-help_needed'],
+  confirmed_safe:['✅ 確認安全', 'status-ok'],
+  not_sent:      ['－ 未發送',   'text-muted'],
+};
+
+const RESOURCE_ICON = {
+  water:'💧', food:'🍱', first_aid:'🩹',
+  shelter:'🏠', vehicle:'🚗', tool:'🔧', other:'📦'
+};
+
+// ── 初始化地圖 ───────────────────────────────
+function initMap() {
+  map = L.map('map').setView([24.125, 120.678], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+}
+
+// ── 更新地圖標記 ─────────────────────────────
+function updateMap(elderly, resources) {
+  // 清除舊標記
+  map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l); });
+
+  const colors = { ok:'#27ae60', no_response:'#e74c3c', pending:'#e67e22', help_needed:'#e74c3c' };
+
+  elderly.forEach(e => {
+    if (!e.lat || !e.lng) return;
+    const color = colors[e.today_status] || '#95a5a6';
+    const [label] = STATUS[e.today_status] || ['—', ''];
+    L.circleMarker([e.lat, e.lng], {
+      radius: 10, color, fillColor: color, fillOpacity: 0.85, weight: 2
+    }).bindPopup(`<b>${e.name}</b><br>${label}<br>${e.address || ''}`).addTo(map);
+  });
+
+  resources.forEach(r => {
+    if (!r.lat || !r.lng) return;
+    const icon = RESOURCE_ICON[r.resource_type] || '📦';
+    L.marker([r.lat, r.lng]).bindPopup(
+      `<b>${icon} ${r.name}</b><br>數量：${r.quantity||'—'}<br>登記人：${r.owner||'—'}`
+    ).addTo(map);
+  });
+}
+
+// ── 渲染長者表格 ─────────────────────────────
+function renderElderly(data, filter='') {
+  const tbody = document.getElementById('elderly-table');
+  const rows = data.filter(e => !filter ||
+    e.name.includes(filter) || (e.address||'').includes(filter));
+  tbody.innerHTML = rows.map(e => {
+    const [label, cls] = STATUS[e.today_status] || ['—',''];
+    const time = e.responded_at ? e.responded_at.slice(11,16) : '—';
+    return `<tr>
+      <td class="fw-semibold">${e.name}</td>
+      <td>${e.phone||'—'}</td>
+      <td class="${cls}">${label}</td>
+      <td class="text-muted small">${time}</td>
+    </tr>`;
+  }).join('');
+}
+
+// ── 渲染物資 ─────────────────────────────────
+function renderResources(data) {
+  const el = document.getElementById('resources-list');
+  if (!data.length) { el.innerHTML = '<p class="text-muted">暫無物資資料</p>'; return; }
+  el.innerHTML = data.map(r => {
+    const icon = RESOURCE_ICON[r.resource_type] || '📦';
+    const avail = r.is_available
+      ? '<span class="badge bg-success resource-badge">可用</span>'
+      : '<span class="badge bg-secondary resource-badge">不可用</span>';
+    return `<div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+      <div>
+        <span class="fw-semibold">${icon} ${r.name}</span>
+        <span class="text-muted small ms-2">${r.quantity||''}</span><br>
+        <span class="text-muted small">${r.address||''}</span>
+      </div>
+      <div>${avail}</div>
+    </div>`;
+  }).join('');
+}
+
+// ── 渲染警報 ─────────────────────────────────
+function renderAlerts(data) {
+  const el = document.getElementById('alerts-list');
+  if (!data.length) {
+    el.innerHTML = '<div class="alert alert-success py-2">目前沒有未解決的警報 👍</div>';
+    return;
+  }
+  el.innerHTML = data.map(a => {
+    const cls = a.alert_type.includes('3h') ? 'danger' : 'warning';
+    const time = (a.created_at||'').slice(0,16);
+    return `<div class="alert alert-${cls} py-2 mb-2">
+      <b>${a.elderly}</b> — ${a.alert_type} <span class="float-end small">${time}</span>
+    </div>`;
+  }).join('');
+}
+
+// ── 主要資料載入 ─────────────────────────────
+async function loadAll() {
+  try {
+    const [summary, elderly, resources, alerts] = await Promise.all([
+      fetch('/api/dashboard/summary').then(r=>r.json()),
+      fetch('/api/dashboard/elderly').then(r=>r.json()),
+      fetch('/api/resources/').then(r=>r.json()),
+      fetch('/api/dashboard/alerts').then(r=>r.json()),
+    ]);
+
+    // Metrics
+    const cs = summary.checkin_summary || {};
+    document.getElementById('m-ok').textContent       = cs.ok || 0;
+    document.getElementById('m-no-resp').textContent  = cs.no_response || 0;
+    document.getElementById('m-pending').textContent  = cs.pending || 0;
+    document.getElementById('m-alerts').textContent   = summary.active_alerts || 0;
+    document.getElementById('m-resources').textContent= summary.available_resources || 0;
+    document.getElementById('m-needs').textContent    = summary.open_needs || 0;
+
+    // Mode badge
+    const badge = document.getElementById('mode-badge');
+    if (summary.mode === 'emergency') {
+      badge.textContent = '🚨 緊急模式';
+      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-badge-emergency';
+    } else {
+      badge.textContent = '🟢 日常模式';
+      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-badge-normal';
+    }
+
+    // Timestamp
+    document.getElementById('last-updated').textContent =
+      '更新：' + new Date().toLocaleTimeString('zh-TW');
+
+    allElderly = elderly;
+    renderElderly(elderly);
+    renderResources(resources);
+    renderAlerts(alerts);
+    updateMap(elderly, resources);
+
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ── 模式切換 ─────────────────────────────────
+document.getElementById('toggle-mode').addEventListener('click', async () => {
+  const badge = document.getElementById('mode-badge');
+  const isEmergency = badge.textContent.includes('緊急');
+  const newMode = isEmergency ? 'normal' : 'emergency';
+  if (!confirm(`確定切換為${newMode === 'emergency' ? '緊急' : '日常'}模式？`)) return;
+  await fetch(`/api/dashboard/mode?mode=${newMode}`, { method: 'POST' });
+  loadAll();
+});
+
+// ── 搜尋 ─────────────────────────────────────
+document.getElementById('search-elderly').addEventListener('input', e => {
+  renderElderly(allElderly, e.target.value.trim());
+});
+
+// ── RAG 查詢 ─────────────────────────────────
+function setRagQ(q) {
+  document.getElementById('rag-input').value = q;
+  ragQuery();
+}
+
+async function ragQuery() {
+  const input = document.getElementById('rag-input');
+  const q = input.value.trim();
+  if (!q) return;
+
+  const btn = document.getElementById('rag-btn');
+  btn.disabled = true;
+  btn.textContent = '查詢中…';
+  document.getElementById('rag-result').style.display = 'none';
+  document.getElementById('rag-error').style.display  = 'none';
+
+  try {
+    const res = await fetch('/api/rag/query', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ question: q }),
+    });
+    const data = await res.json();
+
+    if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
+
+    const resultBox = document.getElementById('rag-result');
+    document.getElementById('rag-answer').textContent = data.answer || '（無回答）';
+    document.getElementById('rag-sources').textContent =
+      data.sources && data.sources.length
+        ? '📚 來源：' + data.sources.join('、')
+        : '';
+    resultBox.style.display = 'block';
+  } catch(e) {
+    const errBox = document.getElementById('rag-error');
+    errBox.textContent = '查詢失敗：' + e.message;
+    errBox.style.display = 'block';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '送出';
+  }
+}
+
+// ── 啟動 ─────────────────────────────────────
+initMap();
+loadAll();
+setInterval(loadAll, 30000);  // 30 秒自動重整
+</script>
+</body>
+</html>

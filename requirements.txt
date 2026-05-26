@@ -1,0 +1,24 @@
+# Web Framework
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+
+# Settings
+pydantic-settings==2.6.1
+
+# Database
+sqlalchemy==2.0.36
+psycopg2-binary==2.9.10
+pgvector==0.3.6
+
+# LINE Bot SDK v3
+line-bot-sdk==3.13.0
+
+# Gemini
+google-generativeai==0.8.3
+
+# Scheduler
+apscheduler==3.10.4
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.18

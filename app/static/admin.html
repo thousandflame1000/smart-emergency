@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鄰里守望 — 管理後台</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<style>
+  body { background:#f4f6fb; font-family:'Segoe UI',sans-serif; }
+  .navbar { background:#1a5276 !important; }
+  .card  { border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  .tab-content { padding-top:1.5rem; }
+  .table td, .table th { vertical-align:middle; }
+  .btn-icon { padding:.2rem .5rem; font-size:.8rem; }
+  .role-badge { font-size:.72rem; }
+</style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark mb-4">
+  <div class="container-fluid px-4">
+    <span class="navbar-brand fw-bold fs-5">🏘️ 鄰里守望 — 管理後台</span>
+    <a href="/" class="btn btn-sm btn-outline-light">← 返回儀表板</a>
+  </div>
+</nav>
+
+<div class="container-fluid px-4">
+
+  <!-- Tabs -->
+  <ul class="nav nav-tabs" id="mainTab">
+    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-elderly">👴 長者管理</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-volunteers">🙋 志工/家屬</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-resources">📦 物資管理</a></li>
+  </ul>
+
+  <div class="tab-content">
+
+    <!-- ── 長者管理 ────────────────────────────── -->
+    <div class="tab-pane fade show active" id="tab-elderly">
+      <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0">長者名單</h6>
+          <button class="btn btn-primary btn-sm" onclick="openUserModal('elderly')">＋ 新增長者</button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead class="table-light">
+              <tr><th>姓名</th><th>電話</th><th>地址</th><th>LINE UID</th><th>狀態</th><th>操作</th></tr>
+            </thead>
+            <tbody id="elderly-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 志工/家屬 ──────────────────────────── -->
+    <div class="tab-pane fade" id="tab-volunteers">
+      <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0">志工 / 家屬名單</h6>
+          <div class="d-flex gap-2">
+            <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增志工</button>
+            <button class="btn btn-outline-primary btn-sm" onclick="openUserModal('family')">＋ 新增家屬</button>
+          </div>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead class="table-light">
+              <tr><th>姓名</th><th>角色</th><th>電話</th><th>LINE UID</th><th>狀態</th><th>操作</th></tr>
+            </thead>
+            <tbody id="volunteers-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 物資管理 ────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-resources">
+      <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0">物資清單</h6>
+          <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead class="table-light">
+              <tr><th>名稱</th><th>類型</th><th>數量</th><th>地址</th><th>登記人</th><th>狀態</th><th>操作</th></tr>
+            </thead>
+            <tbody id="resources-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 使用者 Modal ──────────────────────────── -->
+<div class="modal fade" id="userModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="userModalTitle">新增使用者</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="user-id">
+        <input type="hidden" id="user-role">
+        <div class="mb-3">
+          <label class="form-label">姓名 <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="user-name" placeholder="王大明">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">電話</label>
+          <input type="text" class="form-control" id="user-phone" placeholder="0912345678">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">地址</label>
+          <input type="text" class="form-control" id="user-address" placeholder="台中市南區...">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">LINE User ID</label>
+          <input type="text" class="form-control" id="user-line" placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+          <div class="form-text">綁定後才能收到 LINE 通知</div>
+        </div>
+        <div class="row g-2">
+          <div class="col">
+            <label class="form-label">緯度</label>
+            <input type="number" step="0.0001" class="form-control" id="user-lat" placeholder="24.1234">
+          </div>
+          <div class="col">
+            <label class="form-label">經度</label>
+            <input type="number" step="0.0001" class="form-control" id="user-lng" placeholder="120.6789">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" onclick="saveUser()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 物資 Modal ─────────────────────────────── -->
+<div class="modal fade" id="resourceModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="resourceModalTitle">新增物資</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="res-id">
+        <div class="mb-3">
+          <label class="form-label">名稱 <span class="text-danger">*</span></label>
+          <input type="text" class="form-control" id="res-name" placeholder="備用飲用水">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">類型</label>
+          <select class="form-select" id="res-type">
+            <option value="water">💧 飲用水</option>
+            <option value="food">🍱 食物</option>
+            <option value="first_aid">🩹 急救</option>
+            <option value="shelter">🏠 庇護所</option>
+            <option value="vehicle">🚗 交通工具</option>
+            <option value="tool">🔧 工具</option>
+            <option value="other">📦 其他</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">數量</label>
+          <input type="text" class="form-control" id="res-quantity" placeholder="約 50 公升">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">地址</label>
+          <input type="text" class="form-control" id="res-address">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">備註</label>
+          <input type="text" class="form-control" id="res-note">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">登記人（選擇志工）</label>
+          <select class="form-select" id="res-owner-id">
+            <option value="">— 選擇 —</option>
+          </select>
+        </div>
+        <div class="row g-2">
+          <div class="col">
+            <label class="form-label">緯度</label>
+            <input type="number" step="0.0001" class="form-control" id="res-lat">
+          </div>
+          <div class="col">
+            <label class="form-label">經度</label>
+            <input type="number" step="0.0001" class="form-control" id="res-lng">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" onclick="saveResource()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+let allUsers = [];
+const ROLE_LABEL = { elderly:'長者', volunteer:'志工', family:'家屬', admin:'管理員' };
+const ROLE_COLOR = { elderly:'primary', volunteer:'success', family:'warning', admin:'danger' };
+const RES_ICON   = { water:'💧', food:'🍱', first_aid:'🩹', shelter:'🏠', vehicle:'🚗', tool:'🔧', other:'📦' };
+
+// ── 載入資料 ──────────────────────────────────
+async function loadAll() {
+  const [users, resources] = await Promise.all([
+    fetch('/api/dashboard/users').then(r=>r.json()),
+    fetch('/api/resources/?available_only=false').then(r=>r.json()),
+  ]);
+  allUsers = users;
+  renderElderly(users.filter(u => u.roles.includes('elderly')));
+  renderVolunteers(users.filter(u => !u.roles.includes('elderly')));
+  renderResources(resources);
+  populateOwnerSelect(users.filter(u => u.roles.includes('volunteer') || u.roles.includes('admin')));
+}
+
+// ── 長者表格 ──────────────────────────────────
+function renderElderly(data) {
+  document.getElementById('elderly-tbody').innerHTML = data.map(u => `
+    <tr>
+      <td class="fw-semibold">${u.name}</td>
+      <td>${u.phone||'—'}</td>
+      <td class="small text-muted">${u.address||'—'}</td>
+      <td class="small text-muted">${u.line_uid ? u.line_uid.slice(0,12)+'…' : '<span class="text-danger">未綁定</span>'}</td>
+      <td>${u.is_active ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>'}</td>
+      <td>
+        <button class="btn btn-outline-primary btn-icon me-1" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
+        <button class="btn btn-outline-danger btn-icon" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
+      </td>
+    </tr>`).join('');
+}
+
+// ── 志工/家屬表格 ─────────────────────────────
+function renderVolunteers(data) {
+  document.getElementById('volunteers-tbody').innerHTML = data.map(u => `
+    <tr>
+      <td class="fw-semibold">${u.name}</td>
+      <td>${u.roles.map(r=>`<span class="badge bg-${ROLE_COLOR[r]||'secondary'} role-badge me-1">${ROLE_LABEL[r]||r}</span>`).join('')}</td>
+      <td>${u.phone||'—'}</td>
+      <td class="small text-muted">${u.line_uid ? u.line_uid.slice(0,12)+'…' : '<span class="text-danger">未綁定</span>'}</td>
+      <td>${u.is_active ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>'}</td>
+      <td>
+        <button class="btn btn-outline-primary btn-icon me-1" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
+        <button class="btn btn-outline-danger btn-icon" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
+      </td>
+    </tr>`).join('');
+}
+
+// ── 物資表格 ──────────────────────────────────
+function renderResources(data) {
+  document.getElementById('resources-tbody').innerHTML = data.map(r => `
+    <tr>
+      <td class="fw-semibold">${r.name}</td>
+      <td>${RES_ICON[r.resource_type]||'📦'} ${r.resource_type}</td>
+      <td>${r.quantity||'—'}</td>
+      <td class="small text-muted">${r.address||'—'}</td>
+      <td>${r.owner||'—'}</td>
+      <td>
+        <span class="badge ${r.is_available?'bg-success':'bg-secondary'}" style="cursor:pointer"
+          onclick="toggleResource('${r.id}')">
+          ${r.is_available?'可用':'不可用'}
+        </span>
+      </td>
+      <td>
+        <button class="btn btn-outline-primary btn-icon me-1" onclick='editResource(${JSON.stringify(r)})'>編輯</button>
+        <button class="btn btn-outline-danger btn-icon" onclick="deleteResource('${r.id}','${r.name}')">刪除</button>
+      </td>
+    </tr>`).join('');
+}
+
+function populateOwnerSelect(volunteers) {
+  const sel = document.getElementById('res-owner-id');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— 選擇 —</option>' +
+    volunteers.map(v=>`<option value="${v.id}">${v.name}</option>`).join('');
+  sel.value = cur;
+}
+
+// ── 使用者 Modal ──────────────────────────────
+function openUserModal(role, user=null) {
+  document.getElementById('userModalTitle').textContent =
+    user ? '編輯使用者' : `新增${ROLE_LABEL[role]||role}`;
+  document.getElementById('user-id').value      = user?.id || '';
+  document.getElementById('user-role').value    = role;
+  document.getElementById('user-name').value    = user?.name || '';
+  document.getElementById('user-phone').value   = user?.phone || '';
+  document.getElementById('user-address').value = user?.address || '';
+  document.getElementById('user-line').value    = user?.line_uid || '';
+  document.getElementById('user-lat').value     = user?.lat || '';
+  document.getElementById('user-lng').value     = user?.lng || '';
+  new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+
+function editUser(u) {
+  const role = u.roles[0] || 'elderly';
+  openUserModal(role, u);
+}
+
+async function saveUser() {
+  const id      = document.getElementById('user-id').value;
+  const role    = document.getElementById('user-role').value;
+  const name    = document.getElementById('user-name').value.trim();
+  const phone   = document.getElementById('user-phone').value.trim();
+  const address = document.getElementById('user-address').value.trim();
+  const lineUid = document.getElementById('user-line').value.trim();
+  const lat     = document.getElementById('user-lat').value;
+  const lng     = document.getElementById('user-lng').value;
+
+  if (!name) { alert('請輸入姓名'); return; }
+
+  const params = new URLSearchParams({ name });
+  if (phone)   params.set('phone', phone);
+  if (address) params.set('address', address);
+  if (lineUid) params.set('line_uid', lineUid);
+  if (lat)     params.set('lat', lat);
+  if (lng)     params.set('lng', lng);
+
+  if (id) {
+    // 更新
+    await fetch(`/api/dashboard/users/${id}?${params}`, { method: 'PUT' });
+  } else {
+    // 新增
+    params.append('roles', role);
+    await fetch(`/api/dashboard/users?${params}`, { method: 'POST' });
+  }
+
+  bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+  loadAll();
+}
+
+async function deleteUser(id, name) {
+  if (!confirm(`確定刪除「${name}」？此動作無法復原。`)) return;
+  await fetch(`/api/dashboard/users/${id}`, { method: 'DELETE' });
+  loadAll();
+}
+
+// ── 物資 Modal ────────────────────────────────
+function openResourceModal(res=null) {
+  document.getElementById('resourceModalTitle').textContent = res ? '編輯物資' : '新增物資';
+  document.getElementById('res-id').value       = res?.id || '';
+  document.getElementById('res-name').value     = res?.name || '';
+  document.getElementById('res-type').value     = res?.resource_type || 'water';
+  document.getElementById('res-quantity').value = res?.quantity || '';
+  document.getElementById('res-address').value  = res?.address || '';
+  document.getElementById('res-note').value     = res?.note || '';
+  document.getElementById('res-lat').value      = res?.lat || '';
+  document.getElementById('res-lng').value      = res?.lng || '';
+  new bootstrap.Modal(document.getElementById('resourceModal')).show();
+}
+
+function editResource(r) { openResourceModal(r); }
+
+async function saveResource() {
+  const id       = document.getElementById('res-id').value;
+  const name     = document.getElementById('res-name').value.trim();
+  const resType  = document.getElementById('res-type').value;
+  const quantity = document.getElementById('res-quantity').value.trim();
+  const address  = document.getElementById('res-address').value.trim();
+  const note     = document.getElementById('res-note').value.trim();
+  const ownerId  = document.getElementById('res-owner-id').value;
+  const lat      = document.getElementById('res-lat').value;
+  const lng      = document.getElementById('res-lng').value;
+
+  if (!name) { alert('請輸入名稱'); return; }
+
+  const params = new URLSearchParams({ name, resource_type: resType });
+  if (quantity) params.set('quantity', quantity);
+  if (address)  params.set('address', address);
+  if (note)     params.set('note', note);
+  if (lat)      params.set('lat', lat);
+  if (lng)      params.set('lng', lng);
+
+  if (id) {
+    await fetch(`/api/resources/${id}?${params}`, { method: 'PUT' });
+  } else {
+    if (!ownerId) { alert('請選擇登記人'); return; }
+    params.set('owner_id', ownerId);
+    await fetch(`/api/resources/?${params}`, { method: 'POST' });
+  }
+
+  bootstrap.Modal.getInstance(document.getElementById('resourceModal')).hide();
+  loadAll();
+}
+
+async function deleteResource(id, name) {
+  if (!confirm(`確定刪除「${name}」？`)) return;
+  await fetch(`/api/resources/${id}`, { method: 'DELETE' });
+  loadAll();
+}
+
+async function toggleResource(id) {
+  await fetch(`/api/resources/${id}/toggle`, { method: 'PATCH' });
+  loadAll();
+}
+
+// ── 啟動 ─────────────────────────────────────
+loadAll();
+</script>
+</body>
+</html>

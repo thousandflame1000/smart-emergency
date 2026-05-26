@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+.DS_Store
+*.db
+*.db-shm
+*.db-wal
+server.log
+server_err.log
+test_q.json
+test_query.json
