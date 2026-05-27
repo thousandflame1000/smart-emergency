@@ -50,15 +50,11 @@ def query(question: str) -> dict:
         response = model.generate_content(prompt)
         answer   = response.text
     except Exception as e:
-        err = str(e)
-        if "429" in err or "RESOURCE_EXHAUSTED" in err or "quota" in err.lower():
-            # Rate limit — 直接回傳最相關 chunk 的摘要
-            answer = (
-                "⚠️ AI 生成暫時達到速率限制，以下為直接摘錄最相關資料：\n\n"
-                + results[0]["content"][:600]
-            )
-        else:
-            raise
+        # 任何錯誤都 fallback 回傳最相關 chunk
+        answer = (
+            "⚠️ AI 生成暫時無法使用，以下為直接摘錄最相關資料：\n\n"
+            + results[0]["content"][:600]
+        )
 
     sources = list({r["source"] for r in results})
 
