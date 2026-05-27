@@ -139,11 +139,13 @@ def handle_text(event: MessageEvent):
         return
 
     if text in ["幫助", "help", "?"]:
+        is_vol = user.roles and any(r in user.roles for r in ["volunteer", "family", "admin"])
+        extra = "\n・直接輸入問題 — AI 急救 / 照護知識查詢 🤖" if is_vol else ""
         reply_text(event.reply_token,
                    "📖 可用指令：\n"
                    "・「我很好」— 回覆今日打卡\n"
                    "・「狀態」— 查看系統模式\n"
-                   "・「需要幫忙」— 觸發緊急通知")
+                   f"・「需要幫忙」— 觸發緊急通知{extra}")
         return
 
     if "需要幫忙" in text or "救命" in text or "緊急" in text:
@@ -171,6 +173,21 @@ def handle_text(event: MessageEvent):
         reply_text(event.reply_token,
                    "🆘 已收到您的求助！\n正在通知家屬和志工，請稍候。")
         return
+
+    # 志工 / 家屬 → 問題導向 RAG 查詢
+    if user.roles and any(r in user.roles for r in ["volunteer", "family", "admin"]):
+        if len(text) >= 8:  # 足夠長的問題才送 RAG
+            try:
+                from app.services import rag as rag_svc
+                result = rag_svc.query(text)
+                if result.get("has_answer"):
+                    answer = result["answer"]
+                    sources = result.get("sources", [])
+                    src_line = f"\n\n📚 來源：{' | '.join(sources[:2])}" if sources else ""
+                    reply_text(event.reply_token, f"🤖 AI 助手回答：\n\n{answer[:1000]}{src_line}")
+                    return
+            except Exception:
+                pass
 
     reply_text(event.reply_token,
                "收到您的訊息了 😊\n"
