@@ -39,6 +39,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # 緊急模式：每 30 分鐘自動媒合物資
+    from app.services.dispatch import auto_dispatch
+    _scheduler.add_job(
+        auto_dispatch,
+        IntervalTrigger(minutes=30),
+        id="auto_dispatch",
+        replace_existing=True,
+    )
+
     _scheduler.start()
     logger.info(f"Scheduler started. Checkin at {checkin_hour:02d}:{checkin_minute:02d}")
 

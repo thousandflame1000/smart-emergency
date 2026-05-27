@@ -195,14 +195,14 @@ def create_need(
 
 @router.post("/needs/{need_id}/match")
 def match_need(need_id: str, resource_id: str, db: Session = Depends(get_db)):
-    """手動媒合需求與物資"""
-    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
-    resource = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
+    """手動媒合需求與物資，並立即 LINE 通知志工"""
+    from app.services.dispatch import manual_dispatch
+    return manual_dispatch(need_id, resource_id, db)
 
-    if not need or not resource:
-        return {"error": "Not found"}
 
-    need.matched_resource_id = resource.id
-    need.status = "matched"
-    db.commit()
-    return {"message": "媒合成功", "need_id": need_id, "resource_id": resource_id}
+@router.post("/dispatch")
+def run_dispatch():
+    """立即執行一次自動媒合（管理員手動觸發）"""
+    from app.services.dispatch import auto_dispatch
+    result = auto_dispatch()
+    return result

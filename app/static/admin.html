@@ -85,7 +85,12 @@
       <div class="card p-3 mb-3">
         <div class="d-flex justify-content-between align-items-center mb-3">
           <h6 class="fw-bold mb-0">物資清單</h6>
-          <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
+          <div class="d-flex gap-2">
+            <button class="btn btn-danger btn-sm" onclick="runDispatch()" id="dispatch-btn">
+              🚨 立即自動媒合
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
+          </div>
         </div>
         <div class="table-responsive">
           <table class="table table-sm table-hover">
@@ -510,6 +515,27 @@ async function testQuery() {
     el.textContent = data.answer + (data.sources?.length ? '\n\n📚 ' + data.sources.join(' | ') : '');
   } catch(e) {
     el.textContent = '查詢失敗：' + e.message;
+  }
+}
+
+// ── 自動媒合 ──────────────────────────────────
+async function runDispatch() {
+  const btn = document.getElementById('dispatch-btn');
+  if (!confirm('立即執行物資自動媒合？\n（系統需在緊急模式下才會真正媒合）')) return;
+  btn.disabled = true; btn.textContent = '媒合中…';
+  try {
+    const res = await fetch('/api/resources/dispatch', { method: 'POST' });
+    const data = await res.json();
+    if (data.reason === 'not_emergency') {
+      alert('⚠️ 目前為日常模式，請先從儀表板切換至緊急模式');
+    } else {
+      alert(`媒合完成！\n✅ 成功媒合：${data.matched} 筆\n📤 通知志工：${data.notified} 人\n⏭️ 無對應物資：${data.skipped} 筆`);
+      loadAll();
+    }
+  } catch(e) {
+    alert('執行失敗：' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '🚨 立即自動媒合';
   }
 }
 
