@@ -31,6 +31,7 @@
     <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-elderly">👴 長者管理</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-volunteers">🙋 志工/家屬</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-resources">📦 物資管理</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-kb" onclick="loadKB()">🧠 知識庫</a></li>
   </ul>
 
   <div class="tab-content">
@@ -89,6 +90,31 @@
             <tbody id="resources-tbody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <!-- ── 知識庫管理 ────────────────────────────── -->
+    <div class="tab-pane fade" id="tab-kb">
+      <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0">🧠 RAG 知識庫狀態</h6>
+          <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm" onclick="loadKB()">🔄 刷新</button>
+            <button class="btn btn-warning btn-sm" id="ingest-btn" onclick="ingestAll()">📥 重新載入知識庫</button>
+          </div>
+        </div>
+        <div id="kb-stats" class="mb-3">
+          <div class="spinner-border spinner-border-sm text-primary me-2"></div>載入中...
+        </div>
+        <div id="ingest-status" class="alert" style="display:none"></div>
+        <hr>
+        <div class="section-title fw-bold mb-2">🔍 測試 RAG 查詢</div>
+        <div class="input-group mb-2">
+          <input type="text" id="kb-test-q" class="form-control"
+            placeholder="例如：CPR 步驟" onkeydown="if(event.key==='Enter') testQuery()">
+          <button class="btn btn-primary" onclick="testQuery()">查詢</button>
+        </div>
+        <div id="kb-test-result" class="p-3 bg-light rounded" style="display:none; white-space:pre-wrap; font-size:.88rem"></div>
       </div>
     </div>
 
@@ -402,6 +428,84 @@ async function deleteResource(id, name) {
 async function toggleResource(id) {
   await fetch(`/api/resources/${id}/toggle`, { method: 'PATCH' });
   loadAll();
+}
+
+// ── 知識庫 ───────────────────────────────────
+async function loadKB() {
+  try {
+    const [stats, status] = await Promise.all([
+      fetch('/api/rag/stats').then(r=>r.json()),
+      fetch('/api/rag/ingest_status').then(r=>r.json()),
+    ]);
+    const cats = (stats.categories||[]).map(c=>`<span class="badge bg-secondary me-1">${c}</span>`).join('');
+    document.getElementById('kb-stats').innerHTML = `
+      <div class="row g-3">
+        <div class="col-auto">
+          <div class="border rounded p-3 text-center" style="min-width:120px">
+            <div style="font-size:2rem;font-weight:800">${stats.total_chunks||0}</div>
+            <div class="text-muted small">總 Chunks</div>
+          </div>
+        </div>
+        <div class="col-auto">
+          <div class="border rounded p-3 text-center" style="min-width:120px">
+            <div style="font-size:2rem;font-weight:800;color:#27ae60">${stats.chunks_with_embedding||0}</div>
+            <div class="text-muted small">已向量化</div>
+          </div>
+        </div>
+        <div class="col d-flex align-items-center flex-wrap gap-1">
+          <span class="text-muted me-2">分類：</span>${cats||'<span class="text-muted">無</span>'}
+        </div>
+      </div>`;
+    if (status.running) {
+      showIngestStatus('info', '⏳ 知識庫載入中，請稍候…');
+      setTimeout(loadKB, 3000);
+    } else if (status.done) {
+      showIngestStatus('success', `✅ 上次載入完成，共 ${status.chunks} 個 chunks`);
+    } else if (status.error) {
+      showIngestStatus('danger', `❌ 錯誤：${status.error}`);
+    }
+  } catch(e) {
+    document.getElementById('kb-stats').textContent = '載入失敗：' + e.message;
+  }
+}
+
+function showIngestStatus(type, msg) {
+  const el = document.getElementById('ingest-status');
+  el.className = `alert alert-${type}`;
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function ingestAll() {
+  if (!confirm('這會清空現有知識庫並重新載入，約需 1-2 分鐘，確定嗎？')) return;
+  document.getElementById('ingest-btn').disabled = true;
+  showIngestStatus('info', '⏳ 送出請求…');
+  try {
+    const res = await fetch('/api/rag/ingest_all', { method:'POST' });
+    const data = await res.json();
+    showIngestStatus('info', data.message || '正在載入…');
+    setTimeout(()=>{ loadKB(); document.getElementById('ingest-btn').disabled=false; }, 3000);
+  } catch(e) {
+    showIngestStatus('danger', '請求失敗：' + e.message);
+    document.getElementById('ingest-btn').disabled = false;
+  }
+}
+
+async function testQuery() {
+  const q = document.getElementById('kb-test-q').value.trim();
+  if (!q) return;
+  const el = document.getElementById('kb-test-result');
+  el.style.display='block'; el.textContent='查詢中…';
+  try {
+    const res = await fetch('/api/rag/query',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({question:q})
+    });
+    const data = await res.json();
+    el.textContent = data.answer + (data.sources?.length ? '\n\n📚 ' + data.sources.join(' | ') : '');
+  } catch(e) {
+    el.textContent = '查詢失敗：' + e.message;
+  }
 }
 
 // ── 啟動 ─────────────────────────────────────
