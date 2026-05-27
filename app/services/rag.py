@@ -14,7 +14,7 @@ from app.config import settings
 genai.configure(api_key=settings.GEMINI_API_KEY)
 
 EMBED_MODEL        = "models/gemini-embedding-001"   # 3072-dim
-GENERATE_MODEL     = "models/gemini-2.0-flash-lite"
+GENERATE_MODEL     = "models/gemini-2.5-flash"
 SIMILARITY_THRESHOLD = 0.70
 TOP_K              = 3
 
