@@ -118,7 +118,46 @@
         </div>
         <div id="ingest-status" class="alert" style="display:none"></div>
         <hr>
-        <div class="section-title fw-bold mb-2">🔍 測試 RAG 查詢</div>
+
+        <!-- 新增文件 -->
+        <div class="fw-bold mb-3">📄 新增知識文件</div>
+        <div class="row g-2 mb-2">
+          <div class="col-md-6">
+            <label class="form-label small text-muted">來源名稱（顯示在回答底部）</label>
+            <input type="text" id="doc-source" class="form-control form-control-sm"
+              placeholder="例如：台中市急救手冊 v1.0">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label small text-muted">分類</label>
+            <select class="form-select form-select-sm" id="doc-category">
+              <option value="first_aid">🩹 急救</option>
+              <option value="eldercare">👴 長者照護</option>
+              <option value="disaster">🌀 災時應變</option>
+              <option value="volunteer">🙋 志工管理</option>
+              <option value="other">📄 其他</option>
+            </select>
+          </div>
+        </div>
+        <div class="mb-2">
+          <label class="form-label small text-muted">文件內容（貼上 SOP、指引、注意事項等）</label>
+          <textarea id="doc-content" class="form-control" rows="7"
+            placeholder="貼上文件內容...&#10;系統會自動切段（每 400 字一段）並向量化。"></textarea>
+        </div>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <span class="text-muted small" id="doc-char-count">0 字</span>
+          <button class="btn btn-success" onclick="addDocument()" id="doc-add-btn">
+            ➕ 新增並向量化
+          </button>
+        </div>
+        <div id="doc-result" class="alert" style="display:none"></div>
+
+        <hr>
+        <!-- 現有文件列表 -->
+        <div class="fw-bold mb-2">📚 目前知識文件</div>
+        <div id="doc-list" class="mb-3"></div>
+
+        <hr>
+        <div class="fw-bold mb-2">🔍 測試 RAG 查詢</div>
         <div class="input-group mb-2">
           <input type="text" id="kb-test-q" class="form-control"
             placeholder="例如：CPR 步驟" onkeydown="if(event.key==='Enter') testQuery()">
@@ -441,6 +480,74 @@ async function toggleResource(id) {
 }
 
 // ── 知識庫 ───────────────────────────────────
+// ── 文件字數即時計算 ──────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  const ta = document.getElementById('doc-content');
+  if (ta) ta.addEventListener('input', () => {
+    document.getElementById('doc-char-count').textContent = ta.value.length + ' 字';
+  });
+});
+
+// ── 新增文件 ──────────────────────────────────
+async function addDocument() {
+  const source   = document.getElementById('doc-source').value.trim();
+  const category = document.getElementById('doc-category').value;
+  const content  = document.getElementById('doc-content').value.trim();
+  const resultEl = document.getElementById('doc-result');
+  const btn      = document.getElementById('doc-add-btn');
+
+  if (!source)  { alert('請填寫來源名稱'); return; }
+  if (!content) { alert('請貼上文件內容'); return; }
+  if (content.length < 30) { alert('內容太短（至少 30 字）'); return; }
+
+  btn.disabled = true; btn.textContent = '向量化中…（約 10-30 秒）';
+  resultEl.style.display = 'none';
+
+  try {
+    const res = await fetch('/api/rag/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, source, category }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
+    resultEl.className = 'alert alert-success';
+    resultEl.textContent = `✅ 成功新增 ${data.inserted} 個 chunks！來源：${source}`;
+    resultEl.style.display = 'block';
+    // 清空輸入
+    document.getElementById('doc-content').value = '';
+    document.getElementById('doc-source').value  = '';
+    document.getElementById('doc-char-count').textContent = '0 字';
+    loadKB();  // 刷新統計
+  } catch(e) {
+    resultEl.className = 'alert alert-danger';
+    resultEl.textContent = '❌ 失敗：' + e.message;
+    resultEl.style.display = 'block';
+  } finally {
+    btn.disabled = false; btn.textContent = '➕ 新增並向量化';
+  }
+}
+
+// ── 文件列表 ──────────────────────────────────
+async function loadDocList() {
+  try {
+    const stats = await fetch('/api/rag/stats').then(r=>r.json());
+    const cats = stats.categories || [];
+    const catLabel = { first_aid:'🩹 急救', eldercare:'👴 長者照護',
+                       disaster:'🌀 災時應變', volunteer:'🙋 志工管理', other:'📄 其他' };
+    const el = document.getElementById('doc-list');
+    if (!cats.length) {
+      el.innerHTML = '<p class="text-muted">（知識庫為空）</p>';
+      return;
+    }
+    el.innerHTML = cats.map(c => `
+      <span class="badge bg-secondary me-2 mb-1 p-2" style="font-size:.85rem">
+        ${catLabel[c]||c}
+      </span>`).join('') +
+      `<p class="text-muted small mt-2">共 ${stats.total_chunks} 個 chunks，點「🔄 刷新」更新</p>`;
+  } catch(e) {}
+}
+
 async function loadKB() {
   try {
     const [stats, status] = await Promise.all([
@@ -474,6 +581,7 @@ async function loadKB() {
     } else if (status.error) {
       showIngestStatus('danger', `❌ 錯誤：${status.error}`);
     }
+    loadDocList();
   } catch(e) {
     document.getElementById('kb-stats').textContent = '載入失敗：' + e.message;
   }
