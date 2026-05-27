@@ -113,6 +113,22 @@ def handle_text(event: MessageEvent):
         return
 
     if text in ["我很好", "好", "OK", "ok", "沒事"]:
+        # 更新今日打卡狀態
+        from app.models.checkin import DailyCheckin
+        from datetime import date, datetime
+        today_checkin = (
+            db.query(DailyCheckin)
+            .filter(
+                DailyCheckin.elderly_id == user.id,
+                DailyCheckin.date == date.today(),
+                DailyCheckin.status == "pending",
+            )
+            .first()
+        )
+        if today_checkin:
+            today_checkin.status = "ok"
+            today_checkin.responded_at = datetime.now()
+            db.commit()
         reply_text(event.reply_token, "✅ 收到，今天也要保重喔！")
         return
 
@@ -131,6 +147,27 @@ def handle_text(event: MessageEvent):
         return
 
     if "需要幫忙" in text or "救命" in text or "緊急" in text:
+        # 更新今日打卡狀態並觸發警報
+        from app.models.checkin import DailyCheckin
+        from datetime import date, datetime
+        today_checkin = (
+            db.query(DailyCheckin)
+            .filter(
+                DailyCheckin.elderly_id == user.id,
+                DailyCheckin.date == date.today(),
+            )
+            .first()
+        )
+        if today_checkin:
+            today_checkin.status = "help_needed"
+            today_checkin.responded_at = datetime.now()
+            db.commit()
+            # 通知家屬 / 志工
+            try:
+                from app.services.alert import send_alerts_for_checkin
+                send_alerts_for_checkin(today_checkin.id, "help_needed", db)
+            except Exception:
+                pass
         reply_text(event.reply_token,
                    "🆘 已收到您的求助！\n正在通知家屬和志工，請稍候。")
         return

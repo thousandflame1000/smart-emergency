@@ -8,6 +8,14 @@ from app.models.care_relation import CareRelation
 from app.services.line_notify import send_alert_message
 
 
+def send_alerts_for_checkin(checkin_id, alert_type: str, db: Session) -> None:
+    """即時發送警報（長者主動求助時呼叫）"""
+    checkin = db.query(DailyCheckin).filter(DailyCheckin.id == checkin_id).first()
+    if not checkin:
+        return
+    _escalate(db, checkin, alert_type, datetime.now())
+
+
 def check_no_response() -> None:
     """Scheduler 每 15 分鐘呼叫：偵測未回應長者並升級通知"""
     db: Session = SessionLocal()
