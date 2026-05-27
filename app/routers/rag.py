@@ -44,32 +44,51 @@ def ingest(req: IngestRequest):
     return {"message": f"成功載入 {inserted} 個 chunks", "inserted": inserted}
 
 
+_ingest_status = {"running": False, "done": False, "chunks": 0, "error": None}
+
 @router.post("/ingest_all")
 def ingest_all():
-    """載入所有內建 SOP 知識庫（管理員用，可重複執行）"""
-    import sys, os
-    from app.database import SessionLocal
-    from app.models.knowledge import KnowledgeChunk
+    """載入所有內建 SOP 知識庫（背景執行，立即回傳）"""
+    import threading
 
-    # 先清空舊的
-    db = SessionLocal()
-    db.query(KnowledgeChunk).delete()
-    db.commit()
-    db.close()
+    if _ingest_status["running"]:
+        return {"message": "正在載入中，請稍後查詢 /api/rag/ingest_status"}
 
-    # 確保根目錄在 sys.path
-    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    def _run():
+        import sys, os, importlib
+        _ingest_status["running"] = True
+        _ingest_status["done"]    = False
+        _ingest_status["error"]   = None
+        try:
+            from app.database import SessionLocal
+            from app.models.knowledge import KnowledgeChunk
+            db = SessionLocal()
+            db.query(KnowledgeChunk).delete()
+            db.commit()
+            db.close()
 
-    try:
-        import importlib, traceback
-        ingest_kb = importlib.import_module("ingest_kb")
-        importlib.reload(ingest_kb)
-        total = ingest_kb.run()
-        return {"message": "知識庫載入完成", "chunks": total}
-    except Exception as e:
-        return {"error": str(e), "traceback": traceback.format_exc()[-1000:]}
+            root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            if root not in sys.path:
+                sys.path.insert(0, root)
+
+            ingest_kb = importlib.import_module("ingest_kb")
+            importlib.reload(ingest_kb)
+            total = ingest_kb.run()
+            _ingest_status["chunks"] = total
+            _ingest_status["done"]   = True
+        except Exception as e:
+            _ingest_status["error"] = str(e)
+        finally:
+            _ingest_status["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"message": "開始載入知識庫（背景執行），約需 1-2 分鐘，請用 GET /api/rag/ingest_status 查詢進度"}
+
+
+@router.get("/ingest_status")
+def ingest_status():
+    """查詢知識庫載入進度"""
+    return _ingest_status
 
 
 @router.get("/stats")
