@@ -195,6 +195,23 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
     return {"message": "刪除成功"}
 
 
+@router.post("/trigger_checkin")
+def trigger_checkin(db: Session = Depends(get_db)):
+    """立即發送打卡訊息給所有長者（Demo / 測試用）"""
+    import threading
+    def _run():
+        from app.services.checkin import send_daily_checkins
+        send_daily_checkins()
+    threading.Thread(target=_run, daemon=True).start()
+    elderly_count = (
+        db.query(User)
+        .filter(User.roles.contains(["elderly"]), User.is_active == True,
+                User.line_uid != None)
+        .count()
+    )
+    return {"message": f"已觸發打卡，共 {elderly_count} 位有綁定 LINE 的長者"}
+
+
 @router.post("/relations")
 def create_relation(
     elderly_id: str,

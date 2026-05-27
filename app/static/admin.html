@@ -20,7 +20,12 @@
 <nav class="navbar navbar-dark mb-4">
   <div class="container-fluid px-4">
     <span class="navbar-brand fw-bold fs-5">🏘️ 鄰里守望 — 管理後台</span>
-    <a href="/" class="btn btn-sm btn-outline-light">← 返回儀表板</a>
+    <div class="d-flex gap-2">
+      <button class="btn btn-sm btn-warning fw-bold" onclick="triggerCheckin()" id="checkin-btn">
+        📤 立即發送打卡
+      </button>
+      <a href="/" class="btn btn-sm btn-outline-light">← 返回儀表板</a>
+    </div>
   </div>
 </nav>
 
@@ -505,6 +510,23 @@ async function testQuery() {
     el.textContent = data.answer + (data.sources?.length ? '\n\n📚 ' + data.sources.join(' | ') : '');
   } catch(e) {
     el.textContent = '查詢失敗：' + e.message;
+  }
+}
+
+// ── 立即發送打卡 ──────────────────────────────
+async function triggerCheckin() {
+  const btn = document.getElementById('checkin-btn');
+  if (!confirm('立即對所有有綁定 LINE 的長者發送打卡訊息？')) return;
+  btn.disabled = true; btn.textContent = '發送中…';
+  try {
+    const res = await fetch('/api/dashboard/trigger_checkin', { method:'POST' });
+    const data = await res.json();
+    alert(data.message || '已發送');
+    loadAll();
+  } catch(e) {
+    alert('發送失敗：' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '📤 立即發送打卡';
   }
 }
 
