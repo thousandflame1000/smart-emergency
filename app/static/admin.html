@@ -36,6 +36,7 @@
     <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-elderly">👴 長者管理</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-volunteers">🙋 志工/家屬</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-resources">📦 物資管理</a></li>
+    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-relations" onclick="loadRelations()">🔗 照護關係</a></li>
     <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-kb" onclick="loadKB()">🧠 知識庫</a></li>
   </ul>
 
@@ -98,6 +99,25 @@
               <tr><th>名稱</th><th>類型</th><th>數量</th><th>地址</th><th>登記人</th><th>狀態</th><th>操作</th></tr>
             </thead>
             <tbody id="resources-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 照護關係管理 ───────────────────────────── -->
+    <div class="tab-pane fade" id="tab-relations">
+      <div class="card p-3 mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold mb-0">🔗 長者照護關係（誰照顧誰）</h6>
+          <button class="btn btn-primary btn-sm" onclick="openRelationModal()">＋ 新增關係</button>
+        </div>
+        <p class="text-muted small mb-3">設定後，長者未回應時系統會依順序通知對應的家屬/志工</p>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead class="table-light">
+              <tr><th>長者</th><th>聯絡人</th><th>關係</th><th>通知順序</th><th>操作</th></tr>
+            </thead>
+            <tbody id="relations-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -212,6 +232,45 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
         <button class="btn btn-primary" onclick="saveUser()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 照護關係 Modal ─────────────────────────── -->
+<div class="modal fade" id="relationModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">新增照護關係</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">長者 <span class="text-danger">*</span></label>
+          <select class="form-select" id="rel-elderly-id"></select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">聯絡人（家屬/志工）<span class="text-danger">*</span></label>
+          <select class="form-select" id="rel-contact-id"></select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">關係</label>
+          <select class="form-select" id="rel-relation">
+            <option value="family">家屬</option>
+            <option value="volunteer">志工</option>
+            <option value="neighbor">鄰居</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">通知順序（1=最先通知）</label>
+          <input type="number" min="1" max="10" class="form-control" id="rel-order" value="1">
+          <div class="form-text">未回應時，順序小的先被通知</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" onclick="saveRelation()">儲存</button>
       </div>
     </div>
   </div>
@@ -624,6 +683,56 @@ async function testQuery() {
   } catch(e) {
     el.textContent = '查詢失敗：' + e.message;
   }
+}
+
+// ── 照護關係 ──────────────────────────────────
+async function loadRelations() {
+  const [rels, users] = await Promise.all([
+    fetch('/api/dashboard/relations').then(r=>r.json()),
+    fetch('/api/dashboard/users').then(r=>r.json()),
+  ]);
+  // 填 modal 選單
+  const elderly = users.filter(u=>u.roles.includes('elderly'));
+  const contacts = users.filter(u=>!u.roles.includes('elderly'));
+  document.getElementById('rel-elderly-id').innerHTML =
+    elderly.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
+  document.getElementById('rel-contact-id').innerHTML =
+    contacts.map(u=>`<option value="${u.id}">${u.name} (${u.roles.join('/')})</option>`).join('');
+  // 表格
+  const RMAP = {family:'家屬', volunteer:'志工', neighbor:'鄰居'};
+  document.getElementById('relations-tbody').innerHTML = rels.length
+    ? rels.map(r=>`
+        <tr>
+          <td class="fw-semibold">${r.elderly_name}</td>
+          <td>${r.contact_name}</td>
+          <td><span class="badge bg-secondary">${RMAP[r.relation]||r.relation}</span></td>
+          <td class="text-center">${r.notify_order}</td>
+          <td><button class="btn btn-outline-danger btn-icon"
+                onclick="deleteRelation('${r.id}','${r.elderly_name}','${r.contact_name}')">刪除</button></td>
+        </tr>`).join('')
+    : '<tr><td colspan="5" class="text-center text-muted py-3">尚未設定任何照護關係</td></tr>';
+}
+
+function openRelationModal() {
+  new bootstrap.Modal(document.getElementById('relationModal')).show();
+}
+
+async function saveRelation() {
+  const elderly_id   = document.getElementById('rel-elderly-id').value;
+  const contact_id   = document.getElementById('rel-contact-id').value;
+  const relation     = document.getElementById('rel-relation').value;
+  const notify_order = document.getElementById('rel-order').value;
+  if (!elderly_id || !contact_id) { alert('請選擇長者和聯絡人'); return; }
+  const params = new URLSearchParams({elderly_id, contact_id, relation, notify_order});
+  await fetch(`/api/dashboard/relations?${params}`, {method:'POST'});
+  bootstrap.Modal.getInstance(document.getElementById('relationModal')).hide();
+  loadRelations();
+}
+
+async function deleteRelation(id, elderly, contact) {
+  if (!confirm(`確定刪除「${elderly} ↔ ${contact}」的照護關係？`)) return;
+  await fetch(`/api/dashboard/relations/${id}`, {method:'DELETE'});
+  loadRelations();
 }
 
 // ── 自動媒合 ──────────────────────────────────

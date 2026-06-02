@@ -97,16 +97,47 @@ def list_alerts(db: Session = Depends(get_db)):
 
 @router.post("/mode")
 def set_mode(mode: str, db: Session = Depends(get_db)):
-    """切換系統模式：normal / emergency"""
+    """切換系統模式：normal / emergency，並廣播 LINE 通知"""
     if mode not in ("normal", "emergency"):
         return {"error": "mode must be 'normal' or 'emergency'"}
 
     cfg = db.query(SystemConfig).filter(SystemConfig.key == "mode").first()
+    old_mode = cfg.value if cfg else "normal"
+
     if cfg:
         cfg.value = mode
     else:
         db.add(SystemConfig(key="mode", value=mode))
     db.commit()
+
+    # 模式有變化才廣播
+    if old_mode != mode:
+        import threading
+        def _broadcast():
+            try:
+                from app.services.line_notify import send_text
+                all_users = db.query(User).filter(
+                    User.line_uid != None,
+                    User.is_active == True,
+                ).all()
+                if mode == "emergency":
+                    msg = ("🚨 社區緊急模式啟動\n\n"
+                           "請保持冷靜，確認自身安全。\n"
+                           "如需協助請傳「需要幫忙」或按選單按鈕。\n"
+                           "管理員將持續更新資訊。")
+                else:
+                    msg = ("✅ 緊急模式已解除\n\n"
+                           "社區恢復日常模式。\n"
+                           "感謝所有志工的協助！")
+                for u in all_users:
+                    try:
+                        send_text(u.line_uid, msg)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+        threading.Thread(target=_broadcast, daemon=True).start()
+
     return {"mode": mode, "message": f"已切換為{'緊急' if mode == 'emergency' else '日常'}模式"}
 
 
@@ -212,6 +243,28 @@ def trigger_checkin(db: Session = Depends(get_db)):
     return {"message": f"已觸發打卡，共 {elderly_count} 位有綁定 LINE 的長者"}
 
 
+@router.get("/relations")
+def list_relations(elderly_id: str | None = None, db: Session = Depends(get_db)):
+    """列出照護關係"""
+    from app.models.care_relation import CareRelation
+    q = db.query(CareRelation)
+    if elderly_id:
+        q = q.filter(CareRelation.elderly_id == elderly_id)
+    rels = q.order_by(CareRelation.elderly_id, CareRelation.notify_order).all()
+    return [
+        {
+            "id":           str(r.id),
+            "elderly_id":   str(r.elderly_id),
+            "elderly_name": r.elderly.name if r.elderly else "?",
+            "contact_id":   str(r.contact_id),
+            "contact_name": r.contact.name if r.contact else "?",
+            "relation":     r.relation,
+            "notify_order": r.notify_order,
+        }
+        for r in rels
+    ]
+
+
 @router.post("/relations")
 def create_relation(
     elderly_id: str,
@@ -230,4 +283,39 @@ def create_relation(
     )
     db.add(rel)
     db.commit()
-    return {"message": "關係建立成功"}
+    return {"message": "關係建立成功", "id": str(rel.id)}
+
+
+@router.delete("/relations/{relation_id}")
+def delete_relation(relation_id: str, db: Session = Depends(get_db)):
+    """刪除照護關係"""
+    from app.models.care_relation import CareRelation
+    from fastapi import HTTPException
+    rel = db.query(CareRelation).filter(CareRelation.id == relation_id).first()
+    if not rel:
+        raise HTTPException(status_code=404, detail="Not found")
+    db.delete(rel)
+    db.commit()
+    return {"message": "關係刪除成功"}
+
+
+@router.get("/alerts/history")
+def alert_history(limit: int = 50, db: Session = Depends(get_db)):
+    """全部警報（含已解決），給儀表板歷史記錄用"""
+    alerts = (
+        db.query(Alert)
+        .order_by(Alert.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {
+            "id":         str(a.id),
+            "elderly":    a.elderly.name if a.elderly else "unknown",
+            "alert_type": a.alert_type,
+            "status":     a.status,
+            "created_at": str(a.created_at),
+            "resolved_at": str(a.resolved_at) if a.resolved_at else None,
+        }
+        for a in alerts
+    ]

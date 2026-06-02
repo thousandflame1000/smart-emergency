@@ -154,6 +154,7 @@ def send_task_message(
     need_description: str,
     address: str,
     resource_name: str,
+    need_id: str = "",
 ) -> None:
     flex = {
         "type": "bubble",
@@ -188,8 +189,9 @@ def send_task_message(
                     "color": "#27ACB2",
                     "action": {
                         "type": "postback",
-                        "label": "✅ 我可以幫忙",
-                        "data": "action=task_accept",
+                        "label": "✅ 已送達",
+                        "data": f"action=task_delivered&need_id={need_id}",
+                        "displayText": "已完成送達！",
                     },
                 },
                 {
@@ -197,8 +199,8 @@ def send_task_message(
                     "style": "secondary",
                     "action": {
                         "type": "postback",
-                        "label": "❌ 無法幫忙",
-                        "data": "action=task_decline",
+                        "label": "❌ 無法前往",
+                        "data": f"action=task_decline&need_id={need_id}",
                     },
                 },
             ],

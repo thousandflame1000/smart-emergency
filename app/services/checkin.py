@@ -69,8 +69,9 @@ def mark_checkin(checkin_id: str, status: str, db: Session) -> DailyCheckin | No
 
 
 def confirm_safe(checkin_id: str, confirmed_by_id: str, db: Session) -> DailyCheckin | None:
-    """志工/家屬確認長者安全"""
+    """志工/家屬確認長者安全 → 同時關閉所有相關 Alert"""
     from datetime import datetime
+    from app.models.alert import Alert
 
     checkin = db.query(DailyCheckin).filter(
         DailyCheckin.id == checkin_id
@@ -79,9 +80,17 @@ def confirm_safe(checkin_id: str, confirmed_by_id: str, db: Session) -> DailyChe
     if not checkin:
         return None
 
+    now = datetime.now()
     checkin.status = "confirmed_safe"
     checkin.confirmed_by = confirmed_by_id
-    checkin.confirmed_at = datetime.now()
+    checkin.confirmed_at = now
+
+    # 自動關閉所有未解決的相關警報
+    db.query(Alert).filter(
+        Alert.checkin_id == checkin.id,
+        Alert.status == "sent",
+    ).update({"status": "resolved", "resolved_by": confirmed_by_id, "resolved_at": now})
+
     db.commit()
     db.refresh(checkin)
     return checkin

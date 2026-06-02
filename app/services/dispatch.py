@@ -79,12 +79,13 @@ def auto_dispatch() -> dict:
                 )
             best = candidates[0]
 
-            # 媒合
+            # 媒合 + 標記物資為不可用（避免重複媒合）
             need.matched_resource_id = best.id
             need.status = "matched"
+            best.is_available = False          # ← 斷點 3 修復
             matched += 1
 
-            # 通知物資登記人（志工）
+            # 通知物資登記人（志工），帶 need_id 讓他能回報送達
             owner = best.owner
             if owner and owner.line_uid:
                 try:
@@ -93,6 +94,7 @@ def auto_dispatch() -> dict:
                         need_description=need.description or need.need_type,
                         address=need.address or "地址未填",
                         resource_name=best.name,
+                        need_id=str(need.id),  # ← 用於送達確認
                     )
                     notified += 1
                 except Exception:
@@ -118,6 +120,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
 
     need.matched_resource_id = resource.id
     need.status = "matched"
+    resource.is_available = False   # ← 避免重複媒合
     db.commit()
 
     notified = False
@@ -129,6 +132,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
                 need_description=need.description or need.need_type,
                 address=need.address or "地址未填",
                 resource_name=resource.name,
+                need_id=str(need.id),
             )
             notified = True
         except Exception:

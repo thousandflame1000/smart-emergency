@@ -228,11 +228,35 @@ def handle_postback(event: PostbackEvent):
             checkin_svc.confirm_safe(checkin_id, str(user.id), db)
         reply_text(event.reply_token, "✅ 感謝您的確認，已更新紀錄。")
 
-    elif action == "task_accept":
+    elif action == "task_delivered":
+        need_id = data.get("need_id", "")
+        if need_id:
+            from app.models.need import CommunityNeed
+            need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+            if need:
+                need.status = "fulfilled"
+                db.commit()
         reply_text(event.reply_token,
-                   "✅ 謝謝您願意幫忙！管理員會盡快與您聯繫詳情。")
+                   "✅ 感謝您完成送達！已記錄在案，辛苦了 🙏")
 
     elif action == "task_decline":
+        need_id = data.get("need_id", "")
+        if need_id:
+            # 重新開放需求等待下一位志工
+            from app.models.need import CommunityNeed
+            need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+            if need:
+                need.status = "open"
+                need.matched_resource_id = None
+                # 把物資重新開放
+                if need.matched_resource_id:
+                    from app.models.resource import CommunityResource
+                    res = db.query(CommunityResource).filter(
+                        CommunityResource.id == need.matched_resource_id
+                    ).first()
+                    if res:
+                        res.is_available = True
+                db.commit()
         reply_text(event.reply_token,
                    "沒關係，我們會尋找其他志工。感謝您的回覆。")
 
