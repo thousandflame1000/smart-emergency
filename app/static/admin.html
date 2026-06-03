@@ -638,25 +638,58 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 緊急需求                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-needs">
+
+      <!-- 資料來源說明 -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:#1d4ed8;margin-bottom:4px">📱 LINE 傳訊</div>
+          <div style="font-size:12px;color:#374151;line-height:1.6">
+            居民傳：<strong>「需要水」「需要食物」「需要藥」</strong><br>
+            系統自動建立需求單，緊急度預設 3
+          </div>
+        </div>
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:#15803d;margin-bottom:4px">🆘 緊急按鈕</div>
+          <div style="font-size:12px;color:#374151;line-height:1.6">
+            居民按「需要幫忙」或傳「救命」<br>
+            同時觸發警報 + 建立需求，緊急度 5
+          </div>
+        </div>
+        <div style="background:#fafbfc;border:1px solid var(--border);border-radius:10px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">⚙️ 管理員手動</div>
+          <div style="font-size:12px;color:#374151;line-height:1.6">
+            點右上「＋ 新增需求」<br>
+            選類型、填地址、設緊急度
+          </div>
+        </div>
+      </div>
+
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">社區緊急需求</div>
-            <div class="card-subtitle">居民透過 LINE 回報的物資需求，顏色代表緊急度</div>
+            <div class="card-title">物資需求清單</div>
+            <div class="card-subtitle" id="needs-count-label">載入中…</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-ghost btn-sm" onclick="loadNeeds()">🔄 刷新</button>
-            <button class="btn btn-danger btn-sm" onclick="runDispatch()" id="dispatch-btn2">🚨 立即自動媒合</button>
+            <button class="btn btn-primary btn-sm" onclick="openNeedModal()">＋ 新增需求</button>
+            <button class="btn btn-danger btn-sm" onclick="runDispatch()" id="dispatch-btn2">⚡ 立即媒合</button>
           </div>
         </div>
-        <!-- 緊急度說明 -->
-        <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
-          <span style="font-size:11px;color:var(--muted)">緊急度：</span>
-          <span class="urgency-dot u5"></span><span style="font-size:11px">5 極緊急（2km）</span>
-          <span class="urgency-dot u4"></span><span style="font-size:11px">4 緊急（5km）</span>
-          <span class="urgency-dot u3"></span><span style="font-size:11px">3 一般（8km）</span>
-          <span class="urgency-dot u2"></span><span style="font-size:11px">2 輕度（15km）</span>
-          <span class="urgency-dot u1"></span><span style="font-size:11px">1 觀察（25km）</span>
+        <!-- 狀態 + 緊急度篩選 -->
+        <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;gap:16px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;gap:6px">
+            <button class="filter-btn active" data-status="" onclick="filterNeeds(this,'')">全部</button>
+            <button class="filter-btn" data-status="open" onclick="filterNeeds(this,'open')">待媒合</button>
+            <button class="filter-btn" data-status="matched" onclick="filterNeeds(this,'matched')">已媒合</button>
+            <button class="filter-btn" data-status="fulfilled" onclick="filterNeeds(this,'fulfilled')">已完成</button>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+            <span style="font-size:11px;color:var(--muted)">緊急度：</span>
+            <span class="urgency-dot u5" style="display:inline-block"></span><span style="font-size:11px">5 極緊急（2km）</span>
+            <span class="urgency-dot u3" style="display:inline-block"></span><span style="font-size:11px">3 一般（8km）</span>
+            <span class="urgency-dot u1" style="display:inline-block"></span><span style="font-size:11px">1 觀察（25km）</span>
+          </div>
         </div>
         <div class="table-wrap">
           <table class="tbl">
@@ -717,6 +750,72 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   </div><!-- /content -->
 </div><!-- /main -->
 
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Modal: 緊急需求                                      -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-need" onclick="closeOnOverlay(event,'modal-need')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">新增緊急需求</span>
+      <button class="modal-close" onclick="closeModal('modal-need')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">需求類型 <span class="req">*</span></label>
+          <select class="form-select" id="need-type">
+            <option value="water">💧 飲用水</option>
+            <option value="food">🍱 食物</option>
+            <option value="first_aid">🩹 急救用品</option>
+            <option value="shelter">🏠 庇護所</option>
+            <option value="vehicle">🚗 交通工具</option>
+            <option value="tool">🔧 工具</option>
+            <option value="other">📦 其他</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">緊急度（1–5）</label>
+          <select class="form-select" id="need-urgency">
+            <option value="5">5 — 極緊急（距離上限 2km）</option>
+            <option value="4">4 — 緊急（5km）</option>
+            <option value="3" selected>3 — 一般（8km）</option>
+            <option value="2">2 — 輕度（15km）</option>
+            <option value="1">1 — 觀察（25km）</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">說明</label>
+        <input type="text" class="form-control" id="need-desc" placeholder="例：一家 4 口，需要 3 天份食物">
+      </div>
+      <div class="form-group">
+        <label class="form-label">需求地址 <span class="req">*</span></label>
+        <input type="text" class="form-control" id="need-address" placeholder="台中市南區崇倫街…">
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">緯度</label>
+          <input type="number" step="0.0001" class="form-control" id="need-lat" placeholder="24.1234">
+        </div>
+        <div class="form-group">
+          <label class="form-label">經度</label>
+          <input type="number" step="0.0001" class="form-control" id="need-lng" placeholder="120.6789">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">登記人（選填）</label>
+        <select class="form-select" id="need-requester">
+          <option value="">— 不指定（系統自動選擇）—</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-need')">取消</button>
+      <button class="btn btn-primary" onclick="saveNeed()">新增需求</button>
+    </div>
+  </div>
+</div>
 
 <!-- ════════════════════════════════════════════════════ -->
 <!-- Modal: 使用者                                        -->
@@ -1632,6 +1731,9 @@ const STATUS_BADGE = {
   cancelled:'<span class="badge badge-gray">已取消</span>',
 };
 
+let allNeeds = [];
+let needStatusFilter = '';
+
 async function loadNeeds() {
   try {
     const [open, matched, fulfilled] = await Promise.all([
@@ -1639,11 +1741,63 @@ async function loadNeeds() {
       fetch('/api/resources/needs?status=matched').then(r => r.json()),
       fetch('/api/resources/needs?status=fulfilled').then(r => r.json()),
     ]);
-    renderNeeds([...open, ...matched, ...fulfilled]);
+    allNeeds = [...open, ...matched, ...fulfilled];
+    const lbl = document.getElementById('needs-count-label');
+    if (lbl) lbl.textContent =
+      `待媒合 ${open.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆`;
+    renderNeeds(allNeeds);
   } catch(e) {
     document.getElementById('needs-tbody').innerHTML =
       `<tr><td colspan="8" style="color:var(--danger);padding:16px">載入失敗：${e.message}</td></tr>`;
   }
+}
+
+function filterNeeds(btn, status) {
+  document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  needStatusFilter = status;
+  const filtered = status ? allNeeds.filter(n => n.status === status) : allNeeds;
+  renderNeeds(filtered);
+}
+
+function openNeedModal() {
+  // 填入可用的申請人下拉選單
+  document.getElementById('need-requester').innerHTML =
+    '<option value="">— 不指定（系統自動選擇）—</option>' +
+    allUsers.map(u => `<option value="${u.id}">${u.name}（${u.roles.map(r=>ROLE_LABEL[r]||r).join('/')}）</option>`).join('');
+  // reset
+  document.getElementById('need-type').value    = 'water';
+  document.getElementById('need-urgency').value = '3';
+  document.getElementById('need-desc').value    = '';
+  document.getElementById('need-address').value = '';
+  document.getElementById('need-lat').value     = '';
+  document.getElementById('need-lng').value     = '';
+  openModal('modal-need');
+}
+
+async function saveNeed() {
+  const type      = document.getElementById('need-type').value;
+  const urgency   = document.getElementById('need-urgency').value;
+  const desc      = document.getElementById('need-desc').value.trim();
+  const address   = document.getElementById('need-address').value.trim();
+  const lat       = document.getElementById('need-lat').value;
+  const lng       = document.getElementById('need-lng').value;
+  const requester = document.getElementById('need-requester').value;
+
+  if (!address) { alert('請填寫需求地址'); return; }
+
+  const p = new URLSearchParams({ need_type: type, urgency });
+  if (desc)      p.set('description', desc);
+  if (address)   p.set('address', address);
+  if (lat)       p.set('lat', lat);
+  if (lng)       p.set('lng', lng);
+  if (requester) p.set('requester_id', requester);
+
+  const res  = await fetch(`/api/resources/needs?${p}`, { method: 'POST' });
+  const data = await res.json();
+  if (data.error) { alert('新增失敗：' + data.error); return; }
+  closeModal('modal-need');
+  loadNeeds();
 }
 
 function renderNeeds(data) {
@@ -1651,14 +1805,13 @@ function renderNeeds(data) {
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="8"><div class="empty">
       <div class="empty-icon">🆘</div>
-      <div class="empty-text">目前沒有緊急需求</div>
+      <div class="empty-text">目前沒有需求${needStatusFilter ? '（此篩選條件）' : ''}</div>
     </div></td></tr>`;
     return;
   }
-  // Sort: open first, then by urgency desc
-  data.sort((a, b) => {
-    if (a.status === 'open' && b.status !== 'open') return -1;
-    if (b.status === 'open' && a.status !== 'open') return 1;
+  data = [...data].sort((a, b) => {
+    const so = {open:0,matched:1,fulfilled:2,cancelled:3};
+    if (so[a.status] !== so[b.status]) return so[a.status] - so[b.status];
     return b.urgency - a.urgency;
   });
   tbody.innerHTML = data.map(n => `
