@@ -165,8 +165,9 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
 
 @router.post("/needs")
 def create_need(
-    requester_line_uid: str,
     need_type: str,
+    requester_line_uid: str | None = None,
+    requester_id: str | None = None,
     description: str | None = None,
     quantity: str | None = None,
     address: str | None = None,
@@ -175,7 +176,13 @@ def create_need(
     urgency: int = 2,
     db: Session = Depends(get_db),
 ):
-    requester = db.query(User).filter(User.line_uid == requester_line_uid).first()
+    if requester_id:
+        requester = db.query(User).filter(User.id == requester_id).first()
+    elif requester_line_uid:
+        requester = db.query(User).filter(User.line_uid == requester_line_uid).first()
+    else:
+        # 找第一個 active user 當 fallback（管理員手動建立需求時用）
+        requester = db.query(User).filter(User.is_active == True).first()
     if not requester:
         return {"error": "User not found"}
 

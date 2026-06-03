@@ -216,6 +216,97 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
   font-weight: 600; cursor: pointer; transition: all .15s;
 }
 .topbar-btn:hover { border-color: var(--primary); color: var(--primary); }
+
+/* ── Dispatch page ── */
+.dispatch-header {
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 20px; margin-bottom: 16px;
+}
+.dispatch-mode-label {
+  font-size: 15px; font-weight: 700;
+}
+.dispatch-header.emergency {
+  background: #fff5f5; border-color: #fecaca;
+}
+.btn-dispatch-mode {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  border-radius: 8px; padding: 7px 16px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: all .15s;
+}
+.btn-dispatch-mode:hover { border-color: var(--danger); color: var(--danger); }
+.btn-dispatch-run {
+  background: var(--danger); color: #fff; border: none;
+  border-radius: 8px; padding: 9px 22px; font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: opacity .15s;
+  box-shadow: 0 2px 8px rgba(220,38,38,.3);
+}
+.btn-dispatch-run:hover { opacity: .88; }
+.btn-dispatch-run:disabled { opacity: .5; cursor: not-allowed; }
+.dsp-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+}
+/* Need card */
+.need-card {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 16px; border-bottom: 1px solid #f3f4f6; cursor: pointer;
+  transition: background .12s;
+}
+.need-card:last-child { border-bottom: none; }
+.need-card:hover { background: #f9fafb; }
+.need-card.selected { background: #eff6ff; border-left: 3px solid var(--primary); }
+.need-urgency {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 800; color: #fff;
+}
+.u5 { background: #dc2626; }
+.u4 { background: #ea580c; }
+.u3 { background: #d97706; }
+.u2 { background: #65a30d; }
+.u1 { background: #9ca3af; }
+.need-body { flex: 1; min-width: 0; }
+.need-type { font-size: 12px; font-weight: 700; }
+.need-desc { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.need-addr { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.need-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
+/* Resource row */
+.dsp-res-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 16px; border-bottom: 1px solid #f3f4f6;
+}
+.dsp-res-row:last-child { border-bottom: none; }
+.dsp-res-icon { font-size: 18px; flex-shrink: 0; }
+.dsp-res-name { font-size: 13px; font-weight: 600; }
+.dsp-res-meta { font-size: 11px; color: var(--muted); }
+.dsp-src-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+}
+.dot-personal { background: var(--primary); }
+.dot-point    { background: var(--success); }
+/* Candidates panel */
+.cand-panel {
+  background: #f8faff; border-top: 1px solid #dbeafe;
+  padding: 12px 16px;
+}
+.cand-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid #e9f0ff; font-size: 12px;
+}
+.cand-row:last-child { border-bottom: none; }
+.cand-score {
+  font-weight: 800; font-size: 14px; min-width: 36px; text-align: center;
+}
+.score-best { color: var(--success); }
+/* Notice */
+.dsp-notice {
+  padding: 12px 16px; border-radius: 8px; font-size: 13px;
+  display: flex; align-items: center; gap: 8px;
+}
+.dsp-notice.success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
+.dsp-notice.danger  { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
+.dsp-notice.info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
+.dsp-notice.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
 </style>
 </head>
 <body>
@@ -242,6 +333,9 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
   </div>
 
   <div class="nav-section">工具</div>
+  <div class="nav-item" onclick="showPage('dispatch-page')">
+    <span class="icon">🚨</span> 緊急調度
+  </div>
   <div class="nav-item" onclick="showPage('ai-page')">
     <span class="icon">🤖</span> AI 助手
   </div>
@@ -367,6 +461,66 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
       </div>
     </div>
 
+    <!-- ── Page: 緊急調度中心 ── -->
+    <div class="page" id="page-dispatch-page">
+
+      <!-- 模式 + 大按鈕 -->
+      <div class="dispatch-header">
+        <div class="dispatch-mode-block" id="dsp-mode-block">
+          <div class="dispatch-mode-label" id="dsp-mode-label">🟢 日常模式</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px">排程算法僅在緊急模式下自動執行</div>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center">
+          <button class="btn-dispatch-mode" id="dsp-toggle-btn" onclick="dspToggleMode()">切換緊急模式</button>
+          <button class="btn-dispatch-run" id="dsp-run-btn" onclick="dspRunDispatch()">
+            ⚡ 立即執行媒合算法
+          </button>
+        </div>
+      </div>
+
+      <!-- 結果 notice -->
+      <div id="dsp-result" style="display:none;margin-bottom:14px"></div>
+
+      <!-- 主要面板：左需求 右物資 -->
+      <div class="dsp-grid">
+
+        <!-- 左：待媒合需求 -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">🆘 待媒合需求</div>
+              <div class="card-subtitle" id="dsp-needs-count">載入中…</div>
+            </div>
+            <button class="topbar-btn" onclick="dspAddNeedModal()">＋ 新增需求</button>
+          </div>
+          <div id="dsp-needs-list" style="min-height:200px"></div>
+        </div>
+
+        <!-- 右：可用物資 + 資源點 -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📦 可用物資 &amp; 資源點</div>
+              <div class="card-subtitle" id="dsp-res-count">載入中…</div>
+            </div>
+            <button class="topbar-btn" onclick="dspSeedPoints()">📥 匯入資源點</button>
+          </div>
+          <div id="dsp-res-list" style="min-height:200px"></div>
+        </div>
+
+      </div>
+
+      <!-- 媒合歷史 -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header">
+          <div class="card-title">📋 本次媒合結果</div>
+          <span class="card-subtitle" id="dsp-history-ts"></span>
+        </div>
+        <div id="dsp-history" style="padding:16px;font-size:13px;color:var(--muted)">尚未執行</div>
+      </div>
+
+    </div>
+
     <!-- ── Page: AI 助手 ── -->
     <div class="page" id="page-ai-page">
       <div class="card">
@@ -417,7 +571,7 @@ const RES_ICON = { water:'💧',food:'🍱',first_aid:'🩹',shelter:'🏠',vehi
 const PAGE_TITLES = {
   overview: '總覽', elderly: '長者狀態',
   'map-page': '社區地圖', 'resources-page': '物資',
-  'ai-page': 'AI 助手',
+  'dispatch-page': '緊急調度中心', 'ai-page': 'AI 助手',
 };
 
 // ── Navigation ─────────────────────────────
@@ -431,6 +585,7 @@ function showPage(id) {
   document.getElementById('page-title').textContent = PAGE_TITLES[id] || id;
   currentPage = id;
   if (id === 'map-page' && map) setTimeout(() => map.invalidateSize(), 100);
+  if (id === 'dispatch-page') loadDispatchPage();
 }
 
 // ── Map ────────────────────────────────────
@@ -603,6 +758,275 @@ async function ragQuery() {
   } finally {
     btn.disabled = false; btn.textContent = '送出';
   }
+}
+
+// ════════════════════════════════════════════
+// 緊急調度中心
+// ════════════════════════════════════════════
+const DSP_NEED_ICON = { water:'💧', food:'🍱', first_aid:'🩹',
+                        shelter:'🛏️', vehicle:'🚗', tool:'🔧', other:'📦' };
+const PT_SUPPLY_ICON = { water:'💧', food:'🍱', first_aid:'🩹',
+                         shelter:'🛏️', vehicle:'🚗', tool:'🔧', other:'📦' };
+let dspNeeds = [], dspResources = [], dspPoints = [];
+let dspSelectedNeed = null;
+
+async function loadDispatchPage() {
+  try {
+    const [summary, openNeeds, resources, points] = await Promise.all([
+      fetch('/api/dashboard/summary').then(r => r.json()),
+      fetch('/api/resources/needs?status=open').then(r => r.json()),
+      fetch('/api/resources/?available_only=true').then(r => r.json()),
+      fetch('/api/resources/points?active_only=true').then(r => r.json()),
+    ]);
+
+    // 更新模式顯示
+    const isEmg = summary.mode === 'emergency';
+    const header = document.getElementById('dsp-mode-block').parentElement;
+    header.className = 'dispatch-header' + (isEmg ? ' emergency' : '');
+    document.getElementById('dsp-mode-label').textContent =
+      isEmg ? '🚨 緊急模式' : '🟢 日常模式';
+    document.getElementById('dsp-toggle-btn').textContent =
+      isEmg ? '解除緊急模式' : '啟動緊急模式';
+
+    dspNeeds     = openNeeds;
+    dspResources = resources;
+    dspPoints    = points;
+
+    // 統計
+    document.getElementById('dsp-needs-count').textContent =
+      openNeeds.length ? `${openNeeds.length} 筆待媒合` : '目前無待媒合需求';
+    document.getElementById('dsp-res-count').textContent =
+      `個人物資 ${resources.length} 項 · 資源點 ${points.length} 個`;
+
+    renderDspNeeds(openNeeds);
+    renderDspResources(resources, points);
+  } catch(e) {
+    document.getElementById('dsp-needs-list').innerHTML =
+      `<div style="padding:20px;color:var(--danger)">載入失敗：${e.message}</div>`;
+  }
+}
+
+function renderDspNeeds(needs) {
+  const el = document.getElementById('dsp-needs-list');
+  if (!needs.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:8px">✅</div>
+      <div>目前沒有待媒合的需求</div>
+      <button onclick="dspAddNeedModal()" style="margin-top:12px;background:var(--primary);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:12.5px;font-weight:600;cursor:pointer">
+        ＋ 新增測試需求
+      </button>
+    </div>`;
+    return;
+  }
+  // 依緊急度排序
+  needs = [...needs].sort((a, b) => b.urgency - a.urgency);
+  el.innerHTML = needs.map(n => `
+    <div class="need-card ${dspSelectedNeed === n.id ? 'selected' : ''}"
+         onclick="dspSelectNeed('${n.id}')">
+      <div class="need-urgency u${n.urgency}">${n.urgency}</div>
+      <div class="need-body">
+        <div class="need-type">${DSP_NEED_ICON[n.need_type]||'📦'} ${n.need_type} ${n.description ? '— ' + n.description : ''}</div>
+        <div class="need-addr">📍 ${n.address || '未填地址'}</div>
+      </div>
+      <div class="need-actions">
+        <span style="font-size:10px;color:var(--muted)">${n.created_at?.slice(5,16)||''}</span>
+      </div>
+    </div>
+    <div class="cand-panel" id="cand-${n.id}" style="display:none"></div>
+  `).join('');
+}
+
+function renderDspResources(resources, points) {
+  const el = document.getElementById('dsp-res-list');
+  if (!resources.length && !points.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:8px">📦</div>
+      <div>尚無可用物資或資源點</div>
+      <button onclick="dspSeedPoints()" style="margin-top:12px;background:var(--success);color:#fff;border:none;border-radius:8px;padding:7px 16px;font-size:12.5px;font-weight:600;cursor:pointer">
+        📥 匯入台中市資源點
+      </button>
+    </div>`;
+    return;
+  }
+  const rows = [
+    ...resources.map(r => `
+      <div class="dsp-res-row">
+        <span class="dsp-src-dot dot-personal" title="個人物資"></span>
+        <span class="dsp-res-icon">${DSP_NEED_ICON[r.resource_type]||'📦'}</span>
+        <div style="flex:1;min-width:0">
+          <div class="dsp-res-name">${r.name}</div>
+          <div class="dsp-res-meta">數量：${r.quantity||'—'} · 登記：${r.owner||'—'}</div>
+        </div>
+        <span style="font-size:10px;color:var(--muted)">個人物資</span>
+      </div>`),
+    ...points.slice(0, 20).map(p => `
+      <div class="dsp-res-row">
+        <span class="dsp-src-dot dot-point" title="固定資源點"></span>
+        <span class="dsp-res-icon">${{shelter:'🏠',fire_station:'🚒',hospital:'🏥',clinic:'💊',community:'🏘️',store:'🛒',warehouse:'📦'}[p.point_type]||'📍'}</span>
+        <div style="flex:1;min-width:0">
+          <div class="dsp-res-name">${p.name}</div>
+          <div class="dsp-res-meta">${p.address||'—'} · ${(p.supply_types||[]).join('/')||'—'}</div>
+        </div>
+        <span style="font-size:10px;color:var(--success)">固定資源點</span>
+      </div>`),
+  ];
+  el.innerHTML = rows.join('') || '<div style="padding:20px;text-align:center;color:var(--muted)">無資料</div>';
+}
+
+async function dspSelectNeed(needId) {
+  // 切換選取
+  dspSelectedNeed = dspSelectedNeed === needId ? null : needId;
+  renderDspNeeds(dspNeeds);
+
+  if (!dspSelectedNeed) return;
+
+  const panel = document.getElementById(`cand-${needId}`);
+  panel.style.display = 'block';
+  panel.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">評分候選中…</div>';
+
+  try {
+    const cands = await fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json());
+    if (!cands.length) {
+      panel.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">⚠️ 無符合條件的物資或資源點</div>';
+      return;
+    }
+    panel.innerHTML = `
+      <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:6px">候選資源評分（前 5 名）</div>
+      ${cands.slice(0,5).map((c, i) => `
+        <div class="cand-row">
+          <span class="cand-score ${i===0?'score-best':''}">${c.score}</span>
+          <span style="font-size:11px;background:${c.source==='resource'?'#dbeafe':'#dcfce7'};color:${c.source==='resource'?'#1d4ed8':'#15803d'};padding:2px 6px;border-radius:4px;white-space:nowrap">
+            ${c.source==='resource'?'個人物資':'資源點'}
+          </span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</span>
+          <span style="color:var(--muted);white-space:nowrap">${c.dist_km != null ? c.dist_km+'km' : '?'}</span>
+          ${c.source==='resource'
+            ? `<button onclick="dspManualMatch('${needId}','${c.id}')" style="background:var(--success);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">媒合</button>`
+            : '<span style="font-size:11px;color:var(--muted)">固定據點</span>'}
+        </div>`).join('')}`;
+  } catch(e) {
+    panel.innerHTML = `<div style="padding:8px;color:var(--danger);font-size:12px">載入失敗：${e.message}</div>`;
+  }
+}
+
+async function dspManualMatch(needId, resourceId) {
+  if (!confirm('確定以此物資手動媒合？')) return;
+  const res  = await fetch(`/api/resources/needs/${needId}/match?resource_id=${resourceId}`, { method:'POST' });
+  const data = await res.json();
+  if (data.error) { alert('媒合失敗：' + data.error); return; }
+  showDspNotice('success',
+    `✅ 媒合成功！距離 ${data.dist_km ?? '?'} km　${data.volunteer_notified ? '已 LINE 通知志工 📱' : '（志工無 LINE 綁定）'}`);
+  loadDispatchPage();
+}
+
+async function dspRunDispatch() {
+  const btn = document.getElementById('dsp-run-btn');
+  btn.disabled = true; btn.textContent = '⏳ 執行中…';
+  try {
+    const res  = await fetch('/api/resources/dispatch', { method:'POST' });
+    const data = await res.json();
+    if (data.reason === 'not_emergency') {
+      showDspNotice('warning', '⚠️ 系統目前為日常模式，請先點「啟動緊急模式」再執行');
+    } else {
+      const detailText = (data.details||[])
+        .filter(d => d.result === 'matched')
+        .map(d => `　• ${d.matched}（${d.dist_km != null ? d.dist_km+'km' : '?'}，評分 ${d.score}）${d.notified?'📱':''}`)
+        .join('\n');
+      showDspNotice('success',
+        `⚡ 媒合完成：成功 ${data.matched} 筆 / 跳過 ${data.skipped} 筆 / 已通知 ${data.notified} 位志工` +
+        (detailText ? `\n${detailText}` : ''));
+      renderDispatchHistory(data);
+    }
+    loadDispatchPage();
+  } catch(e) {
+    showDspNotice('danger', '執行失敗：' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '⚡ 立即執行媒合算法';
+  }
+}
+
+function renderDispatchHistory(data) {
+  const el = document.getElementById('dsp-history');
+  document.getElementById('dsp-history-ts').textContent = new Date().toLocaleTimeString('zh-TW');
+  if (!data.details?.length) {
+    el.innerHTML = '<span style="color:var(--muted)">無媒合結果</span>'; return;
+  }
+  el.innerHTML = `
+    <div style="display:flex;gap:16px;margin-bottom:12px">
+      <span style="color:var(--success);font-weight:700">✅ 媒合 ${data.matched}</span>
+      <span style="color:var(--muted)">⏭️ 跳過 ${data.skipped}</span>
+      <span style="color:var(--primary)">📱 通知 ${data.notified}</span>
+    </div>
+    <table class="tbl" style="font-size:12px">
+      <thead><tr>
+        <th>需求 ID</th><th>結果</th><th>媒合至</th><th>距離</th><th>評分</th><th>通知</th>
+      </tr></thead>
+      <tbody>
+        ${data.details.map(d => `
+          <tr>
+            <td style="font-family:monospace;font-size:10px">${d.need_id.slice(0,8)}…</td>
+            <td>${d.result==='matched'
+              ? '<span style="color:var(--success);font-weight:600">已媒合</span>'
+              : '<span style="color:var(--muted)">跳過</span>'}</td>
+            <td>${d.matched||d.reason||'—'}</td>
+            <td>${d.dist_km != null ? d.dist_km+' km' : '—'}</td>
+            <td>${d.score != null ? d.score : '—'}</td>
+            <td>${d.notified ? '📱 已送' : '—'}</td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function showDspNotice(type, msg) {
+  const el = document.getElementById('dsp-result');
+  el.className = `dsp-notice ${type}`;
+  el.style.display = 'flex';
+  el.innerHTML = `<span>${msg.replace(/\n/g,'<br>')}</span>`;
+  el.scrollIntoView({ behavior:'smooth', block:'nearest' });
+}
+
+async function dspToggleMode() {
+  const isEmg = document.getElementById('dsp-mode-label').textContent.includes('緊急');
+  const next  = isEmg ? 'normal' : 'emergency';
+  const label = next === 'emergency' ? '緊急' : '日常';
+  if (!confirm(`確定切換為${label}模式？${next==='emergency'?'\n\n⚠️ 系統將廣播通知所有 LINE 用戶':''}`)) return;
+  await fetch(`/api/dashboard/mode?mode=${next}`, { method:'POST' });
+  loadAll();
+  loadDispatchPage();
+}
+
+async function dspSeedPoints() {
+  const res  = await fetch('/api/resources/points/seed?city=台中市', { method:'POST' });
+  const data = await res.json();
+  showDspNotice('info', data.message || '正在匯入…');
+  setTimeout(loadDispatchPage, 3000);
+}
+
+// ── 新增需求 Modal ──
+function dspAddNeedModal() {
+  // 簡易 prompt 流程
+  const type = prompt('需求類型（water / food / first_aid / shelter / vehicle / tool / other）：', 'water');
+  if (!type) return;
+  const desc  = prompt('說明（可空白）：', '') || '';
+  const addr  = prompt('地址：', '台中市南區') || '';
+  const urgency = parseInt(prompt('緊急度 1-5（5最緊急）：', '3') || '3');
+
+  fetch('/api/dashboard/elderly')
+    .then(r => r.json())
+    .then(elderly => {
+      const uid = elderly[0]?.id || '';
+      const params = new URLSearchParams({ need_type: type, urgency });
+      if (uid)  params.set('requester_id', uid);
+      if (desc) params.set('description', desc);
+      if (addr) params.set('address', addr);
+      return fetch(`/api/resources/needs?${params}`, { method:'POST' });
+    })
+    .then(r => r?.json())
+    .then(d => {
+      if (d?.id) { showDspNotice('success', '✅ 需求已新增'); loadDispatchPage(); }
+      else throw new Error(JSON.stringify(d));
+    })
+    .catch(e => showDspNotice('danger', '新增失敗：' + e.message));
 }
 
 // ── Init ───────────────────────────────────
