@@ -3,347 +3,529 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>鄰里守望平台</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+<title>鄰里守望</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --primary: #1a5276;
-  --success: #27ae60;
-  --danger: #e74c3c;
-  --warning: #e67e22;
-  --light-bg: #f0f4f8;
+  --bg:       #f6f8fb;
+  --sidebar:  #111827;
+  --card:     #ffffff;
+  --border:   #e5e9f0;
+  --primary:  #2563eb;
+  --success:  #16a34a;
+  --danger:   #dc2626;
+  --warning:  #d97706;
+  --muted:    #6b7280;
+  --text:     #111827;
+  --radius:   12px;
+  --shadow:   0 1px 4px rgba(0,0,0,.08);
 }
-* { box-sizing: border-box; }
-body { background: var(--light-bg); font-family: 'Segoe UI', sans-serif; margin: 0; }
+body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif;
+       color: var(--text); font-size: 14px; display: flex; height: 100vh; overflow: hidden; }
 
-/* Navbar */
-.navbar {
-  background: linear-gradient(135deg, #1a5276 0%, #1f618d 100%) !important;
-  box-shadow: 0 2px 12px rgba(0,0,0,.2);
-  padding: .75rem 1.5rem;
+/* ── Sidebar ── */
+.sidebar {
+  width: 220px; flex-shrink: 0;
+  background: var(--sidebar);
+  display: flex; flex-direction: column;
+  padding: 0;
+  overflow: hidden;
 }
-.navbar-brand { font-size: 1.2rem; letter-spacing: .5px; }
-
-/* Cards */
-.card {
-  border: none;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0,0,0,.07);
-  transition: box-shadow .2s;
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
 }
-.card:hover { box-shadow: 0 4px 20px rgba(0,0,0,.12); }
-
-/* Metric cards */
-.metric-card { text-align: center; padding: 1.25rem 1rem; }
-.metric-num  { font-size: 2.6rem; font-weight: 800; line-height: 1; }
-.metric-label{ color: #666; font-size: .82rem; margin-top: .3rem; }
-.metric-icon { font-size: 1.6rem; margin-bottom: .3rem; }
-
-/* Status */
-.status-ok          { color: #27ae60; font-weight: 700; }
-.status-no_response { color: #e74c3c; font-weight: 700; }
-.status-pending     { color: #e67e22; font-weight: 600; }
-.status-help_needed { color: #c0392b; font-weight: 700; }
-.status-confirmed_safe { color: #27ae60; font-weight: 600; }
-
-/* Mode badge */
-.mode-normal    { background: linear-gradient(135deg,#27ae60,#2ecc71); color:#fff; }
-.mode-emergency { background: linear-gradient(135deg,#e74c3c,#c0392b); color:#fff;
-                  animation: pulse 1.5s ease-in-out infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.7} }
-
-/* Map */
-#map { height: 400px; border-radius: 12px; }
-
-/* Section headers */
-.section-title {
-  font-size: .95rem; font-weight: 700; color: var(--primary);
-  margin-bottom: 1rem; display: flex; align-items: center; gap: .5rem;
+.sidebar-logo h1 { font-size: 15px; font-weight: 700; color: #fff; }
+.sidebar-logo span { font-size: 11px; color: #6b7280; margin-top: 2px; display: block; }
+.nav-section { padding: 16px 12px 4px; font-size: 10px; font-weight: 600;
+               color: #4b5563; letter-spacing: .08em; text-transform: uppercase; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 8px; margin: 1px 8px;
+  color: #9ca3af; cursor: pointer; transition: all .15s;
+  font-size: 13.5px; font-weight: 500; user-select: none;
 }
-
-/* Table */
-.table td, .table th { vertical-align: middle; font-size: .88rem; }
-.table tbody tr:hover { background: #eaf4fb; cursor: pointer; }
-
-/* Resource badges */
-.res-badge { font-size: .72rem; padding: .25rem .6rem; border-radius: 20px; }
-
-/* Alert items */
-.alert-item {
-  border-left: 4px solid;
-  border-radius: 0 8px 8px 0;
-  padding: .6rem 1rem;
-  margin-bottom: .5rem;
-  background: #fff;
-  font-size: .88rem;
+.nav-item:hover { background: rgba(255,255,255,.06); color: #e5e7eb; }
+.nav-item.active { background: var(--primary); color: #fff; }
+.nav-item .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.sidebar-bottom {
+  margin-top: auto; padding: 12px 8px;
+  border-top: 1px solid rgba(255,255,255,.08);
 }
-.alert-item.danger { border-color: #e74c3c; }
-.alert-item.warning { border-color: #e67e22; }
-
-/* RAG */
-.rag-box { background: #f8fafc; border-radius: 12px; padding: 1rem; }
-.rag-answer { white-space: pre-wrap; line-height: 1.8; font-size: .92rem; }
-.quick-btn {
-  font-size: .78rem; padding: .3rem .7rem; border-radius: 20px;
-  border: 1px solid #c8d6e5; color: #2c3e50; background: #fff;
-  cursor: pointer; transition: all .15s;
+#mode-pill {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600;
+  background: rgba(22,163,74,.15); color: #4ade80;
+  border: 1px solid rgba(22,163,74,.25); cursor: pointer;
+  transition: all .2s;
 }
-.quick-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+#mode-pill.emergency {
+  background: rgba(220,38,38,.2); color: #f87171;
+  border-color: rgba(220,38,38,.35);
+  animation: pulse-pill 2s ease-in-out infinite;
+}
+@keyframes pulse-pill { 0%,100%{opacity:1} 50%{opacity:.65} }
 
-/* Footer */
-.footer { text-align: center; color: #aaa; font-size: .78rem; padding: 2rem 0 1rem; }
+/* ── Main ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  height: 52px; background: var(--card); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 24px;
+  justify-content: space-between; flex-shrink: 0;
+}
+.topbar-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+.topbar-right .ts { font-size: 12px; color: var(--muted); }
+.content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+/* ── Pages ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── Metrics ── */
+.metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+.metric {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 16px 18px;
+}
+.metric-label { font-size: 11px; font-weight: 600; color: var(--muted);
+                text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
+.metric-value { font-size: 32px; font-weight: 800; line-height: 1; }
+.metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.c-green { color: var(--success); }
+.c-red   { color: var(--danger); }
+.c-amber { color: var(--warning); }
+.c-blue  { color: var(--primary); }
+
+/* ── Grid layouts ── */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: 5fr 4fr; gap: 16px; }
+
+/* ── Cards ── */
+.card { background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); overflow: hidden; }
+.card-header {
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.card-body { padding: 0; }
+
+/* ── Table ── */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { font-size: 11px; font-weight: 600; color: var(--muted);
+          text-transform: uppercase; letter-spacing: .04em;
+          padding: 10px 16px; border-bottom: 1px solid var(--border); text-align: left; }
+.tbl td { padding: 11px 16px; border-bottom: 1px solid #f3f4f6;
+          font-size: 13px; vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: #f9fafb; }
+
+/* ── Status badges ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.badge-green  { background: #dcfce7; color: #15803d; }
+.badge-red    { background: #fee2e2; color: #b91c1c; }
+.badge-amber  { background: #fef3c7; color: #92400e; }
+.badge-gray   { background: #f3f4f6; color: #6b7280; }
+.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+
+/* ── Map ── */
+#map { height: 360px; border-radius: 0 0 var(--radius) var(--radius); }
+
+/* ── Alert list ── */
+.alert-row {
+  display: flex; align-items: center; padding: 12px 16px;
+  border-bottom: 1px solid #f3f4f6; gap: 10px;
+}
+.alert-row:last-child { border-bottom: none; }
+.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.alert-dot.high { background: var(--danger); }
+.alert-dot.mid  { background: var(--warning); }
+.alert-name { font-weight: 600; font-size: 13px; }
+.alert-type { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.alert-time { margin-left: auto; font-size: 11px; color: var(--muted); }
+
+/* ── Resource rows ── */
+.res-row {
+  display: flex; align-items: center; padding: 11px 16px;
+  border-bottom: 1px solid #f3f4f6; gap: 10px;
+}
+.res-row:last-child { border-bottom: none; }
+.res-icon { font-size: 20px; flex-shrink: 0; }
+.res-name { font-weight: 600; font-size: 13px; }
+.res-qty  { font-size: 11px; color: var(--muted); }
+.res-avail { margin-left: auto; }
+
+/* ── RAG panel ── */
+.rag-wrap { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.rag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rag-chip {
+  padding: 4px 10px; border-radius: 20px; font-size: 12px;
+  border: 1px solid var(--border); background: var(--bg);
+  cursor: pointer; transition: all .12s; color: var(--text);
+}
+.rag-chip:hover { border-color: var(--primary); color: var(--primary); background: #eff6ff; }
+.rag-input-row { display: flex; gap: 8px; }
+.rag-input {
+  flex: 1; border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 12px; font-size: 13px; outline: none;
+  transition: border-color .15s;
+}
+.rag-input:focus { border-color: var(--primary); }
+.btn-primary {
+  background: var(--primary); color: #fff; border: none;
+  border-radius: 8px; padding: 8px 16px; font-size: 13px;
+  font-weight: 600; cursor: pointer; transition: opacity .15s;
+}
+.btn-primary:hover { opacity: .88; }
+.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.rag-answer {
+  background: #f8faff; border: 1px solid #dbeafe; border-radius: 8px;
+  padding: 14px; white-space: pre-wrap; line-height: 1.75;
+  font-size: 13px; max-height: 300px; overflow-y: auto;
+}
+.rag-src { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+
+/* ── Empty state ── */
+.empty { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 13px; }
+.empty-icon { font-size: 28px; margin-bottom: 8px; }
+
+/* ── Input ── */
+.search-input {
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 5px 10px; font-size: 12px; outline: none;
+  transition: border-color .15s; width: 160px;
+}
+.search-input:focus { border-color: var(--primary); }
+
+/* ── Topbar btn ── */
+.topbar-btn {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+  border-radius: 6px; padding: 5px 12px; font-size: 12px;
+  font-weight: 600; cursor: pointer; transition: all .15s;
+}
+.topbar-btn:hover { border-color: var(--primary); color: var(--primary); }
 </style>
 </head>
 <body>
 
-<!-- Navbar -->
-<nav class="navbar navbar-dark">
-  <div class="container-fluid">
-    <span class="navbar-brand fw-bold">🏘️ 鄰里守望平台</span>
-    <div class="d-flex align-items-center gap-2">
-      <span id="mode-badge" class="badge rounded-pill px-3 py-2 fs-6"></span>
-      <button id="toggle-mode" class="btn btn-sm btn-outline-light">切換模式</button>
-      <a href="/admin" class="btn btn-sm btn-outline-light">⚙️ 管理</a>
-      <span id="last-updated" class="text-light opacity-50 small d-none d-md-block"></span>
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🏘️ 鄰里守望</h1>
+    <span>社區照護平台</span>
+  </div>
+
+  <div class="nav-section">主要功能</div>
+  <div class="nav-item active" onclick="showPage('overview')">
+    <span class="icon">📊</span> 總覽
+  </div>
+  <div class="nav-item" onclick="showPage('elderly')">
+    <span class="icon">👴</span> 長者狀態
+  </div>
+  <div class="nav-item" onclick="showPage('map-page')">
+    <span class="icon">🗺️</span> 社區地圖
+  </div>
+  <div class="nav-item" onclick="showPage('resources-page')">
+    <span class="icon">📦</span> 物資
+  </div>
+
+  <div class="nav-section">工具</div>
+  <div class="nav-item" onclick="showPage('ai-page')">
+    <span class="icon">🤖</span> AI 助手
+  </div>
+  <div class="nav-item" onclick="window.location='/admin'">
+    <span class="icon">⚙️</span> 管理後台
+  </div>
+
+  <div class="sidebar-bottom">
+    <div id="mode-pill" onclick="toggleMode()">
+      <span id="mode-dot">🟢</span>
+      <span id="mode-text">日常模式</span>
     </div>
   </div>
-</nav>
+</aside>
 
-<div class="container-fluid px-3 px-md-4 py-3">
-
-  <!-- Metrics -->
-  <div class="row g-3 mb-3">
-    <div class="col-6 col-md-2">
-      <div class="card metric-card">
-        <div class="metric-icon">✅</div>
-        <div class="metric-num text-success" id="m-ok">—</div>
-        <div class="metric-label">已回應</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-2">
-      <div class="card metric-card">
-        <div class="metric-icon">🚨</div>
-        <div class="metric-num text-danger" id="m-no-resp">—</div>
-        <div class="metric-label">未回應</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-2">
-      <div class="card metric-card">
-        <div class="metric-icon">⏳</div>
-        <div class="metric-num text-warning" id="m-pending">—</div>
-        <div class="metric-label">等待中</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-2">
-      <div class="card metric-card">
-        <div class="metric-icon">🔔</div>
-        <div class="metric-num text-danger" id="m-alerts">—</div>
-        <div class="metric-label">未解警報</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-2">
-      <div class="card metric-card">
-        <div class="metric-icon">📦</div>
-        <div class="metric-num text-primary" id="m-resources">—</div>
-        <div class="metric-label">可用物資</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-2">
-      <div class="card metric-card">
-        <div class="metric-icon">🆘</div>
-        <div class="metric-num text-info" id="m-needs">—</div>
-        <div class="metric-label">待處理需求</div>
-      </div>
+<!-- ── Main ── -->
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title" id="page-title">總覽</div>
+    <div class="topbar-right">
+      <span class="ts" id="last-ts"></span>
+      <button class="topbar-btn" onclick="loadAll()">↻ 刷新</button>
     </div>
   </div>
 
-  <!-- Row 1: 長者 + 地圖 -->
-  <div class="row g-3 mb-3">
-    <div class="col-12 col-lg-5">
-      <div class="card p-3 h-100">
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <div class="section-title mb-0">👴 今日長者狀態</div>
-          <input type="text" id="search-elderly" class="form-control form-control-sm w-50"
-                 placeholder="搜尋姓名...">
+  <div class="content">
+
+    <!-- ── Page: 總覽 ── -->
+    <div class="page active" id="page-overview">
+
+      <div class="metrics">
+        <div class="metric">
+          <div class="metric-label">已回應</div>
+          <div class="metric-value c-green" id="m-ok">—</div>
+          <div class="metric-sub">今日打卡</div>
         </div>
-        <div class="table-responsive">
-          <table class="table table-sm align-middle mb-0">
-            <thead class="table-light">
-              <tr><th>姓名</th><th>電話</th><th>狀態</th><th>時間</th></tr>
-            </thead>
-            <tbody id="elderly-table"></tbody>
+        <div class="metric">
+          <div class="metric-label">未回應</div>
+          <div class="metric-value c-red" id="m-no">—</div>
+          <div class="metric-sub">需要關注</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">等待中</div>
+          <div class="metric-value c-amber" id="m-pending">—</div>
+          <div class="metric-sub">尚未回覆</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">未解警報</div>
+          <div class="metric-value c-red" id="m-alerts">—</div>
+          <div class="metric-sub">需要處理</div>
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <!-- 警報 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">🔔 警報</span>
+          </div>
+          <div class="card-body" id="alerts-list">
+            <div class="empty"><div class="empty-icon">✅</div>目前無未解警報</div>
+          </div>
+        </div>
+
+        <!-- 長者快覽 -->
+        <div class="card">
+          <div class="card-header">
+            <span class="card-title">👴 今日打卡</span>
+            <input class="search-input" id="search-input" placeholder="搜尋姓名…"
+                   oninput="filterElderly(this.value)">
+          </div>
+          <div class="card-body">
+            <table class="tbl">
+              <thead>
+                <tr><th>姓名</th><th>狀態</th><th>時間</th></tr>
+              </thead>
+              <tbody id="elderly-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Page: 長者狀態 ── -->
+    <div class="page" id="page-elderly">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">👴 所有長者今日狀態</span>
+          <input class="search-input" id="search-input2" placeholder="搜尋…"
+                 oninput="filterElderly2(this.value)">
+        </div>
+        <div class="card-body">
+          <table class="tbl">
+            <thead><tr><th>姓名</th><th>電話</th><th>地址</th><th>狀態</th><th>回覆時間</th></tr></thead>
+            <tbody id="elderly-tbody2"></tbody>
           </table>
         </div>
       </div>
     </div>
-    <div class="col-12 col-lg-7">
-      <div class="card p-3 h-100">
-        <div class="section-title">🗺️ 社區地圖</div>
+
+    <!-- ── Page: 地圖 ── -->
+    <div class="page" id="page-map-page">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🗺️ 社區地圖</span>
+          <div style="display:flex;gap:12px;font-size:12px;color:var(--muted)">
+            <span>🟢 已回應</span><span>🔴 未回應</span>
+            <span>🟠 等待中</span><span>📍 物資點</span>
+          </div>
+        </div>
         <div id="map"></div>
-        <div class="mt-2 small text-muted d-flex gap-3 flex-wrap">
-          <span>🟢 已回應</span><span>🔴 未回應</span>
-          <span>🟠 等待中</span><span>📍 物資點</span>
-        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Row 2: 物資 + 警報 -->
-  <div class="row g-3 mb-3">
-    <div class="col-12 col-lg-6">
-      <div class="card p-3">
-        <div class="section-title">📦 社區物資</div>
-        <div id="resources-list"></div>
-      </div>
-    </div>
-    <div class="col-12 col-lg-6">
-      <div class="card p-3">
-        <div class="section-title">🔔 警報記錄</div>
-        <div id="alerts-list"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- RAG 助手 -->
-  <div class="row g-3 mb-3">
-    <div class="col-12">
-      <div class="card p-3">
-        <div class="section-title">
-          🤖 志工 AI 助手
-          <span class="text-muted fw-normal" style="font-size:.8rem">長照 SOP · 急救指引 · 災時應變</span>
+    <!-- ── Page: 物資 ── -->
+    <div class="page" id="page-resources-page">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">📦 社區物資</span>
+          <span style="font-size:12px;color:var(--muted)" id="res-count"></span>
         </div>
-        <div class="row g-2 align-items-end mb-2">
-          <div class="col">
-            <input type="text" id="rag-input" class="form-control"
-              placeholder="例如：老人跌倒怎麼辦？CPR 步驟？颱風來了要做什麼？"
-              onkeydown="if(event.key==='Enter') ragQuery()">
+        <div class="card-body" id="resources-list"></div>
+      </div>
+    </div>
+
+    <!-- ── Page: AI 助手 ── -->
+    <div class="page" id="page-ai-page">
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">🤖 AI 急救 · 長照助手</span>
+          <span style="font-size:11px;color:var(--muted)">基於 SOP 知識庫，Gemini 生成</span>
+        </div>
+        <div class="rag-wrap">
+          <div class="rag-chips">
+            <span class="rag-chip" onclick="ask('心肺復甦術 CPR 步驟')">CPR 步驟</span>
+            <span class="rag-chip" onclick="ask('老人失溫怎麼辦')">老人失溫</span>
+            <span class="rag-chip" onclick="ask('中風怎麼辨識')">辨識中風</span>
+            <span class="rag-chip" onclick="ask('異物哽塞哈姆立克法')">哈姆立克</span>
+            <span class="rag-chip" onclick="ask('地震來了怎麼辦')">地震應變</span>
+            <span class="rag-chip" onclick="ask('颱風前要準備什麼')">颱風準備</span>
+            <span class="rag-chip" onclick="ask('低血糖緊急處理')">低血糖急救</span>
+            <span class="rag-chip" onclick="ask('志工家訪流程')">志工訪視</span>
           </div>
-          <div class="col-auto">
-            <button class="btn btn-primary px-4" onclick="ragQuery()" id="rag-btn">送出</button>
+          <div class="rag-input-row">
+            <input class="rag-input" id="rag-q" placeholder="輸入問題，例如：老人跌倒無法起身怎麼辦？"
+                   onkeydown="if(event.key==='Enter') ragQuery()">
+            <button class="btn-primary" id="rag-btn" onclick="ragQuery()">送出</button>
+          </div>
+          <div id="rag-result" style="display:none">
+            <div class="rag-answer" id="rag-answer"></div>
+            <div class="rag-src" id="rag-src"></div>
           </div>
         </div>
-        <div class="d-flex flex-wrap gap-2 mb-2">
-          <button class="quick-btn" onclick="setRagQ('心肺復甦術 CPR 步驟')">CPR 步驟</button>
-          <button class="quick-btn" onclick="setRagQ('老人失溫怎麼辦')">老人失溫</button>
-          <button class="quick-btn" onclick="setRagQ('中風怎麼辨識')">辨識中風</button>
-          <button class="quick-btn" onclick="setRagQ('異物哽塞怎麼處理')">哈姆立克法</button>
-          <button class="quick-btn" onclick="setRagQ('地震來了怎麼辦')">地震應變</button>
-          <button class="quick-btn" onclick="setRagQ('颱風前要準備什麼')">颱風準備</button>
-          <button class="quick-btn" onclick="setRagQ('低血糖緊急處理')">低血糖急救</button>
-          <button class="quick-btn" onclick="setRagQ('志工訪視流程')">志工訪視</button>
-        </div>
-        <div id="rag-result" class="rag-box" style="display:none">
-          <div id="rag-answer" class="rag-answer mb-2"></div>
-          <div id="rag-sources" class="text-muted small"></div>
-        </div>
-        <div id="rag-error" class="alert alert-danger py-2 mt-2" style="display:none"></div>
       </div>
     </div>
-  </div>
 
-</div>
+  </div><!-- /content -->
+</div><!-- /main -->
 
-<div class="footer">鄰里守望平台 · 平時照顧長者，災時守護社區 · 2026 慈悲科技創新競賽</div>
-
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-let map, allElderly = [];
+// ── State ──────────────────────────────────
+let map, allElderly = [], currentPage = 'overview';
 
 const STATUS = {
-  ok:             ['✅ 已回應',   'status-ok'],
-  no_response:    ['🚨 未回應',   'status-no_response'],
-  pending:        ['⏳ 等待中',   'status-pending'],
-  help_needed:    ['🆘 需要幫忙', 'status-help_needed'],
-  confirmed_safe: ['✅ 確認安全', 'status-confirmed_safe'],
-  not_sent:       ['－ 未發送',   'text-muted'],
+  ok:             ['已回應',   'badge-green'],
+  no_response:    ['未回應',   'badge-red'],
+  pending:        ['等待中',   'badge-amber'],
+  help_needed:    ['需要幫忙', 'badge-red'],
+  confirmed_safe: ['確認安全', 'badge-green'],
+  not_sent:       ['未發送',   'badge-gray'],
+};
+const RES_ICON = { water:'💧',food:'🍱',first_aid:'🩹',shelter:'🏠',vehicle:'🚗',tool:'🔧',other:'📦' };
+const PAGE_TITLES = {
+  overview: '總覽', elderly: '長者狀態',
+  'map-page': '社區地圖', 'resources-page': '物資',
+  'ai-page': 'AI 助手',
 };
 
-const RES_ICON = {
-  water:'💧', food:'🍱', first_aid:'🩹',
-  shelter:'🏠', vehicle:'🚗', tool:'🔧', other:'📦'
-};
+// ── Navigation ─────────────────────────────
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => {
+    if (n.getAttribute('onclick')?.includes(id)) n.classList.add('active');
+  });
+  document.getElementById('page-title').textContent = PAGE_TITLES[id] || id;
+  currentPage = id;
+  if (id === 'map-page' && map) setTimeout(() => map.invalidateSize(), 100);
+}
 
-// ── 地圖 ─────────────────────────────────────
+// ── Map ────────────────────────────────────
 function initMap() {
   map = L.map('map').setView([24.125, 120.678], 14);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap'
-  }).addTo(map);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    { attribution: '© OpenStreetMap' }).addTo(map);
 }
 
 function updateMap(elderly, resources) {
-  map.eachLayer(l => {
-    if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l);
-  });
-  const colors = { ok:'#27ae60', no_response:'#e74c3c', pending:'#e67e22', help_needed:'#c0392b' };
+  map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l); });
+  const C = { ok:'#16a34a', no_response:'#dc2626', pending:'#d97706', help_needed:'#b91c1c' };
   elderly.forEach(e => {
     if (!e.lat || !e.lng) return;
-    const color = colors[e.today_status] || '#95a5a6';
-    const [label] = STATUS[e.today_status] || ['—',''];
+    const [label] = STATUS[e.today_status] || ['—'];
     L.circleMarker([e.lat, e.lng], {
-      radius:11, color:'#fff', fillColor:color, fillOpacity:.9, weight:2
+      radius:10, color:'#fff', fillColor: C[e.today_status]||'#9ca3af', fillOpacity:.9, weight:2.5
     }).bindPopup(`<b>${e.name}</b><br>${label}<br><small>${e.address||''}</small>`).addTo(map);
   });
   resources.forEach(r => {
     if (!r.lat || !r.lng) return;
-    const icon = RES_ICON[r.resource_type] || '📦';
     L.marker([r.lat, r.lng]).bindPopup(
-      `<b>${icon} ${r.name}</b><br>數量：${r.quantity||'—'}<br>登記人：${r.owner||'—'}`
+      `<b>${RES_ICON[r.resource_type]||'📦'} ${r.name}</b><br>數量：${r.quantity||'—'}`
     ).addTo(map);
   });
 }
 
-// ── 長者表格 ─────────────────────────────────
-function renderElderly(data, filter='') {
-  const rows = data.filter(e => !filter ||
-    e.name.includes(filter) || (e.address||'').includes(filter));
-  document.getElementById('elderly-table').innerHTML = rows.map(e => {
-    const [label, cls] = STATUS[e.today_status] || ['—',''];
+// ── Render helpers ─────────────────────────
+function renderStatus(s) {
+  const [label, cls] = STATUS[s] || ['—', 'badge-gray'];
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function renderElderly(data, tbodyId) {
+  const tbody = document.getElementById(tbodyId);
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">暫無資料</td></tr>`; return;
+  }
+  tbody.innerHTML = data.map(e => {
     const time = e.responded_at ? e.responded_at.slice(11,16) : '—';
     return `<tr>
-      <td class="fw-semibold">${e.name}</td>
-      <td class="text-muted">${e.phone||'—'}</td>
-      <td class="${cls}">${label}</td>
-      <td class="text-muted">${time}</td>
+      <td style="font-weight:600">${e.name}</td>
+      ${tbodyId === 'elderly-tbody2' ? `<td style="color:var(--muted)">${e.phone||'—'}</td><td style="color:var(--muted);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.address||'—'}</td>` : ''}
+      <td>${renderStatus(e.today_status)}</td>
+      <td style="color:var(--muted)">${time}</td>
     </tr>`;
-  }).join('') || '<tr><td colspan="4" class="text-center text-muted py-3">暫無長者資料</td></tr>';
+  }).join('');
 }
 
-// ── 物資 ─────────────────────────────────────
-function renderResources(data) {
-  const el = document.getElementById('resources-list');
-  if (!data.length) { el.innerHTML = '<p class="text-muted text-center py-2">暫無物資資料</p>'; return; }
-  el.innerHTML = data.map(r => `
-    <div class="d-flex justify-content-between align-items-center py-2 border-bottom">
-      <div>
-        <span class="fw-semibold">${RES_ICON[r.resource_type]||'📦'} ${r.name}</span>
-        <span class="text-muted small ms-2">${r.quantity||''}</span><br>
-        <span class="text-muted small">${r.address||''}</span>
-      </div>
-      <span class="res-badge ${r.is_available?'bg-success text-white':'bg-light text-muted'}">
-        ${r.is_available?'可用':'不可用'}
-      </span>
-    </div>`).join('');
+function filterElderly(q) {
+  renderElderly(allElderly.filter(e => e.name.includes(q)||''.includes(q)), 'elderly-tbody');
+}
+function filterElderly2(q) {
+  renderElderly(allElderly.filter(e => e.name.includes(q)||(e.address||'').includes(q)), 'elderly-tbody2');
 }
 
-// ── 警報 ─────────────────────────────────────
 function renderAlerts(data) {
   const el = document.getElementById('alerts-list');
   if (!data.length) {
-    el.innerHTML = '<div class="text-success text-center py-3">👍 目前沒有未解決的警報</div>'; return;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">✅</div>目前無未解警報</div>`; return;
   }
   el.innerHTML = data.map(a => {
-    const cls = a.alert_type.includes('3h') ? 'danger' : 'warning';
-    return `<div class="alert-item ${cls}">
-      <b>${a.elderly}</b> — <span class="text-muted">${a.alert_type}</span>
-      <span class="float-end text-muted small">${(a.created_at||'').slice(0,16)}</span>
+    const cls = a.alert_type.includes('3h') || a.alert_type === 'help_needed' ? 'high' : 'mid';
+    const typeLabel = { no_response_1h:'超過 1 小時未回應', no_response_3h:'超過 3 小時未回應', help_needed:'主動求助' };
+    return `<div class="alert-row">
+      <div class="alert-dot ${cls}"></div>
+      <div>
+        <div class="alert-name">${a.elderly}</div>
+        <div class="alert-type">${typeLabel[a.alert_type]||a.alert_type}</div>
+      </div>
+      <div class="alert-time">${(a.created_at||'').slice(11,16)}</div>
     </div>`;
   }).join('');
 }
 
-// ── 載入資料 ─────────────────────────────────
+function renderResources(data) {
+  const el = document.getElementById('resources-list');
+  document.getElementById('res-count').textContent = `${data.length} 筆`;
+  if (!data.length) { el.innerHTML = `<div class="empty">暫無物資資料</div>`; return; }
+  el.innerHTML = data.map(r => `
+    <div class="res-row">
+      <span class="res-icon">${RES_ICON[r.resource_type]||'📦'}</span>
+      <div>
+        <div class="res-name">${r.name}</div>
+        <div class="res-qty">${r.quantity||''} · ${r.address||''}</div>
+      </div>
+      <div class="res-avail">
+        <span class="badge ${r.is_available?'badge-green':'badge-gray'}">
+          ${r.is_available?'可用':'不可用'}
+        </span>
+      </div>
+    </div>`).join('');
+}
+
+// ── Load ───────────────────────────────────
 async function loadAll() {
   try {
     const [summary, elderly, resources, alerts] = await Promise.all([
@@ -354,82 +536,76 @@ async function loadAll() {
     ]);
 
     const cs = summary.checkin_summary || {};
-    document.getElementById('m-ok').textContent       = cs.ok || 0;
-    document.getElementById('m-no-resp').textContent  = cs.no_response || 0;
-    document.getElementById('m-pending').textContent  = cs.pending || 0;
-    document.getElementById('m-alerts').textContent   = summary.active_alerts || 0;
-    document.getElementById('m-resources').textContent= summary.available_resources || 0;
-    document.getElementById('m-needs').textContent    = summary.open_needs || 0;
+    document.getElementById('m-ok').textContent      = cs.ok || 0;
+    document.getElementById('m-no').textContent      = (cs.no_response || 0) + (cs.help_needed || 0);
+    document.getElementById('m-pending').textContent = cs.pending || 0;
+    document.getElementById('m-alerts').textContent  = summary.active_alerts || 0;
 
-    const badge = document.getElementById('mode-badge');
+    // Mode
+    const pill = document.getElementById('mode-pill');
     if (summary.mode === 'emergency') {
-      badge.textContent = '🚨 緊急模式';
-      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-emergency';
+      pill.classList.add('emergency');
+      document.getElementById('mode-dot').textContent = '🚨';
+      document.getElementById('mode-text').textContent = '緊急模式';
     } else {
-      badge.textContent = '🟢 日常模式';
-      badge.className = 'badge rounded-pill px-3 py-2 fs-6 mode-normal';
+      pill.classList.remove('emergency');
+      document.getElementById('mode-dot').textContent = '🟢';
+      document.getElementById('mode-text').textContent = '日常模式';
     }
 
-    document.getElementById('last-updated').textContent =
-      '更新：' + new Date().toLocaleTimeString('zh-TW');
-
+    document.getElementById('last-ts').textContent = '更新 ' + new Date().toLocaleTimeString('zh-TW');
     allElderly = elderly;
-    renderElderly(elderly);
-    renderResources(resources);
+
+    renderElderly(elderly, 'elderly-tbody');
+    renderElderly(elderly, 'elderly-tbody2');
     renderAlerts(alerts);
+    renderResources(resources);
     updateMap(elderly, resources);
   } catch(e) { console.error(e); }
 }
 
-// ── 模式切換 ─────────────────────────────────
-document.getElementById('toggle-mode').addEventListener('click', async () => {
-  const isEmergency = document.getElementById('mode-badge').textContent.includes('緊急');
-  const newMode = isEmergency ? 'normal' : 'emergency';
-  if (!confirm(`確定切換為${newMode==='emergency'?'緊急':'日常'}模式？`)) return;
-  await fetch(`/api/dashboard/mode?mode=${newMode}`, { method:'POST' });
+// ── Mode toggle ────────────────────────────
+async function toggleMode() {
+  const isEmergency = document.getElementById('mode-pill').classList.contains('emergency');
+  const next = isEmergency ? 'normal' : 'emergency';
+  const label = next === 'emergency' ? '緊急' : '日常';
+  if (!confirm(`確定切換為${label}模式？${next==='emergency'?'\n\n⚠️ 系統將廣播通知所有 LINE 用戶':''}`)) return;
+  await fetch(`/api/dashboard/mode?mode=${next}`, { method:'POST' });
   loadAll();
-});
+}
 
-// ── 搜尋 ─────────────────────────────────────
-document.getElementById('search-elderly').addEventListener('input', e => {
-  renderElderly(allElderly, e.target.value.trim());
-});
-
-// ── RAG ──────────────────────────────────────
-function setRagQ(q) {
-  document.getElementById('rag-input').value = q;
+// ── RAG ────────────────────────────────────
+function ask(q) {
+  document.getElementById('rag-q').value = q;
+  showPage('ai-page');
   ragQuery();
 }
 
 async function ragQuery() {
-  const input = document.getElementById('rag-input');
-  const q = input.value.trim();
+  const q = document.getElementById('rag-q').value.trim();
   if (!q) return;
   const btn = document.getElementById('rag-btn');
   btn.disabled = true; btn.textContent = '查詢中…';
   document.getElementById('rag-result').style.display = 'none';
-  document.getElementById('rag-error').style.display  = 'none';
   try {
     const res = await fetch('/api/rag/query', {
       method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ question: q }),
     });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
-    document.getElementById('rag-answer').textContent = data.answer || '（無回答）';
-    document.getElementById('rag-sources').textContent =
-      data.sources?.length ? '📚 來源：' + data.sources.join('、') : '';
+    const d = await res.json();
+    document.getElementById('rag-answer').textContent = d.answer || '（無回答）';
+    document.getElementById('rag-src').textContent =
+      d.sources?.length ? '📚 來源：' + d.sources.join(' · ') : '';
     document.getElementById('rag-result').style.display = 'block';
   } catch(e) {
-    const err = document.getElementById('rag-error');
-    err.textContent = '查詢失敗：' + e.message;
-    err.style.display = 'block';
+    document.getElementById('rag-answer').textContent = '查詢失敗：' + e.message;
+    document.getElementById('rag-result').style.display = 'block';
   } finally {
     btn.disabled = false; btn.textContent = '送出';
   }
 }
 
-// ── 啟動 ─────────────────────────────────────
+// ── Init ───────────────────────────────────
 initMap();
 loadAll();
 setInterval(loadAll, 30000);

@@ -8,6 +8,8 @@ import os
 from app.database import engine, Base
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.routers import linebot, dashboard, resources, rag
+# 確保所有 model 被 import，Base.metadata.create_all 才會建表
+import app.models.resource_point  # noqa: F401
 
 
 @asynccontextmanager

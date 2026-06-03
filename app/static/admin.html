@@ -4,293 +4,901 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>鄰里守望 — 管理後台</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
 <style>
-  body { background:#f4f6fb; font-family:'Segoe UI',sans-serif; }
-  .navbar { background:#1a5276 !important; }
-  .card  { border:none; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,.08); }
-  .tab-content { padding-top:1.5rem; }
-  .table td, .table th { vertical-align:middle; }
-  .btn-icon { padding:.2rem .5rem; font-size:.8rem; }
-  .role-badge { font-size:.72rem; }
+/* ── Reset & Base ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:      #f6f8fb;
+  --sidebar: #111827;
+  --card:    #ffffff;
+  --border:  #e5e9f0;
+  --primary: #2563eb;
+  --success: #16a34a;
+  --danger:  #dc2626;
+  --warning: #d97706;
+  --muted:   #6b7280;
+  --text:    #111827;
+  --radius:  12px;
+  --shadow:  0 1px 4px rgba(0,0,0,.08);
+}
+body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif;
+       color: var(--text); font-size: 14px; display: flex; height: 100vh; overflow: hidden; }
+
+/* ── Sidebar ── */
+.sidebar {
+  width: 220px; flex-shrink: 0;
+  background: var(--sidebar);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-logo {
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.sidebar-logo h1 { font-size: 15px; font-weight: 700; color: #fff; }
+.sidebar-logo span { font-size: 11px; color: #6b7280; margin-top: 2px; display: block; }
+.nav-section { padding: 16px 12px 4px; font-size: 10px; font-weight: 600;
+               color: #4b5563; letter-spacing: .08em; text-transform: uppercase; }
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: 8px; margin: 1px 8px;
+  color: #9ca3af; cursor: pointer; transition: all .15s;
+  font-size: 13.5px; font-weight: 500; user-select: none;
+}
+.nav-item:hover { background: rgba(255,255,255,.06); color: #e5e7eb; }
+.nav-item.active { background: var(--primary); color: #fff; }
+.nav-item .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.sidebar-bottom {
+  margin-top: auto; padding: 12px 8px;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.back-link {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 12px; border-radius: 8px; margin-bottom: 6px;
+  color: #9ca3af; cursor: pointer; transition: all .15s;
+  font-size: 12px; font-weight: 500; text-decoration: none;
+}
+.back-link:hover { background: rgba(255,255,255,.06); color: #e5e7eb; }
+
+/* ── Main ── */
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+  height: 52px; background: var(--card); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 24px;
+  justify-content: space-between; flex-shrink: 0;
+}
+.topbar-title { font-size: 15px; font-weight: 600; }
+.topbar-actions { display: flex; gap: 8px; }
+.content { flex: 1; overflow-y: auto; padding: 20px 24px; }
+
+/* ── Pages ── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── Cards ── */
+.card { background: var(--card); border: 1px solid var(--border);
+        border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; }
+.card-header {
+  padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-title { font-size: 13px; font-weight: 700; }
+.card-subtitle { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.card-body { padding: 16px 18px; }
+
+/* ── Table ── */
+.tbl { width: 100%; border-collapse: collapse; }
+.tbl th { font-size: 11px; font-weight: 600; color: var(--muted);
+          text-transform: uppercase; letter-spacing: .04em;
+          padding: 10px 16px; border-bottom: 1px solid var(--border);
+          text-align: left; white-space: nowrap; }
+.tbl td { padding: 11px 16px; border-bottom: 1px solid #f3f4f6;
+          font-size: 13px; vertical-align: middle; }
+.tbl tr:last-child td { border-bottom: none; }
+.tbl tr:hover td { background: #f9fafb; }
+.tbl .muted { color: var(--muted); font-size: 12px; }
+
+/* ── Badges ── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.badge-green  { background: #dcfce7; color: #15803d; }
+.badge-red    { background: #fee2e2; color: #b91c1c; }
+.badge-amber  { background: #fef3c7; color: #92400e; }
+.badge-gray   { background: #f3f4f6; color: #6b7280; }
+.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+.badge-purple { background: #f3e8ff; color: #7e22ce; }
+
+/* ── Buttons ── */
+.btn {
+  border: none; border-radius: 8px; padding: 7px 14px;
+  font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: all .15s; display: inline-flex; align-items: center; gap: 5px;
+}
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary  { background: var(--primary); color: #fff; }
+.btn-primary:hover:not(:disabled)  { opacity: .88; }
+.btn-success  { background: var(--success); color: #fff; }
+.btn-success:hover:not(:disabled)  { opacity: .88; }
+.btn-danger   { background: var(--danger); color: #fff; }
+.btn-danger:hover:not(:disabled)   { opacity: .88; }
+.btn-warning  { background: var(--warning); color: #fff; }
+.btn-warning:hover:not(:disabled)  { opacity: .88; }
+.btn-ghost {
+  background: transparent; border: 1px solid var(--border); color: var(--text);
+}
+.btn-ghost:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+.btn-ghost-danger {
+  background: transparent; border: 1px solid transparent; color: var(--danger);
+  padding: 4px 10px; font-size: 12px;
+}
+.btn-ghost-danger:hover { background: #fee2e2; }
+.btn-ghost-edit {
+  background: transparent; border: 1px solid transparent; color: var(--primary);
+  padding: 4px 10px; font-size: 12px;
+}
+.btn-ghost-edit:hover { background: #dbeafe; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+
+/* ── Form ── */
+.form-row { display: grid; gap: 14px; }
+.form-row.col-2 { grid-template-columns: 1fr 1fr; }
+.form-row.col-3 { grid-template-columns: 1fr 1fr 1fr; }
+.form-group { display: flex; flex-direction: column; gap: 5px; }
+.form-label { font-size: 12px; font-weight: 600; color: var(--text); }
+.form-label .req { color: var(--danger); }
+.form-hint { font-size: 11px; color: var(--muted); }
+.form-control {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 11px; font-size: 13px; outline: none;
+  transition: border-color .15s; background: #fff;
+  font-family: inherit; color: var(--text);
+}
+.form-control:focus { border-color: var(--primary); }
+.form-select {
+  border: 1px solid var(--border); border-radius: 8px;
+  padding: 8px 11px; font-size: 13px; outline: none;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath fill='%236b7280' d='M4 6l4 4 4-4'/%3E%3C/svg%3E") no-repeat right 10px center / 14px;
+  -webkit-appearance: none; appearance: none;
+  cursor: pointer; color: var(--text);
+}
+.form-select:focus { border-color: var(--primary); }
+textarea.form-control { resize: vertical; min-height: 80px; }
+
+/* ── Modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 999; opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal-box {
+  background: var(--card); border-radius: var(--radius);
+  width: 480px; max-width: 95vw; max-height: 90vh;
+  overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+  transform: translateY(10px); transition: transform .2s;
+}
+.modal-box.wide { width: 560px; }
+.modal-overlay.open .modal-box { transform: translateY(0); }
+.modal-header {
+  padding: 18px 20px 16px; border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-title { font-size: 15px; font-weight: 700; }
+.modal-close {
+  background: none; border: none; cursor: pointer;
+  font-size: 20px; color: var(--muted); line-height: 1; padding: 2px;
+}
+.modal-close:hover { color: var(--text); }
+.modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+.modal-footer {
+  padding: 14px 20px; border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+
+/* ── Notice bar ── */
+.notice {
+  padding: 10px 14px; border-radius: 8px; font-size: 12.5px;
+  display: flex; align-items: flex-start; gap: 8px; margin-bottom: 14px;
+}
+.notice.info    { background: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+.notice.success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
+.notice.danger  { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.notice.warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+.notice-icon { flex-shrink: 0; font-size: 14px; }
+
+/* ── KB stats ── */
+.stat-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.stat-chip {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 18px; min-width: 110px;
+  text-align: center;
+}
+.stat-chip-val { font-size: 28px; font-weight: 800; line-height: 1; }
+.stat-chip-lbl { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+/* ── Category chips ── */
+.cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cat-chip {
+  padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg); color: var(--text);
+}
+
+/* ── Empty state ── */
+.empty { text-align: center; padding: 40px 16px; color: var(--muted); }
+.empty-icon { font-size: 32px; margin-bottom: 10px; }
+.empty-text { font-size: 13px; }
+
+/* ── Spinner ── */
+.spinner {
+  display: inline-block; width: 16px; height: 16px;
+  border: 2px solid var(--border); border-top-color: var(--primary);
+  border-radius: 50%; animation: spin .6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── RAG test ── */
+.rag-test-output {
+  background: #f8faff; border: 1px solid #dbeafe; border-radius: 8px;
+  padding: 14px; white-space: pre-wrap; line-height: 1.75;
+  font-size: 13px; max-height: 280px; overflow-y: auto;
+  margin-top: 10px;
+}
+
+/* ── Toggle ── */
+.toggle-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px; font-size: 11.5px; font-weight: 600;
+  cursor: pointer; border: none; transition: all .15s;
+}
+.toggle-avail  { background: #dcfce7; color: #15803d; }
+.toggle-unavail { background: #f3f4f6; color: #6b7280; }
+.toggle-avail:hover  { background: #bbf7d0; }
+.toggle-unavail:hover { background: #e5e7eb; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+
+/* ── KB ingest area ── */
+.kb-add-box {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 18px; background: #fafbfc; display: flex; flex-direction: column; gap: 12px;
+}
+.kb-add-box h4 { font-size: 13px; font-weight: 700; margin-bottom: 0; }
+
+/* ── Filter buttons (resource points) ── */
+.filter-btn {
+  padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+  border: 1px solid var(--border); background: var(--bg); color: var(--muted);
+  cursor: pointer; transition: all .12s;
+}
+.filter-btn:hover { border-color: var(--primary); color: var(--primary); }
+.filter-btn.active { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* ── Source badge ── */
+.src-badge {
+  display: inline-block; padding: 2px 7px; border-radius: 4px;
+  font-size: 10px; font-weight: 600; letter-spacing: .02em;
+}
+.src-gov      { background: #eff6ff; color: #1d4ed8; }
+.src-manual   { background: #f3f4f6; color: #6b7280; }
+.src-line     { background: #f0fdf4; color: #15803d; }
+
+/* ── Urgency dot ── */
+.urgency-dot {
+  width: 10px; height: 10px; border-radius: 50%; display: inline-block;
+}
+.u5 { background: #dc2626; }
+.u4 { background: #ea580c; }
+.u3 { background: #d97706; }
+.u2 { background: #65a30d; }
+.u1 { background: #6b7280; }
+
+/* ── Supply chips (resource point) ── */
+.supply-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.supply-chip {
+  padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600;
+  background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;
+}
 </style>
 </head>
 <body>
 
-<nav class="navbar navbar-dark mb-4">
-  <div class="container-fluid px-4">
-    <span class="navbar-brand fw-bold fs-5">🏘️ 鄰里守望 — 管理後台</span>
-    <div class="d-flex gap-2">
-      <button class="btn btn-sm btn-warning fw-bold" onclick="triggerCheckin()" id="checkin-btn">
+<!-- ── Sidebar ── -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <h1>🏘️ 鄰里守望</h1>
+    <span>管理後台</span>
+  </div>
+
+  <div class="nav-section">成員管理</div>
+  <div class="nav-item active" onclick="showPage('page-elderly')" data-page="page-elderly">
+    <span class="icon">👴</span> 長者管理
+  </div>
+  <div class="nav-item" onclick="showPage('page-volunteers')" data-page="page-volunteers">
+    <span class="icon">🙋</span> 志工 / 家屬
+  </div>
+  <div class="nav-item" onclick="showPage('page-relations')" data-page="page-relations">
+    <span class="icon">🔗</span> 照護關係
+  </div>
+
+  <div class="nav-section">資源管理</div>
+  <div class="nav-item" onclick="showPage('page-resources')" data-page="page-resources">
+    <span class="icon">📦</span> 個人物資
+  </div>
+  <div class="nav-item" onclick="showPage('page-points')" data-page="page-points">
+    <span class="icon">📍</span> 社區資源點
+  </div>
+  <div class="nav-item" onclick="showPage('page-needs')" data-page="page-needs">
+    <span class="icon">🆘</span> 緊急需求
+  </div>
+  <div class="nav-item" onclick="showPage('page-kb')" data-page="page-kb">
+    <span class="icon">🧠</span> 知識庫
+  </div>
+
+  <div class="sidebar-bottom">
+    <a href="/" class="back-link">
+      <span>←</span> 返回儀表板
+    </a>
+  </div>
+</aside>
+
+<!-- ── Main ── -->
+<div class="main">
+  <div class="topbar">
+    <span class="topbar-title" id="topbar-title">長者管理</span>
+    <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm" onclick="triggerCheckin()" id="checkin-btn">
         📤 立即發送打卡
       </button>
-      <a href="/" class="btn btn-sm btn-outline-light">← 返回儀表板</a>
     </div>
   </div>
-</nav>
+  <div class="content">
 
-<div class="container-fluid px-4">
-
-  <!-- Tabs -->
-  <ul class="nav nav-tabs" id="mainTab">
-    <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#tab-elderly">👴 長者管理</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-volunteers">🙋 志工/家屬</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-resources">📦 物資管理</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-relations" onclick="loadRelations()">🔗 照護關係</a></li>
-    <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#tab-kb" onclick="loadKB()">🧠 知識庫</a></li>
-  </ul>
-
-  <div class="tab-content">
-
-    <!-- ── 長者管理 ────────────────────────────── -->
-    <div class="tab-pane fade show active" id="tab-elderly">
-      <div class="card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="fw-bold mb-0">長者名單</h6>
-          <button class="btn btn-primary btn-sm" onclick="openUserModal('elderly')">＋ 新增長者</button>
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 長者管理                                        -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page active" id="page-elderly">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">長者名單</div>
+            <div class="card-subtitle">所有已登記的社區長者</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openUserModal('elderly')">
+            ＋ 新增長者
+          </button>
         </div>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead class="table-light">
-              <tr><th>姓名</th><th>電話</th><th>地址</th><th>LINE UID</th><th>狀態</th><th>操作</th></tr>
+        <div class="table-wrap">
+          <table class="tbl" id="elderly-tbl">
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>電話</th>
+                <th>地址</th>
+                <th>LINE 狀態</th>
+                <th>帳號狀態</th>
+                <th>操作</th>
+              </tr>
             </thead>
-            <tbody id="elderly-tbody"></tbody>
+            <tbody id="elderly-tbody">
+              <tr><td colspan="6"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── 志工/家屬 ──────────────────────────── -->
-    <div class="tab-pane fade" id="tab-volunteers">
-      <div class="card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="fw-bold mb-0">志工 / 家屬名單</h6>
-          <div class="d-flex gap-2">
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 志工 / 家屬                                     -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-volunteers">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">志工 / 家屬名單</div>
+            <div class="card-subtitle">協助照護的聯絡人</div>
+          </div>
+          <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增志工</button>
-            <button class="btn btn-outline-primary btn-sm" onclick="openUserModal('family')">＋ 新增家屬</button>
+            <button class="btn btn-ghost btn-sm"   onclick="openUserModal('family')">＋ 新增家屬</button>
           </div>
         </div>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead class="table-light">
-              <tr><th>姓名</th><th>角色</th><th>電話</th><th>LINE UID</th><th>狀態</th><th>操作</th></tr>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>姓名</th>
+                <th>角色</th>
+                <th>電話</th>
+                <th>LINE 狀態</th>
+                <th>帳號狀態</th>
+                <th>操作</th>
+              </tr>
             </thead>
-            <tbody id="volunteers-tbody"></tbody>
+            <tbody id="volunteers-tbody">
+              <tr><td colspan="6"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── 物資管理 ────────────────────────────── -->
-    <div class="tab-pane fade" id="tab-resources">
-      <div class="card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="fw-bold mb-0">物資清單</h6>
-          <div class="d-flex gap-2">
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 照護關係                                        -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-relations">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">照護關係設定</div>
+            <div class="card-subtitle">長者未回應時，依順序通知對應聯絡人</div>
+          </div>
+          <button class="btn btn-primary btn-sm" onclick="openRelationModal()">＋ 新增關係</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>長者</th>
+                <th>聯絡人</th>
+                <th>關係</th>
+                <th style="text-align:center">通知順序</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="relations-tbody">
+              <tr><td colspan="5"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 物資管理                                        -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-resources">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">社區物資清單</div>
+            <div class="card-subtitle">點擊「可用 / 不可用」快速切換狀態</div>
+          </div>
+          <div style="display:flex;gap:8px">
             <button class="btn btn-danger btn-sm" onclick="runDispatch()" id="dispatch-btn">
               🚨 立即自動媒合
             </button>
             <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
           </div>
         </div>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead class="table-light">
-              <tr><th>名稱</th><th>類型</th><th>數量</th><th>地址</th><th>登記人</th><th>狀態</th><th>操作</th></tr>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>類型</th>
+                <th>數量</th>
+                <th>地址</th>
+                <th>登記人</th>
+                <th>狀態</th>
+                <th>操作</th>
+              </tr>
             </thead>
-            <tbody id="resources-tbody"></tbody>
+            <tbody id="resources-tbody">
+              <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
           </table>
         </div>
       </div>
     </div>
 
-    <!-- ── 照護關係管理 ───────────────────────────── -->
-    <div class="tab-pane fade" id="tab-relations">
-      <div class="card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="fw-bold mb-0">🔗 長者照護關係（誰照顧誰）</h6>
-          <button class="btn btn-primary btn-sm" onclick="openRelationModal()">＋ 新增關係</button>
-        </div>
-        <p class="text-muted small mb-3">設定後，長者未回應時系統會依順序通知對應的家屬/志工</p>
-        <div class="table-responsive">
-          <table class="table table-sm table-hover">
-            <thead class="table-light">
-              <tr><th>長者</th><th>聯絡人</th><th>關係</th><th>通知順序</th><th>操作</th></tr>
-            </thead>
-            <tbody id="relations-tbody"></tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 知識庫                                          -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-kb">
 
-    <!-- ── 知識庫管理 ────────────────────────────── -->
-    <div class="tab-pane fade" id="tab-kb">
-      <div class="card p-3 mb-3">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="fw-bold mb-0">🧠 RAG 知識庫狀態</h6>
-          <div class="d-flex gap-2">
-            <button class="btn btn-outline-secondary btn-sm" onclick="loadKB()">🔄 刷新</button>
+      <!-- 統計 -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">RAG 知識庫狀態</div>
+            <div class="card-subtitle">向量化完成後，志工可透過 LINE 查詢 AI 助手</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="loadKB()">🔄 刷新</button>
             <button class="btn btn-warning btn-sm" id="ingest-btn" onclick="ingestAll()">📥 重新載入知識庫</button>
           </div>
         </div>
-        <div id="kb-stats" class="mb-3">
-          <div class="spinner-border spinner-border-sm text-primary me-2"></div>載入中...
-        </div>
-        <div id="ingest-status" class="alert" style="display:none"></div>
-        <hr>
-
-        <!-- 新增文件 -->
-        <div class="fw-bold mb-3">📄 新增知識文件</div>
-        <div class="row g-2 mb-2">
-          <div class="col-md-6">
-            <label class="form-label small text-muted">來源名稱（顯示在回答底部）</label>
-            <input type="text" id="doc-source" class="form-control form-control-sm"
-              placeholder="例如：台中市急救手冊 v1.0">
+        <div class="card-body">
+          <div id="kb-stats-wrap">
+            <div class="stat-chips">
+              <div class="stat-chip"><div class="stat-chip-val" id="stat-total">—</div><div class="stat-chip-lbl">總 Chunks</div></div>
+              <div class="stat-chip"><div class="stat-chip-val" id="stat-embed" style="color:var(--success)">—</div><div class="stat-chip-lbl">已向量化</div></div>
+            </div>
+            <div id="stat-cats" class="cat-chips"></div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label small text-muted">分類</label>
-            <select class="form-select form-select-sm" id="doc-category">
-              <option value="first_aid">🩹 急救</option>
-              <option value="eldercare">👴 長者照護</option>
-              <option value="disaster">🌀 災時應變</option>
-              <option value="volunteer">🙋 志工管理</option>
-              <option value="other">📄 其他</option>
-            </select>
+          <div id="ingest-notice" style="margin-top:14px;display:none"></div>
+        </div>
+      </div>
+
+      <!-- 新增文件 -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📄 新增知識文件</div>
+        </div>
+        <div class="card-body">
+          <div class="form-row col-2" style="margin-bottom:12px">
+            <div class="form-group">
+              <label class="form-label">來源名稱 <span class="req">*</span></label>
+              <input type="text" id="doc-source" class="form-control" placeholder="例如：台中市急救手冊 v1.0">
+            </div>
+            <div class="form-group">
+              <label class="form-label">分類</label>
+              <select id="doc-category" class="form-select">
+                <option value="first_aid">🩹 急救</option>
+                <option value="eldercare">👴 長者照護</option>
+                <option value="disaster">🌀 災時應變</option>
+                <option value="volunteer">🙋 志工管理</option>
+                <option value="other">📄 其他</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:10px">
+            <label class="form-label">文件內容 <span class="req">*</span></label>
+            <textarea id="doc-content" class="form-control" rows="7"
+              placeholder="貼上 SOP、指引、注意事項等…&#10;系統將自動切段（每 400 字一段）並向量化。"></textarea>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--muted)" id="doc-char-count">0 字</span>
+            <button class="btn btn-success" onclick="addDocument()" id="doc-add-btn">
+              ➕ 新增並向量化
+            </button>
+          </div>
+          <div id="doc-result" style="margin-top:10px;display:none"></div>
+        </div>
+      </div>
+
+      <!-- 文件清單 -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">📚 目前知識文件分類</div></div>
+        <div class="card-body" id="doc-list">
+          <p style="font-size:12px;color:var(--muted)">載入中…</p>
+        </div>
+      </div>
+
+      <!-- 測試查詢 -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">🔍 測試 RAG 查詢</div></div>
+        <div class="card-body">
+          <div style="display:flex;gap:8px">
+            <input type="text" id="kb-test-q" class="form-control"
+              placeholder="例如：CPR 步驟" onkeydown="if(event.key==='Enter') testQuery()">
+            <button class="btn btn-primary" onclick="testQuery()">查詢</button>
+          </div>
+          <div id="kb-test-result" class="rag-test-output" style="display:none"></div>
+        </div>
+      </div>
+
+    </div><!-- /page-kb -->
+
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 社區資源點                                      -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-points">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">社區固定資源點</div>
+            <div class="card-subtitle">避難收容所、消防分隊、衛生所、活動中心、物資分發點</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="seedPoints()">📥 從政府資料匯入</button>
+            <button class="btn btn-primary btn-sm" onclick="openPointModal()">＋ 手動新增</button>
           </div>
         </div>
-        <div class="mb-2">
-          <label class="form-label small text-muted">文件內容（貼上 SOP、指引、注意事項等）</label>
-          <textarea id="doc-content" class="form-control" rows="7"
-            placeholder="貼上文件內容...&#10;系統會自動切段（每 400 字一段）並向量化。"></textarea>
+        <!-- 分類篩選器 -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">
+          <button class="filter-btn active" data-type="" onclick="filterPoints(this,'')">全部</button>
+          <button class="filter-btn" data-type="shelter" onclick="filterPoints(this,'shelter')">🏠 避難所</button>
+          <button class="filter-btn" data-type="fire_station" onclick="filterPoints(this,'fire_station')">🚒 消防</button>
+          <button class="filter-btn" data-type="hospital" onclick="filterPoints(this,'hospital')">🏥 醫院</button>
+          <button class="filter-btn" data-type="clinic" onclick="filterPoints(this,'clinic')">💊 衛生所</button>
+          <button class="filter-btn" data-type="community" onclick="filterPoints(this,'community')">🏘️ 活動中心</button>
+          <button class="filter-btn" data-type="store" onclick="filterPoints(this,'store')">🛒 分發點</button>
+          <button class="filter-btn" data-type="warehouse" onclick="filterPoints(this,'warehouse')">📦 倉庫</button>
         </div>
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <span class="text-muted small" id="doc-char-count">0 字</span>
-          <button class="btn btn-success" onclick="addDocument()" id="doc-add-btn">
-            ➕ 新增並向量化
-          </button>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>類型</th>
+                <th>地址</th>
+                <th>容量</th>
+                <th>可提供物資</th>
+                <th>電話</th>
+                <th>來源</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="points-tbody">
+              <tr><td colspan="8"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
         </div>
-        <div id="doc-result" class="alert" style="display:none"></div>
+      </div>
+      <div id="seed-notice" style="display:none;margin-top:0"></div>
+    </div>
 
-        <hr>
-        <!-- 現有文件列表 -->
-        <div class="fw-bold mb-2">📚 目前知識文件</div>
-        <div id="doc-list" class="mb-3"></div>
-
-        <hr>
-        <div class="fw-bold mb-2">🔍 測試 RAG 查詢</div>
-        <div class="input-group mb-2">
-          <input type="text" id="kb-test-q" class="form-control"
-            placeholder="例如：CPR 步驟" onkeydown="if(event.key==='Enter') testQuery()">
-          <button class="btn btn-primary" onclick="testQuery()">查詢</button>
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 緊急需求                                        -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-needs">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">社區緊急需求</div>
+            <div class="card-subtitle">居民透過 LINE 回報的物資需求，顏色代表緊急度</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="loadNeeds()">🔄 刷新</button>
+            <button class="btn btn-danger btn-sm" onclick="runDispatch()" id="dispatch-btn2">🚨 立即自動媒合</button>
+          </div>
         </div>
-        <div id="kb-test-result" class="p-3 bg-light rounded" style="display:none; white-space:pre-wrap; font-size:.88rem"></div>
+        <!-- 緊急度說明 -->
+        <div style="padding:10px 18px;border-bottom:1px solid var(--border);display:flex;gap:10px;align-items:center">
+          <span style="font-size:11px;color:var(--muted)">緊急度：</span>
+          <span class="urgency-dot u5"></span><span style="font-size:11px">5 極緊急（2km）</span>
+          <span class="urgency-dot u4"></span><span style="font-size:11px">4 緊急（5km）</span>
+          <span class="urgency-dot u3"></span><span style="font-size:11px">3 一般（8km）</span>
+          <span class="urgency-dot u2"></span><span style="font-size:11px">2 輕度（15km）</span>
+          <span class="urgency-dot u1"></span><span style="font-size:11px">1 觀察（25km）</span>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>緊急度</th>
+                <th>類型</th>
+                <th>說明</th>
+                <th>地址</th>
+                <th>狀態</th>
+                <th>建立時間</th>
+                <th>媒合結果</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="needs-tbody">
+              <tr><td colspan="8"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 媒合演算法說明 -->
+      <div class="card">
+        <div class="card-header"><div class="card-title">📐 媒合算法說明</div></div>
+        <div class="card-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">評分公式</div>
+              <div style="background:#f8faff;border:1px solid #dbeafe;border-radius:8px;padding:12px;font-size:12px;font-family:monospace;line-height:1.8">
+                score = urgency × 12<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ affinity × 15<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- (dist/max_dist) × 25<br>
+                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- volunteer_tasks × 5
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">距離上限（依緊急度）</div>
+              <table class="tbl" style="font-size:12px">
+                <tr><td>5 極緊急</td><td><strong>2 km</strong></td></tr>
+                <tr><td>4 緊急</td><td><strong>5 km</strong></td></tr>
+                <tr><td>3 一般</td><td><strong>8 km</strong></td></tr>
+                <tr><td>2 輕度</td><td><strong>15 km</strong></td></tr>
+                <tr><td>1 觀察</td><td><strong>25 km</strong></td></tr>
+              </table>
+            </div>
+          </div>
+          <div style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7">
+            <strong>資料來源（三層）：</strong><br>
+            Layer 1 個人物資 — 志工自行登記的 CommunityResource<br>
+            Layer 2 固定資源點 — 政府開放資料匯入的 ResourcePoint（避難所、消防、衛生所）<br>
+            Layer 3 類型親合度矩陣 — water ↔ food 部分匹配；tool ↔ other 部分匹配
+          </div>
+        </div>
       </div>
     </div>
 
-  </div>
-</div>
+  </div><!-- /content -->
+</div><!-- /main -->
 
-<!-- ── 使用者 Modal ──────────────────────────── -->
-<div class="modal fade" id="userModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="userModalTitle">新增使用者</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <input type="hidden" id="user-id">
-        <input type="hidden" id="user-role">
-        <div class="mb-3">
-          <label class="form-label">姓名 <span class="text-danger">*</span></label>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Modal: 使用者                                        -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-user" onclick="closeOnOverlay(event,'modal-user')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="user-modal-title">新增使用者</span>
+      <button class="modal-close" onclick="closeModal('modal-user')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="user-id">
+      <input type="hidden" id="user-role">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">姓名 <span class="req">*</span></label>
           <input type="text" class="form-control" id="user-name" placeholder="王大明">
         </div>
-        <div class="mb-3">
+        <div class="form-group">
           <label class="form-label">電話</label>
           <input type="text" class="form-control" id="user-phone" placeholder="0912345678">
         </div>
-        <div class="mb-3">
-          <label class="form-label">地址</label>
-          <input type="text" class="form-control" id="user-address" placeholder="台中市南區...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">地址</label>
+        <input type="text" class="form-control" id="user-address" placeholder="台中市南區…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">LINE User ID</label>
+        <input type="text" class="form-control" id="user-line" placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+        <span class="form-hint">綁定後才能收到 LINE 推播通知</span>
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">緯度</label>
+          <input type="number" step="0.0001" class="form-control" id="user-lat" placeholder="24.1234">
         </div>
-        <div class="mb-3">
-          <label class="form-label">LINE User ID</label>
-          <input type="text" class="form-control" id="user-line" placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
-          <div class="form-text">綁定後才能收到 LINE 通知</div>
-        </div>
-        <div class="row g-2">
-          <div class="col">
-            <label class="form-label">緯度</label>
-            <input type="number" step="0.0001" class="form-control" id="user-lat" placeholder="24.1234">
-          </div>
-          <div class="col">
-            <label class="form-label">經度</label>
-            <input type="number" step="0.0001" class="form-control" id="user-lng" placeholder="120.6789">
-          </div>
+        <div class="form-group">
+          <label class="form-label">經度</label>
+          <input type="number" step="0.0001" class="form-control" id="user-lng" placeholder="120.6789">
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-        <button class="btn btn-primary" onclick="saveUser()">儲存</button>
-      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-user')">取消</button>
+      <button class="btn btn-primary" onclick="saveUser()">儲存</button>
     </div>
   </div>
 </div>
 
-<!-- ── 照護關係 Modal ─────────────────────────── -->
-<div class="modal fade" id="relationModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">新增照護關係</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Modal: 照護關係                                      -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-relation" onclick="closeOnOverlay(event,'modal-relation')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">新增照護關係</span>
+      <button class="modal-close" onclick="closeModal('modal-relation')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">長者 <span class="req">*</span></label>
+        <select class="form-select" id="rel-elderly-id"></select>
       </div>
-      <div class="modal-body">
-        <div class="mb-3">
-          <label class="form-label">長者 <span class="text-danger">*</span></label>
-          <select class="form-select" id="rel-elderly-id"></select>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">聯絡人（家屬/志工）<span class="text-danger">*</span></label>
-          <select class="form-select" id="rel-contact-id"></select>
-        </div>
-        <div class="mb-3">
-          <label class="form-label">關係</label>
+      <div class="form-group">
+        <label class="form-label">聯絡人（家屬 / 志工）<span class="req">*</span></label>
+        <select class="form-select" id="rel-contact-id"></select>
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">關係類型</label>
           <select class="form-select" id="rel-relation">
             <option value="family">家屬</option>
             <option value="volunteer">志工</option>
             <option value="neighbor">鄰居</option>
           </select>
         </div>
-        <div class="mb-3">
-          <label class="form-label">通知順序（1=最先通知）</label>
+        <div class="form-group">
+          <label class="form-label">通知順序（1 = 最先）</label>
           <input type="number" min="1" max="10" class="form-control" id="rel-order" value="1">
-          <div class="form-text">未回應時，順序小的先被通知</div>
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-        <button class="btn btn-primary" onclick="saveRelation()">儲存</button>
+      <div class="notice info" style="margin:0">
+        <span class="notice-icon">ℹ️</span>
+        長者未回應打卡時，系統依序由小到大通知聯絡人
       </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-relation')">取消</button>
+      <button class="btn btn-primary" onclick="saveRelation()">儲存</button>
     </div>
   </div>
 </div>
 
-<!-- ── 物資 Modal ─────────────────────────────── -->
-<div class="modal fade" id="resourceModal" tabindex="-1">
-  <div class="modal-dialog">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="resourceModalTitle">新增物資</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Modal: 資源點                                        -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-point" onclick="closeOnOverlay(event,'modal-point')">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <span class="modal-title" id="point-modal-title">新增資源點</span>
+      <button class="modal-close" onclick="closeModal('modal-point')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="pt-id">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">名稱 <span class="req">*</span></label>
+          <input type="text" class="form-control" id="pt-name" placeholder="例：崇倫國小避難所">
+        </div>
+        <div class="form-group">
+          <label class="form-label">類型</label>
+          <select class="form-select" id="pt-type">
+            <option value="shelter">🏠 避難收容所</option>
+            <option value="community">🏘️ 里民活動中心</option>
+            <option value="hospital">🏥 醫療院所</option>
+            <option value="fire_station">🚒 消防分隊</option>
+            <option value="police">👮 警察局/派出所</option>
+            <option value="store">🛒 物資分發點</option>
+            <option value="warehouse">📦 物資倉庫</option>
+            <option value="clinic">💊 衛生所</option>
+            <option value="other">📍 其他</option>
+          </select>
+        </div>
       </div>
-      <div class="modal-body">
-        <input type="hidden" id="res-id">
-        <div class="mb-3">
-          <label class="form-label">名稱 <span class="text-danger">*</span></label>
+      <div class="form-group">
+        <label class="form-label">地址</label>
+        <input type="text" class="form-control" id="pt-address" placeholder="台中市南區…">
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">緯度</label>
+          <input type="number" step="0.0001" class="form-control" id="pt-lat" placeholder="24.1234">
+        </div>
+        <div class="form-group">
+          <label class="form-label">經度</label>
+          <input type="number" step="0.0001" class="form-control" id="pt-lng" placeholder="120.6789">
+        </div>
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">容量（人數）</label>
+          <input type="number" class="form-control" id="pt-capacity" placeholder="200">
+        </div>
+        <div class="form-group">
+          <label class="form-label">電話</label>
+          <input type="text" class="form-control" id="pt-phone" placeholder="04-22xxxxxx">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">開放時間</label>
+        <input type="text" class="form-control" id="pt-hours" placeholder="24h 或 08:00-22:00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">備註</label>
+        <input type="text" class="form-control" id="pt-note">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-point')">取消</button>
+      <button class="btn btn-primary" onclick="savePoint()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Modal: 物資                                          -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-resource" onclick="closeOnOverlay(event,'modal-resource')">
+  <div class="modal-box wide">
+    <div class="modal-header">
+      <span class="modal-title" id="resource-modal-title">新增物資</span>
+      <button class="modal-close" onclick="closeModal('modal-resource')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="res-id">
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">名稱 <span class="req">*</span></label>
           <input type="text" class="form-control" id="res-name" placeholder="備用飲用水">
         </div>
-        <div class="mb-3">
+        <div class="form-group">
           <label class="form-label">類型</label>
           <select class="form-select" id="res-type">
             <option value="water">💧 飲用水</option>
@@ -302,113 +910,209 @@
             <option value="other">📦 其他</option>
           </select>
         </div>
-        <div class="mb-3">
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
           <label class="form-label">數量</label>
           <input type="text" class="form-control" id="res-quantity" placeholder="約 50 公升">
         </div>
-        <div class="mb-3">
-          <label class="form-label">地址</label>
-          <input type="text" class="form-control" id="res-address">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">備註</label>
-          <input type="text" class="form-control" id="res-note">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">登記人（選擇志工）</label>
+        <div class="form-group">
+          <label class="form-label">登記人（志工）</label>
           <select class="form-select" id="res-owner-id">
             <option value="">— 選擇 —</option>
           </select>
         </div>
-        <div class="row g-2">
-          <div class="col">
-            <label class="form-label">緯度</label>
-            <input type="number" step="0.0001" class="form-control" id="res-lat">
-          </div>
-          <div class="col">
-            <label class="form-label">經度</label>
-            <input type="number" step="0.0001" class="form-control" id="res-lng">
-          </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">地址</label>
+        <input type="text" class="form-control" id="res-address">
+      </div>
+      <div class="form-group">
+        <label class="form-label">備註</label>
+        <input type="text" class="form-control" id="res-note">
+      </div>
+      <div class="form-row col-2">
+        <div class="form-group">
+          <label class="form-label">緯度</label>
+          <input type="number" step="0.0001" class="form-control" id="res-lat">
+        </div>
+        <div class="form-group">
+          <label class="form-label">經度</label>
+          <input type="number" step="0.0001" class="form-control" id="res-lng">
         </div>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-        <button class="btn btn-primary" onclick="saveResource()">儲存</button>
-      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-resource')">取消</button>
+      <button class="btn btn-primary" onclick="saveResource()">儲存</button>
     </div>
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
 <script>
-let allUsers = [];
+// ════════════════════════════════════════════════
+// Constants
+// ════════════════════════════════════════════════
 const ROLE_LABEL = { elderly:'長者', volunteer:'志工', family:'家屬', admin:'管理員' };
-const ROLE_COLOR = { elderly:'primary', volunteer:'success', family:'warning', admin:'danger' };
+const ROLE_BADGE = { elderly:'badge-blue', volunteer:'badge-green', family:'badge-amber', admin:'badge-red' };
 const RES_ICON   = { water:'💧', food:'🍱', first_aid:'🩹', shelter:'🏠', vehicle:'🚗', tool:'🔧', other:'📦' };
+const PAGE_TITLE = {
+  'page-elderly':   '長者管理',
+  'page-volunteers':'志工 / 家屬',
+  'page-relations': '照護關係',
+  'page-resources': '個人物資',
+  'page-points':    '社區資源點',
+  'page-needs':     '緊急需求',
+  'page-kb':        '知識庫',
+};
+let allUsers = [];
 
-// ── 載入資料 ──────────────────────────────────
+// ════════════════════════════════════════════════
+// Navigation
+// ════════════════════════════════════════════════
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  const navEl = document.querySelector(`.nav-item[data-page="${id}"]`);
+  if (navEl) navEl.classList.add('active');
+  document.getElementById('topbar-title').textContent = PAGE_TITLE[id] || '';
+
+  // Lazy-load when first visiting
+  if (id === 'page-relations') loadRelations();
+  if (id === 'page-points')    loadPoints();
+  if (id === 'page-needs')     loadNeeds();
+  if (id === 'page-kb')        loadKB();
+}
+
+// ════════════════════════════════════════════════
+// Modal helpers
+// ════════════════════════════════════════════════
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeOnOverlay(e, id) {
+  if (e.target === document.getElementById(id)) closeModal(id);
+}
+
+// ════════════════════════════════════════════════
+// Notice helper
+// ════════════════════════════════════════════════
+function showNotice(elId, type, msg) {
+  const el = document.getElementById(elId);
+  const icons = { info:'ℹ️', success:'✅', danger:'❌', warning:'⚠️' };
+  el.className = `notice ${type}`;
+  el.innerHTML = `<span class="notice-icon">${icons[type]||''}</span><span>${msg}</span>`;
+  el.style.display = 'flex';
+}
+
+// ════════════════════════════════════════════════
+// Load all users + resources
+// ════════════════════════════════════════════════
 async function loadAll() {
-  const [users, resources] = await Promise.all([
-    fetch('/api/dashboard/users').then(r=>r.json()),
-    fetch('/api/resources/?available_only=false').then(r=>r.json()),
-  ]);
-  allUsers = users;
-  renderElderly(users.filter(u => u.roles.includes('elderly')));
-  renderVolunteers(users.filter(u => !u.roles.includes('elderly')));
-  renderResources(resources);
-  populateOwnerSelect(users.filter(u => u.roles.includes('volunteer') || u.roles.includes('admin')));
+  try {
+    const [users, resources] = await Promise.all([
+      fetch('/api/dashboard/users').then(r => r.json()),
+      fetch('/api/resources/?available_only=false').then(r => r.json()),
+    ]);
+    allUsers = users;
+    renderElderly(users.filter(u => u.roles.includes('elderly')));
+    renderVolunteers(users.filter(u => !u.roles.includes('elderly')));
+    renderResources(resources);
+    populateOwnerSelect(users.filter(u => u.roles.includes('volunteer') || u.roles.includes('admin')));
+  } catch(e) {
+    console.error('loadAll failed:', e);
+  }
 }
 
-// ── 長者表格 ──────────────────────────────────
+// ════════════════════════════════════════════════
+// Elderly table
+// ════════════════════════════════════════════════
 function renderElderly(data) {
-  document.getElementById('elderly-tbody').innerHTML = data.map(u => `
+  const tbody = document.getElementById('elderly-tbody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
+      <div class="empty-icon">👴</div>
+      <div class="empty-text">尚未新增長者</div>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(u => `
     <tr>
-      <td class="fw-semibold">${u.name}</td>
-      <td>${u.phone||'—'}</td>
-      <td class="small text-muted">${u.address||'—'}</td>
-      <td class="small text-muted">${u.line_uid ? u.line_uid.slice(0,12)+'…' : '<span class="text-danger">未綁定</span>'}</td>
-      <td>${u.is_active ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>'}</td>
+      <td><strong>${u.name}</strong></td>
+      <td class="muted">${u.phone || '—'}</td>
+      <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.address || '—'}</td>
+      <td>${u.line_uid
+        ? `<span class="badge badge-green">✓ 已綁定</span>`
+        : `<span class="badge badge-red">未綁定</span>`}</td>
+      <td>${u.is_active
+        ? `<span class="badge badge-green">啟用</span>`
+        : `<span class="badge badge-gray">停用</span>`}</td>
       <td>
-        <button class="btn btn-outline-primary btn-icon me-1" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
-        <button class="btn btn-outline-danger btn-icon" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
       </td>
     </tr>`).join('');
 }
 
-// ── 志工/家屬表格 ─────────────────────────────
+// ════════════════════════════════════════════════
+// Volunteer table
+// ════════════════════════════════════════════════
 function renderVolunteers(data) {
-  document.getElementById('volunteers-tbody').innerHTML = data.map(u => `
+  const tbody = document.getElementById('volunteers-tbody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
+      <div class="empty-icon">🙋</div>
+      <div class="empty-text">尚未新增志工或家屬</div>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(u => `
     <tr>
-      <td class="fw-semibold">${u.name}</td>
-      <td>${u.roles.map(r=>`<span class="badge bg-${ROLE_COLOR[r]||'secondary'} role-badge me-1">${ROLE_LABEL[r]||r}</span>`).join('')}</td>
-      <td>${u.phone||'—'}</td>
-      <td class="small text-muted">${u.line_uid ? u.line_uid.slice(0,12)+'…' : '<span class="text-danger">未綁定</span>'}</td>
-      <td>${u.is_active ? '<span class="badge bg-success">啟用</span>' : '<span class="badge bg-secondary">停用</span>'}</td>
+      <td><strong>${u.name}</strong></td>
+      <td>${u.roles.map(r => `<span class="badge ${ROLE_BADGE[r]||'badge-gray'}" style="margin-right:3px">${ROLE_LABEL[r]||r}</span>`).join('')}</td>
+      <td class="muted">${u.phone || '—'}</td>
+      <td>${u.line_uid
+        ? `<span class="badge badge-green">✓ 已綁定</span>`
+        : `<span class="badge badge-red">未綁定</span>`}</td>
+      <td>${u.is_active
+        ? `<span class="badge badge-green">啟用</span>`
+        : `<span class="badge badge-gray">停用</span>`}</td>
       <td>
-        <button class="btn btn-outline-primary btn-icon me-1" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
-        <button class="btn btn-outline-danger btn-icon" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
       </td>
     </tr>`).join('');
 }
 
-// ── 物資表格 ──────────────────────────────────
+// ════════════════════════════════════════════════
+// Resources table
+// ════════════════════════════════════════════════
 function renderResources(data) {
-  document.getElementById('resources-tbody').innerHTML = data.map(r => `
+  const tbody = document.getElementById('resources-tbody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty">
+      <div class="empty-icon">📦</div>
+      <div class="empty-text">尚未登記任何物資</div>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = data.map(r => `
     <tr>
-      <td class="fw-semibold">${r.name}</td>
-      <td>${RES_ICON[r.resource_type]||'📦'} ${r.resource_type}</td>
-      <td>${r.quantity||'—'}</td>
-      <td class="small text-muted">${r.address||'—'}</td>
-      <td>${r.owner||'—'}</td>
+      <td><strong>${r.name}</strong></td>
+      <td>${RES_ICON[r.resource_type]||'📦'} <span class="muted">${r.resource_type}</span></td>
+      <td class="muted">${r.quantity || '—'}</td>
+      <td class="muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.address || '—'}</td>
+      <td class="muted">${r.owner || '—'}</td>
       <td>
-        <span class="badge ${r.is_available?'bg-success':'bg-secondary'}" style="cursor:pointer"
+        <button class="toggle-btn ${r.is_available ? 'toggle-avail' : 'toggle-unavail'}"
           onclick="toggleResource('${r.id}')">
-          ${r.is_available?'可用':'不可用'}
-        </span>
+          ${r.is_available ? '● 可用' : '○ 不可用'}
+        </button>
       </td>
       <td>
-        <button class="btn btn-outline-primary btn-icon me-1" onclick='editResource(${JSON.stringify(r)})'>編輯</button>
-        <button class="btn btn-outline-danger btn-icon" onclick="deleteResource('${r.id}','${r.name}')">刪除</button>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editResource(${JSON.stringify(r)})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deleteResource('${r.id}','${r.name}')">刪除</button>
       </td>
     </tr>`).join('');
 }
@@ -417,14 +1121,16 @@ function populateOwnerSelect(volunteers) {
   const sel = document.getElementById('res-owner-id');
   const cur = sel.value;
   sel.innerHTML = '<option value="">— 選擇 —</option>' +
-    volunteers.map(v=>`<option value="${v.id}">${v.name}</option>`).join('');
+    volunteers.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
   sel.value = cur;
 }
 
-// ── 使用者 Modal ──────────────────────────────
-function openUserModal(role, user=null) {
-  document.getElementById('userModalTitle').textContent =
-    user ? '編輯使用者' : `新增${ROLE_LABEL[role]||role}`;
+// ════════════════════════════════════════════════
+// User modal
+// ════════════════════════════════════════════════
+function openUserModal(role, user = null) {
+  document.getElementById('user-modal-title').textContent =
+    user ? '編輯使用者' : `新增${ROLE_LABEL[role] || role}`;
   document.getElementById('user-id').value      = user?.id || '';
   document.getElementById('user-role').value    = role;
   document.getElementById('user-name').value    = user?.name || '';
@@ -433,13 +1139,10 @@ function openUserModal(role, user=null) {
   document.getElementById('user-line').value    = user?.line_uid || '';
   document.getElementById('user-lat').value     = user?.lat || '';
   document.getElementById('user-lng').value     = user?.lng || '';
-  new bootstrap.Modal(document.getElementById('userModal')).show();
+  openModal('modal-user');
 }
 
-function editUser(u) {
-  const role = u.roles[0] || 'elderly';
-  openUserModal(role, u);
-}
+function editUser(u) { openUserModal(u.roles[0] || 'elderly', u); }
 
 async function saveUser() {
   const id      = document.getElementById('user-id').value;
@@ -453,23 +1156,20 @@ async function saveUser() {
 
   if (!name) { alert('請輸入姓名'); return; }
 
-  const params = new URLSearchParams({ name });
-  if (phone)   params.set('phone', phone);
-  if (address) params.set('address', address);
-  if (lineUid) params.set('line_uid', lineUid);
-  if (lat)     params.set('lat', lat);
-  if (lng)     params.set('lng', lng);
+  const p = new URLSearchParams({ name });
+  if (phone)   p.set('phone', phone);
+  if (address) p.set('address', address);
+  if (lineUid) p.set('line_uid', lineUid);
+  if (lat)     p.set('lat', lat);
+  if (lng)     p.set('lng', lng);
 
   if (id) {
-    // 更新
-    await fetch(`/api/dashboard/users/${id}?${params}`, { method: 'PUT' });
+    await fetch(`/api/dashboard/users/${id}?${p}`, { method: 'PUT' });
   } else {
-    // 新增
-    params.append('roles', role);
-    await fetch(`/api/dashboard/users?${params}`, { method: 'POST' });
+    p.append('roles', role);
+    await fetch(`/api/dashboard/users?${p}`, { method: 'POST' });
   }
-
-  bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+  closeModal('modal-user');
   loadAll();
 }
 
@@ -479,9 +1179,11 @@ async function deleteUser(id, name) {
   loadAll();
 }
 
-// ── 物資 Modal ────────────────────────────────
-function openResourceModal(res=null) {
-  document.getElementById('resourceModalTitle').textContent = res ? '編輯物資' : '新增物資';
+// ════════════════════════════════════════════════
+// Resource modal
+// ════════════════════════════════════════════════
+function openResourceModal(res = null) {
+  document.getElementById('resource-modal-title').textContent = res ? '編輯物資' : '新增物資';
   document.getElementById('res-id').value       = res?.id || '';
   document.getElementById('res-name').value     = res?.name || '';
   document.getElementById('res-type').value     = res?.resource_type || 'water';
@@ -490,40 +1192,39 @@ function openResourceModal(res=null) {
   document.getElementById('res-note').value     = res?.note || '';
   document.getElementById('res-lat').value      = res?.lat || '';
   document.getElementById('res-lng').value      = res?.lng || '';
-  new bootstrap.Modal(document.getElementById('resourceModal')).show();
+  openModal('modal-resource');
 }
 
 function editResource(r) { openResourceModal(r); }
 
 async function saveResource() {
-  const id       = document.getElementById('res-id').value;
-  const name     = document.getElementById('res-name').value.trim();
-  const resType  = document.getElementById('res-type').value;
-  const quantity = document.getElementById('res-quantity').value.trim();
-  const address  = document.getElementById('res-address').value.trim();
-  const note     = document.getElementById('res-note').value.trim();
-  const ownerId  = document.getElementById('res-owner-id').value;
-  const lat      = document.getElementById('res-lat').value;
-  const lng      = document.getElementById('res-lng').value;
+  const id      = document.getElementById('res-id').value;
+  const name    = document.getElementById('res-name').value.trim();
+  const resType = document.getElementById('res-type').value;
+  const qty     = document.getElementById('res-quantity').value.trim();
+  const addr    = document.getElementById('res-address').value.trim();
+  const note    = document.getElementById('res-note').value.trim();
+  const ownerId = document.getElementById('res-owner-id').value;
+  const lat     = document.getElementById('res-lat').value;
+  const lng     = document.getElementById('res-lng').value;
 
   if (!name) { alert('請輸入名稱'); return; }
 
-  const params = new URLSearchParams({ name, resource_type: resType });
-  if (quantity) params.set('quantity', quantity);
-  if (address)  params.set('address', address);
-  if (note)     params.set('note', note);
-  if (lat)      params.set('lat', lat);
-  if (lng)      params.set('lng', lng);
+  const p = new URLSearchParams({ name, resource_type: resType });
+  if (qty)  p.set('quantity', qty);
+  if (addr) p.set('address', addr);
+  if (note) p.set('note', note);
+  if (lat)  p.set('lat', lat);
+  if (lng)  p.set('lng', lng);
 
   if (id) {
-    await fetch(`/api/resources/${id}?${params}`, { method: 'PUT' });
+    await fetch(`/api/resources/${id}?${p}`, { method: 'PUT' });
   } else {
     if (!ownerId) { alert('請選擇登記人'); return; }
-    params.set('owner_id', ownerId);
-    await fetch(`/api/resources/?${params}`, { method: 'POST' });
+    p.set('owner_id', ownerId);
+    await fetch(`/api/resources/?${p}`, { method: 'POST' });
   }
-
-  bootstrap.Modal.getInstance(document.getElementById('resourceModal')).hide();
+  closeModal('modal-resource');
   loadAll();
 }
 
@@ -538,8 +1239,132 @@ async function toggleResource(id) {
   loadAll();
 }
 
-// ── 知識庫 ───────────────────────────────────
-// ── 文件字數即時計算 ──────────────────────────
+// ════════════════════════════════════════════════
+// Care relations
+// ════════════════════════════════════════════════
+async function loadRelations() {
+  try {
+    const [rels, users] = await Promise.all([
+      fetch('/api/dashboard/relations').then(r => r.json()),
+      fetch('/api/dashboard/users').then(r => r.json()),
+    ]);
+
+    const elderly  = users.filter(u => u.roles.includes('elderly'));
+    const contacts = users.filter(u => !u.roles.includes('elderly'));
+    document.getElementById('rel-elderly-id').innerHTML =
+      elderly.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+    document.getElementById('rel-contact-id').innerHTML =
+      contacts.map(u => `<option value="${u.id}">${u.name}（${u.roles.map(r=>ROLE_LABEL[r]||r).join('/')}）</option>`).join('');
+
+    const RMAP = { family:'家屬', volunteer:'志工', neighbor:'鄰居' };
+    const tbody = document.getElementById('relations-tbody');
+    if (!rels.length) {
+      tbody.innerHTML = `<tr><td colspan="5"><div class="empty">
+        <div class="empty-icon">🔗</div>
+        <div class="empty-text">尚未設定照護關係</div>
+      </div></td></tr>`;
+      return;
+    }
+    tbody.innerHTML = rels.map(r => `
+      <tr>
+        <td><strong>${r.elderly_name}</strong></td>
+        <td>${r.contact_name}</td>
+        <td><span class="badge badge-gray">${RMAP[r.relation] || r.relation}</span></td>
+        <td style="text-align:center">
+          <span class="badge badge-blue">${r.notify_order}</span>
+        </td>
+        <td>
+          <button class="btn btn-ghost-danger btn-sm"
+            onclick="deleteRelation('${r.id}','${r.elderly_name}','${r.contact_name}')">刪除</button>
+        </td>
+      </tr>`).join('');
+  } catch(e) {
+    document.getElementById('relations-tbody').innerHTML =
+      `<tr><td colspan="5" style="color:var(--danger);padding:16px">載入失敗：${e.message}</td></tr>`;
+  }
+}
+
+function openRelationModal() {
+  if (!document.getElementById('rel-elderly-id').options.length) {
+    loadRelations().then(() => openModal('modal-relation'));
+  } else {
+    openModal('modal-relation');
+  }
+}
+
+async function saveRelation() {
+  const elderly_id   = document.getElementById('rel-elderly-id').value;
+  const contact_id   = document.getElementById('rel-contact-id').value;
+  const relation     = document.getElementById('rel-relation').value;
+  const notify_order = document.getElementById('rel-order').value;
+  if (!elderly_id || !contact_id) { alert('請選擇長者和聯絡人'); return; }
+  const p = new URLSearchParams({ elderly_id, contact_id, relation, notify_order });
+  await fetch(`/api/dashboard/relations?${p}`, { method: 'POST' });
+  closeModal('modal-relation');
+  loadRelations();
+}
+
+async function deleteRelation(id, elderly, contact) {
+  if (!confirm(`確定刪除「${elderly} ↔ ${contact}」的照護關係？`)) return;
+  await fetch(`/api/dashboard/relations/${id}`, { method: 'DELETE' });
+  loadRelations();
+}
+
+// ════════════════════════════════════════════════
+// Knowledge base
+// ════════════════════════════════════════════════
+const CAT_LABEL = {
+  first_aid:'🩹 急救', eldercare:'👴 長者照護',
+  disaster:'🌀 災時應變', volunteer:'🙋 志工管理', other:'📄 其他',
+};
+
+async function loadKB() {
+  try {
+    const [stats, status] = await Promise.all([
+      fetch('/api/rag/stats').then(r => r.json()),
+      fetch('/api/rag/ingest_status').then(r => r.json()),
+    ]);
+    document.getElementById('stat-total').textContent = stats.total_chunks ?? '—';
+    document.getElementById('stat-embed').textContent = stats.chunks_with_embedding ?? '—';
+    const catsEl = document.getElementById('stat-cats');
+    const cats = stats.categories || [];
+    catsEl.innerHTML = cats.length
+      ? cats.map(c => `<span class="cat-chip">${CAT_LABEL[c] || c}</span>`).join('')
+      : '<span style="font-size:12px;color:var(--muted)">（無分類資料）</span>';
+
+    const noticeEl = document.getElementById('ingest-notice');
+    if (status.running) {
+      showNotice('ingest-notice', 'info', '⏳ 知識庫載入中，請稍候…');
+      setTimeout(loadKB, 3000);
+    } else if (status.done) {
+      showNotice('ingest-notice', 'success', `上次載入完成，共 ${status.chunks} 個 chunks`);
+    } else if (status.error) {
+      showNotice('ingest-notice', 'danger', `載入錯誤：${status.error}`);
+    } else {
+      noticeEl.style.display = 'none';
+    }
+
+    loadDocList(cats, stats);
+  } catch(e) {
+    document.getElementById('stat-total').textContent = '!';
+  }
+}
+
+function loadDocList(cats, stats) {
+  const el = document.getElementById('doc-list');
+  if (!cats || !cats.length) {
+    el.innerHTML = '<p style="font-size:12px;color:var(--muted)">知識庫目前為空，請新增文件。</p>';
+    return;
+  }
+  el.innerHTML = `
+    <div class="cat-chips" style="margin-bottom:10px">
+      ${cats.map(c => `<span class="cat-chip">${CAT_LABEL[c] || c}</span>`).join('')}
+    </div>
+    <p style="font-size:12px;color:var(--muted)">
+      共 ${stats.total_chunks || 0} 個 chunks，${stats.chunks_with_embedding || 0} 個已向量化
+    </p>`;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const ta = document.getElementById('doc-content');
   if (ta) ta.addEventListener('input', () => {
@@ -547,7 +1372,6 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// ── 新增文件 ──────────────────────────────────
 async function addDocument() {
   const source   = document.getElementById('doc-source').value.trim();
   const category = document.getElementById('doc-category').value;
@@ -555,11 +1379,11 @@ async function addDocument() {
   const resultEl = document.getElementById('doc-result');
   const btn      = document.getElementById('doc-add-btn');
 
-  if (!source)  { alert('請填寫來源名稱'); return; }
-  if (!content) { alert('請貼上文件內容'); return; }
+  if (!source)          { alert('請填寫來源名稱'); return; }
+  if (!content)         { alert('請貼上文件內容'); return; }
   if (content.length < 30) { alert('內容太短（至少 30 字）'); return; }
 
-  btn.disabled = true; btn.textContent = '向量化中…（約 10-30 秒）';
+  btn.disabled = true; btn.textContent = '向量化中… (約 10-30 秒)';
   resultEl.style.display = 'none';
 
   try {
@@ -570,183 +1394,68 @@ async function addDocument() {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
-    resultEl.className = 'alert alert-success';
-    resultEl.textContent = `✅ 成功新增 ${data.inserted} 個 chunks！來源：${source}`;
-    resultEl.style.display = 'block';
-    // 清空輸入
+    showNotice('doc-result', 'success', `成功新增 ${data.inserted} 個 chunks！來源：${source}`);
     document.getElementById('doc-content').value = '';
     document.getElementById('doc-source').value  = '';
     document.getElementById('doc-char-count').textContent = '0 字';
-    loadKB();  // 刷新統計
+    loadKB();
   } catch(e) {
-    resultEl.className = 'alert alert-danger';
-    resultEl.textContent = '❌ 失敗：' + e.message;
-    resultEl.style.display = 'block';
+    showNotice('doc-result', 'danger', '新增失敗：' + e.message);
   } finally {
     btn.disabled = false; btn.textContent = '➕ 新增並向量化';
   }
 }
 
-// ── 文件列表 ──────────────────────────────────
-async function loadDocList() {
-  try {
-    const stats = await fetch('/api/rag/stats').then(r=>r.json());
-    const cats = stats.categories || [];
-    const catLabel = { first_aid:'🩹 急救', eldercare:'👴 長者照護',
-                       disaster:'🌀 災時應變', volunteer:'🙋 志工管理', other:'📄 其他' };
-    const el = document.getElementById('doc-list');
-    if (!cats.length) {
-      el.innerHTML = '<p class="text-muted">（知識庫為空）</p>';
-      return;
-    }
-    el.innerHTML = cats.map(c => `
-      <span class="badge bg-secondary me-2 mb-1 p-2" style="font-size:.85rem">
-        ${catLabel[c]||c}
-      </span>`).join('') +
-      `<p class="text-muted small mt-2">共 ${stats.total_chunks} 個 chunks，點「🔄 刷新」更新</p>`;
-  } catch(e) {}
-}
-
-async function loadKB() {
-  try {
-    const [stats, status] = await Promise.all([
-      fetch('/api/rag/stats').then(r=>r.json()),
-      fetch('/api/rag/ingest_status').then(r=>r.json()),
-    ]);
-    const cats = (stats.categories||[]).map(c=>`<span class="badge bg-secondary me-1">${c}</span>`).join('');
-    document.getElementById('kb-stats').innerHTML = `
-      <div class="row g-3">
-        <div class="col-auto">
-          <div class="border rounded p-3 text-center" style="min-width:120px">
-            <div style="font-size:2rem;font-weight:800">${stats.total_chunks||0}</div>
-            <div class="text-muted small">總 Chunks</div>
-          </div>
-        </div>
-        <div class="col-auto">
-          <div class="border rounded p-3 text-center" style="min-width:120px">
-            <div style="font-size:2rem;font-weight:800;color:#27ae60">${stats.chunks_with_embedding||0}</div>
-            <div class="text-muted small">已向量化</div>
-          </div>
-        </div>
-        <div class="col d-flex align-items-center flex-wrap gap-1">
-          <span class="text-muted me-2">分類：</span>${cats||'<span class="text-muted">無</span>'}
-        </div>
-      </div>`;
-    if (status.running) {
-      showIngestStatus('info', '⏳ 知識庫載入中，請稍候…');
-      setTimeout(loadKB, 3000);
-    } else if (status.done) {
-      showIngestStatus('success', `✅ 上次載入完成，共 ${status.chunks} 個 chunks`);
-    } else if (status.error) {
-      showIngestStatus('danger', `❌ 錯誤：${status.error}`);
-    }
-    loadDocList();
-  } catch(e) {
-    document.getElementById('kb-stats').textContent = '載入失敗：' + e.message;
-  }
-}
-
-function showIngestStatus(type, msg) {
-  const el = document.getElementById('ingest-status');
-  el.className = `alert alert-${type}`;
-  el.textContent = msg;
-  el.style.display = 'block';
-}
-
 async function ingestAll() {
-  if (!confirm('這會清空現有知識庫並重新載入，約需 1-2 分鐘，確定嗎？')) return;
+  if (!confirm('這會清空現有知識庫並重新載入所有預設文件，約需 1-2 分鐘，確定嗎？')) return;
   document.getElementById('ingest-btn').disabled = true;
-  showIngestStatus('info', '⏳ 送出請求…');
+  showNotice('ingest-notice', 'info', '⏳ 已送出請求，正在重新載入…');
   try {
-    const res = await fetch('/api/rag/ingest_all', { method:'POST' });
+    const res  = await fetch('/api/rag/ingest_all', { method: 'POST' });
     const data = await res.json();
-    showIngestStatus('info', data.message || '正在載入…');
-    setTimeout(()=>{ loadKB(); document.getElementById('ingest-btn').disabled=false; }, 3000);
+    showNotice('ingest-notice', 'info', data.message || '正在載入…');
+    setTimeout(() => {
+      loadKB();
+      document.getElementById('ingest-btn').disabled = false;
+    }, 3000);
   } catch(e) {
-    showIngestStatus('danger', '請求失敗：' + e.message);
+    showNotice('ingest-notice', 'danger', '請求失敗：' + e.message);
     document.getElementById('ingest-btn').disabled = false;
   }
 }
 
 async function testQuery() {
-  const q = document.getElementById('kb-test-q').value.trim();
-  if (!q) return;
+  const q  = document.getElementById('kb-test-q').value.trim();
   const el = document.getElementById('kb-test-result');
-  el.style.display='block'; el.textContent='查詢中…';
+  if (!q) return;
+  el.style.display = 'block'; el.textContent = '查詢中…';
   try {
-    const res = await fetch('/api/rag/query',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({question:q})
+    const res  = await fetch('/api/rag/query', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q }),
     });
     const data = await res.json();
-    el.textContent = data.answer + (data.sources?.length ? '\n\n📚 ' + data.sources.join(' | ') : '');
+    el.textContent = data.answer +
+      (data.sources?.length ? '\n\n📚 來源：' + data.sources.join(' | ') : '');
   } catch(e) {
     el.textContent = '查詢失敗：' + e.message;
   }
 }
 
-// ── 照護關係 ──────────────────────────────────
-async function loadRelations() {
-  const [rels, users] = await Promise.all([
-    fetch('/api/dashboard/relations').then(r=>r.json()),
-    fetch('/api/dashboard/users').then(r=>r.json()),
-  ]);
-  // 填 modal 選單
-  const elderly = users.filter(u=>u.roles.includes('elderly'));
-  const contacts = users.filter(u=>!u.roles.includes('elderly'));
-  document.getElementById('rel-elderly-id').innerHTML =
-    elderly.map(u=>`<option value="${u.id}">${u.name}</option>`).join('');
-  document.getElementById('rel-contact-id').innerHTML =
-    contacts.map(u=>`<option value="${u.id}">${u.name} (${u.roles.join('/')})</option>`).join('');
-  // 表格
-  const RMAP = {family:'家屬', volunteer:'志工', neighbor:'鄰居'};
-  document.getElementById('relations-tbody').innerHTML = rels.length
-    ? rels.map(r=>`
-        <tr>
-          <td class="fw-semibold">${r.elderly_name}</td>
-          <td>${r.contact_name}</td>
-          <td><span class="badge bg-secondary">${RMAP[r.relation]||r.relation}</span></td>
-          <td class="text-center">${r.notify_order}</td>
-          <td><button class="btn btn-outline-danger btn-icon"
-                onclick="deleteRelation('${r.id}','${r.elderly_name}','${r.contact_name}')">刪除</button></td>
-        </tr>`).join('')
-    : '<tr><td colspan="5" class="text-center text-muted py-3">尚未設定任何照護關係</td></tr>';
-}
-
-function openRelationModal() {
-  new bootstrap.Modal(document.getElementById('relationModal')).show();
-}
-
-async function saveRelation() {
-  const elderly_id   = document.getElementById('rel-elderly-id').value;
-  const contact_id   = document.getElementById('rel-contact-id').value;
-  const relation     = document.getElementById('rel-relation').value;
-  const notify_order = document.getElementById('rel-order').value;
-  if (!elderly_id || !contact_id) { alert('請選擇長者和聯絡人'); return; }
-  const params = new URLSearchParams({elderly_id, contact_id, relation, notify_order});
-  await fetch(`/api/dashboard/relations?${params}`, {method:'POST'});
-  bootstrap.Modal.getInstance(document.getElementById('relationModal')).hide();
-  loadRelations();
-}
-
-async function deleteRelation(id, elderly, contact) {
-  if (!confirm(`確定刪除「${elderly} ↔ ${contact}」的照護關係？`)) return;
-  await fetch(`/api/dashboard/relations/${id}`, {method:'DELETE'});
-  loadRelations();
-}
-
-// ── 自動媒合 ──────────────────────────────────
+// ════════════════════════════════════════════════
+// Dispatch
+// ════════════════════════════════════════════════
 async function runDispatch() {
   const btn = document.getElementById('dispatch-btn');
-  if (!confirm('立即執行物資自動媒合？\n（系統需在緊急模式下才會真正媒合）')) return;
+  if (!confirm('立即執行物資自動媒合？\n（系統需在緊急模式下才會媒合）')) return;
   btn.disabled = true; btn.textContent = '媒合中…';
   try {
-    const res = await fetch('/api/resources/dispatch', { method: 'POST' });
+    const res  = await fetch('/api/resources/dispatch', { method: 'POST' });
     const data = await res.json();
     if (data.reason === 'not_emergency') {
       alert('⚠️ 目前為日常模式，請先從儀表板切換至緊急模式');
     } else {
-      alert(`媒合完成！\n✅ 成功媒合：${data.matched} 筆\n📤 通知志工：${data.notified} 人\n⏭️ 無對應物資：${data.skipped} 筆`);
+      alert(`媒合完成！\n✅ 成功：${data.matched} 筆\n📤 通知：${data.notified} 人\n⏭️ 跳過：${data.skipped} 筆`);
       loadAll();
     }
   } catch(e) {
@@ -756,16 +1465,17 @@ async function runDispatch() {
   }
 }
 
-// ── 立即發送打卡 ──────────────────────────────
+// ════════════════════════════════════════════════
+// Trigger checkin
+// ════════════════════════════════════════════════
 async function triggerCheckin() {
   const btn = document.getElementById('checkin-btn');
   if (!confirm('立即對所有有綁定 LINE 的長者發送打卡訊息？')) return;
   btn.disabled = true; btn.textContent = '發送中…';
   try {
-    const res = await fetch('/api/dashboard/trigger_checkin', { method:'POST' });
+    const res  = await fetch('/api/dashboard/trigger_checkin', { method: 'POST' });
     const data = await res.json();
     alert(data.message || '已發送');
-    loadAll();
   } catch(e) {
     alert('發送失敗：' + e.message);
   } finally {
@@ -773,7 +1483,270 @@ async function triggerCheckin() {
   }
 }
 
-// ── 啟動 ─────────────────────────────────────
+// ════════════════════════════════════════════════
+// Resource Points
+// ════════════════════════════════════════════════
+const PT_ICON = {
+  shelter:'🏠', community:'🏘️', hospital:'🏥', fire_station:'🚒',
+  police:'👮', store:'🛒', warehouse:'📦', clinic:'💊', other:'📍',
+};
+const PT_LABEL = {
+  shelter:'避難所', community:'活動中心', hospital:'醫院',
+  fire_station:'消防', police:'警察', store:'分發點',
+  warehouse:'倉庫', clinic:'衛生所', other:'其他',
+};
+const SRC_CLASS = { gov_shelter:'src-gov', gov_fire:'src-gov', gov_clinic:'src-gov',
+                    manual:'src-manual', line_report:'src-line' };
+const SRC_LABEL = { gov_shelter:'政府避難所', gov_fire:'政府消防', gov_clinic:'政府衛生',
+                    manual:'手動新增', line_report:'LINE回報' };
+const SUPPLY_ICON = { water:'💧', food:'🍱', first_aid:'🩹', shelter:'🛏️',
+                      vehicle:'🚗', tool:'🔧', other:'📦' };
+
+let allPoints = [];
+let pointFilter = '';
+
+async function loadPoints() {
+  try {
+    allPoints = await fetch('/api/resources/points?active_only=false').then(r => r.json());
+    renderPoints(allPoints);
+  } catch(e) {
+    document.getElementById('points-tbody').innerHTML =
+      `<tr><td colspan="8" style="color:var(--danger);padding:16px">載入失敗：${e.message}</td></tr>`;
+  }
+}
+
+function filterPoints(btn, type) {
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  pointFilter = type;
+  renderPoints(allPoints);
+}
+
+function renderPoints(data) {
+  const filtered = pointFilter ? data.filter(p => p.point_type === pointFilter) : data;
+  const tbody = document.getElementById('points-tbody');
+  if (!filtered.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty">
+      <div class="empty-icon">📍</div>
+      <div class="empty-text">無資源點${pointFilter ? '（此類型）' : ''}</div>
+    </div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = filtered.map(p => {
+    const supplyChips = (p.supply_types || []).map(t =>
+      `<span class="supply-chip">${SUPPLY_ICON[t]||''} ${t}</span>`
+    ).join('');
+    const srcClass = SRC_CLASS[p.source] || 'src-manual';
+    const srcLabel = SRC_LABEL[p.source] || p.source;
+    return `
+    <tr>
+      <td><strong>${PT_ICON[p.point_type]||'📍'} ${p.name}</strong></td>
+      <td><span class="badge badge-blue">${PT_LABEL[p.point_type]||p.point_type}</span></td>
+      <td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.address||'—'}</td>
+      <td class="muted">${p.capacity ? p.capacity.toLocaleString() + ' 人' : '—'}</td>
+      <td><div class="supply-chips">${supplyChips}</div></td>
+      <td class="muted">${p.phone||'—'}</td>
+      <td><span class="src-badge ${srcClass}">${srcLabel}</span></td>
+      <td>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editPoint(${JSON.stringify(p)})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deletePoint('${p.id}','${p.name}')">刪除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function openPointModal(pt = null) {
+  document.getElementById('point-modal-title').textContent = pt ? '編輯資源點' : '新增資源點';
+  document.getElementById('pt-id').value       = pt?.id || '';
+  document.getElementById('pt-name').value     = pt?.name || '';
+  document.getElementById('pt-type').value     = pt?.point_type || 'shelter';
+  document.getElementById('pt-address').value  = pt?.address || '';
+  document.getElementById('pt-lat').value      = pt?.lat || '';
+  document.getElementById('pt-lng').value      = pt?.lng || '';
+  document.getElementById('pt-capacity').value = pt?.capacity || '';
+  document.getElementById('pt-phone').value    = pt?.phone || '';
+  document.getElementById('pt-hours').value    = pt?.operating_hours || '';
+  document.getElementById('pt-note').value     = pt?.note || '';
+  openModal('modal-point');
+}
+
+function editPoint(p) { openPointModal(p); }
+
+async function savePoint() {
+  const id   = document.getElementById('pt-id').value;
+  const name = document.getElementById('pt-name').value.trim();
+  if (!name) { alert('請填寫名稱'); return; }
+
+  const p = new URLSearchParams({
+    name, point_type: document.getElementById('pt-type').value,
+  });
+  const addr  = document.getElementById('pt-address').value.trim();
+  const lat   = document.getElementById('pt-lat').value;
+  const lng   = document.getElementById('pt-lng').value;
+  const cap   = document.getElementById('pt-capacity').value;
+  const phone = document.getElementById('pt-phone').value.trim();
+  const hours = document.getElementById('pt-hours').value.trim();
+  const note  = document.getElementById('pt-note').value.trim();
+  if (addr)  p.set('address', addr);
+  if (lat)   p.set('lat', lat);
+  if (lng)   p.set('lng', lng);
+  if (cap)   p.set('capacity', cap);
+  if (phone) p.set('phone', phone);
+  if (hours) p.set('operating_hours', hours);
+  if (note)  p.set('note', note);
+
+  const url = id ? `/api/resources/points/${id}?${p}` : `/api/resources/points?${p}`;
+  await fetch(url, { method: id ? 'PUT' : 'POST' });
+  closeModal('modal-point');
+  loadPoints();
+}
+
+async function deletePoint(id, name) {
+  if (!confirm(`確定刪除資源點「${name}」？`)) return;
+  await fetch(`/api/resources/points/${id}`, { method: 'DELETE' });
+  loadPoints();
+}
+
+async function seedPoints() {
+  if (!confirm('從政府開放資料匯入台中市資源點？\n（不會覆蓋已有的同名資源點）')) return;
+  const noticeEl = document.getElementById('seed-notice');
+  try {
+    const res  = await fetch('/api/resources/points/seed?city=台中市', { method: 'POST' });
+    const data = await res.json();
+    showNotice('seed-notice', 'info', data.message || '正在匯入…');
+    setTimeout(loadPoints, 4000);
+  } catch(e) {
+    showNotice('seed-notice', 'danger', '匯入失敗：' + e.message);
+  }
+}
+
+// ════════════════════════════════════════════════
+// Community Needs
+// ════════════════════════════════════════════════
+const NEED_TYPE_ICON = { water:'💧', food:'🍱', first_aid:'🩹',
+                          shelter:'🛏️', vehicle:'🚗', tool:'🔧', other:'📦' };
+const STATUS_BADGE = {
+  open:     '<span class="badge badge-amber">待媒合</span>',
+  matched:  '<span class="badge badge-blue">已媒合</span>',
+  fulfilled:'<span class="badge badge-green">已完成</span>',
+  cancelled:'<span class="badge badge-gray">已取消</span>',
+};
+
+async function loadNeeds() {
+  try {
+    const [open, matched, fulfilled] = await Promise.all([
+      fetch('/api/resources/needs?status=open').then(r => r.json()),
+      fetch('/api/resources/needs?status=matched').then(r => r.json()),
+      fetch('/api/resources/needs?status=fulfilled').then(r => r.json()),
+    ]);
+    renderNeeds([...open, ...matched, ...fulfilled]);
+  } catch(e) {
+    document.getElementById('needs-tbody').innerHTML =
+      `<tr><td colspan="8" style="color:var(--danger);padding:16px">載入失敗：${e.message}</td></tr>`;
+  }
+}
+
+function renderNeeds(data) {
+  const tbody = document.getElementById('needs-tbody');
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty">
+      <div class="empty-icon">🆘</div>
+      <div class="empty-text">目前沒有緊急需求</div>
+    </div></td></tr>`;
+    return;
+  }
+  // Sort: open first, then by urgency desc
+  data.sort((a, b) => {
+    if (a.status === 'open' && b.status !== 'open') return -1;
+    if (b.status === 'open' && a.status !== 'open') return 1;
+    return b.urgency - a.urgency;
+  });
+  tbody.innerHTML = data.map(n => `
+    <tr>
+      <td>
+        <span class="urgency-dot u${n.urgency}" style="display:inline-block;margin-right:4px"></span>
+        <strong style="font-size:15px">${n.urgency}</strong>
+      </td>
+      <td>${NEED_TYPE_ICON[n.need_type]||'📦'} ${n.need_type}</td>
+      <td class="muted">${n.description || '—'}</td>
+      <td class="muted" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.address||'—'}</td>
+      <td>${STATUS_BADGE[n.status]||n.status}</td>
+      <td class="muted" style="white-space:nowrap">${n.created_at.slice(0,16).replace('T',' ')}</td>
+      <td id="match-${n.id}">
+        ${n.status === 'open'
+          ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">查看候選</button>`
+          : '—'}
+      </td>
+      <td>
+        ${n.status === 'open'
+          ? `<button class="btn btn-ghost-danger btn-sm" onclick="cancelNeed('${n.id}')">取消</button>`
+          : ''}
+      </td>
+    </tr>
+    <tr id="cand-row-${n.id}" style="display:none">
+      <td colspan="8" style="padding:0 16px 12px;background:#f9fafb">
+        <div id="cand-list-${n.id}" style="font-size:12px;color:var(--muted)">載入中…</div>
+      </td>
+    </tr>`).join('');
+}
+
+async function showCandidates(needId) {
+  const row  = document.getElementById(`cand-row-${needId}`);
+  const list = document.getElementById(`cand-list-${needId}`);
+  if (row.style.display === 'table-row') { row.style.display = 'none'; return; }
+  row.style.display = 'table-row';
+  list.textContent = '評分中…';
+  try {
+    const cands = await fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json());
+    if (!cands.length) { list.textContent = '無候選資源'; return; }
+    list.innerHTML = `
+      <table class="tbl" style="margin:8px 0">
+        <thead><tr>
+          <th>評分</th><th>來源</th><th>名稱</th><th>志工/資源點</th><th>距離</th><th>操作</th>
+        </tr></thead>
+        <tbody>
+          ${cands.map((c, i) => `
+            <tr style="${i===0?'background:#f0fdf4':''}">
+              <td><strong style="color:${i===0?'var(--success)':'inherit'}">${c.score}</strong></td>
+              <td><span class="src-badge ${c.source==='resource'?'src-line':'src-gov'}">${c.source==='resource'?'個人物資':'資源點'}</span></td>
+              <td>${c.name}</td>
+              <td class="muted">${c.vol}</td>
+              <td class="muted">${c.dist_km != null ? c.dist_km + ' km' : '無座標'}</td>
+              <td>
+                ${c.source==='resource'
+                  ? `<button class="btn btn-success btn-sm" onclick="matchNeed('${needId}','${c.id}')">媒合</button>`
+                  : '<span class="muted">—</span>'}
+              </td>
+            </tr>`).join('')}
+        </tbody>
+      </table>`;
+  } catch(e) {
+    list.textContent = '載入失敗：' + e.message;
+  }
+}
+
+async function matchNeed(needId, resourceId) {
+  if (!confirm('確定以此物資手動媒合？')) return;
+  const res  = await fetch(`/api/resources/needs/${needId}/match?resource_id=${resourceId}`, { method: 'POST' });
+  const data = await res.json();
+  if (data.error) { alert('媒合失敗：' + data.error); return; }
+  alert(`✅ 媒合成功！距離 ${data.dist_km ?? '?'} km\n${data.volunteer_notified ? '已 LINE 通知志工' : '（無 LINE 綁定）'}`);
+  loadNeeds();
+}
+
+async function cancelNeed(needId) {
+  if (!confirm('確定取消此需求？')) return;
+  // PUT status=cancelled
+  await fetch(`/api/resources/needs/${needId}?status=cancelled`, { method: 'PUT' }).catch(() => {});
+  loadNeeds();
+}
+
+// dispatch 也更新需求列表
+const _origRunDispatch = runDispatch;
+
+// ════════════════════════════════════════════════
+// Init
+// ════════════════════════════════════════════════
 loadAll();
 </script>
 </body>
