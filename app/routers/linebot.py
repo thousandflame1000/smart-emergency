@@ -140,12 +140,158 @@ def handle_text(event: MessageEvent):
 
     if text in ["幫助", "help", "?"]:
         is_vol = user.roles and any(r in user.roles for r in ["volunteer", "family", "admin"])
-        extra = "\n・直接輸入問題 — AI 急救 / 照護知識查詢 🤖" if is_vol else ""
+        vol_extra = (
+            "\n\n📦 志工指令：\n"
+            "・「登記物資」— 登記您可提供的物資\n"
+            "・「我的物資」— 查看已登記項目\n"
+            "・直接輸入問題 — AI 急救 / 照護知識查詢 🤖"
+        ) if is_vol else ""
         reply_text(event.reply_token,
                    "📖 可用指令：\n"
                    "・「我很好」— 回覆今日打卡\n"
                    "・「狀態」— 查看系統模式\n"
-                   f"・「需要幫忙」— 觸發緊急通知{extra}")
+                   f"・「需要幫忙」— 觸發緊急通知{vol_extra}")
+        return
+
+    # ── 志工物資登記 ────────────────────────────
+    is_vol = user.roles and any(r in user.roles for r in ["volunteer", "family", "admin"])
+
+    if text in ["登記物資", "物資登記", "登記"]:
+        if not is_vol:
+            reply_text(event.reply_token, "此功能僅限志工使用。請聯絡管理員確認您的角色。")
+            return
+        from app.services.line_notify import send_resource_register_menu
+        try:
+            send_resource_register_menu(line_uid, event.reply_token)
+        except Exception:
+            reply_text(event.reply_token,
+                       "📦 請用以下格式登記物資：\n\n"
+                       "我有 [類型] [數量] [地址]\n\n"
+                       "類型可填：水/食物/藥品/工具/車/庇護所/其他\n\n"
+                       "範例：\n"
+                       "我有 水 20箱 台中市南區崇倫街88號\n"
+                       "我有 食物 50份 自家（台中市東區）")
+        return
+
+    if text in ["我的物資"]:
+        from app.models.resource import CommunityResource
+        my_res = db.query(CommunityResource).filter(
+            CommunityResource.owner_id == user.id
+        ).order_by(CommunityResource.created_at.desc()).limit(5).all()
+        if not my_res:
+            reply_text(event.reply_token, "您目前沒有已登記的物資。\n傳「登記物資」開始登記。")
+        else:
+            RES_TYPE_ZH = {"water":"飲用水","food":"食物","first_aid":"急救用品",
+                           "shelter":"庇護所","vehicle":"交通工具","tool":"工具","other":"其他"}
+            lines = [f"📦 您已登記的物資（最近5項）：\n"]
+            for r in my_res:
+                status = "✅ 可用" if r.is_available else "❌ 已媒合"
+                lines.append(f"・{RES_TYPE_ZH.get(r.resource_type,r.resource_type)} — {r.name}"
+                              f"（{r.quantity or '數量未填'}）{status}")
+            reply_text(event.reply_token, "\n".join(lines))
+        return
+
+    # ── 自然語言物資登記：「我有水/食物/藥/車 數量 地址」 ──
+    if is_vol and text.startswith("我有"):
+        rest = text[2:].strip()
+        # 解析類型
+        TYPE_KEYWORDS = {
+            "water":     ["水", "飲水", "礦泉水", "飲用水", "桶裝水"],
+            "food":      ["食物", "食品", "便當", "乾糧", "泡麵", "罐頭"],
+            "first_aid": ["藥", "急救", "藥品", "醫療", "繃帶", "消毒"],
+            "vehicle":   ["車", "汽車", "機車", "貨車", "接送"],
+            "shelter":   ["空間", "房間", "庇護", "地方", "場地"],
+            "tool":      ["工具", "電鋸", "發電機", "手電筒", "鏟子"],
+        }
+        detected_type = "other"
+        for rtype, keywords in TYPE_KEYWORDS.items():
+            if any(kw in rest for kw in keywords):
+                detected_type = rtype
+                break
+
+        # 移除類型關鍵字，剩下是數量+地址
+        remain = rest
+        for kw_list in TYPE_KEYWORDS.values():
+            for kw in kw_list:
+                remain = remain.replace(kw, "", 1).strip()
+
+        # 嘗試分割數量和地址（用空格分隔）
+        parts = remain.split(None, 1)
+        quantity = parts[0] if parts else None
+        address  = parts[1] if len(parts) > 1 else (user.address or None)
+
+        # 用使用者地址作 fallback
+        if not address and user.address:
+            address = user.address
+
+        from app.models.resource import CommunityResource
+        RES_NAME = {"water":"飲用水","food":"食物","first_aid":"急救用品",
+                    "shelter":"庇護所","vehicle":"交通工具","tool":"工具","other":"物資"}
+        new_res = CommunityResource(
+            owner_id=user.id,
+            resource_type=detected_type,
+            name=f"{user.name}提供的{RES_NAME.get(detected_type,'物資')}",
+            quantity=quantity,
+            address=address,
+            lat=user.lat,
+            lng=user.lng,
+            is_available=True,
+        )
+        db.add(new_res)
+        db.commit()
+
+        TYPE_ZH = {"water":"💧飲用水","food":"🍱食物","first_aid":"🩹急救用品",
+                   "shelter":"🏠庇護所","vehicle":"🚗交通工具","tool":"🔧工具","other":"📦其他物資"}
+        reply_text(event.reply_token,
+                   f"✅ 物資登記成功！\n\n"
+                   f"類型：{TYPE_ZH.get(detected_type, detected_type)}\n"
+                   f"數量：{quantity or '未填'}\n"
+                   f"地址：{address or '未填'}\n\n"
+                   f"緊急模式啟動後系統會自動媒合，\n"
+                   f"或管理員手動指派給您。\n\n"
+                   f"傳「我的物資」可查看已登記項目。")
+        return
+
+    # ── 自然語言需求回報：「需要水/食物/藥」 ──
+    NEED_KEYWORDS = {
+        "water":     ["需要水", "缺水", "沒水", "要水"],
+        "food":      ["需要食物", "需要食", "缺食", "沒食物", "要食物", "沒吃"],
+        "first_aid": ["需要藥", "需要醫療", "受傷", "需要急救"],
+        "shelter":   ["需要庇護", "無家可歸", "房子損壞", "沒地方住"],
+        "vehicle":   ["需要車", "需要接送", "出不去"],
+    }
+    detected_need = None
+    for ntype, nkws in NEED_KEYWORDS.items():
+        if any(kw in text for kw in nkws):
+            detected_need = ntype
+            break
+
+    if detected_need:
+        from app.models.need import CommunityNeed
+        existing = db.query(CommunityNeed).filter(
+            CommunityNeed.requester_id == user.id,
+            CommunityNeed.status == "open",
+            CommunityNeed.need_type == detected_need,
+        ).first()
+        if not existing:
+            need = CommunityNeed(
+                requester_id=user.id,
+                need_type=detected_need,
+                description=text,
+                address=user.address,
+                lat=user.lat,
+                lng=user.lng,
+                urgency=3,
+            )
+            db.add(need)
+            db.commit()
+        NEED_ZH = {"water":"💧飲用水","food":"🍱食物","first_aid":"🩹急救用品",
+                   "shelter":"🏠庇護所","vehicle":"🚗交通工具"}
+        reply_text(event.reply_token,
+                   f"📋 已登記您的需求：{NEED_ZH.get(detected_need, detected_need)}\n\n"
+                   f"系統正在協調物資，\n"
+                   f"志工確認後會盡快送達。\n\n"
+                   f"如情況緊急請傳「需要幫忙」。")
         return
 
     if "需要幫忙" in text or "救命" in text or "緊急" in text:

@@ -478,6 +478,9 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
         </div>
       </div>
 
+      <!-- 步驟指引 -->
+      <div id="dsp-steps" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap"></div>
+
       <!-- 結果 notice -->
       <div id="dsp-result" style="display:none;margin-bottom:14px"></div>
 
@@ -779,6 +782,12 @@ async function loadDispatchPage() {
       fetch('/api/resources/points?active_only=true').then(r => r.json()),
     ]);
 
+    // 第一次進來：若資源點是空的，自動 seed
+    if (points.length === 0) {
+      fetch('/api/resources/points/seed?city=台中市', { method:'POST' }).catch(()=>{});
+      setTimeout(loadDispatchPage, 2500);
+    }
+
     // 更新模式顯示
     const isEmg = summary.mode === 'emergency';
     const header = document.getElementById('dsp-mode-block').parentElement;
@@ -798,12 +807,66 @@ async function loadDispatchPage() {
     document.getElementById('dsp-res-count').textContent =
       `個人物資 ${resources.length} 項 · 資源點 ${points.length} 個`;
 
+    // 步驟引導
+    renderDspSteps(summary.mode, points.length, resources.length, openNeeds.length);
+
     renderDspNeeds(openNeeds);
     renderDspResources(resources, points);
   } catch(e) {
     document.getElementById('dsp-needs-list').innerHTML =
       `<div style="padding:20px;color:var(--danger)">載入失敗：${e.message}</div>`;
   }
+}
+
+function renderDspSteps(mode, pointCount, resCount, needCount) {
+  const steps = [
+    {
+      done: pointCount > 0 || resCount > 0,
+      label: '① 資源就緒',
+      detail: pointCount > 0
+        ? `${pointCount} 個資源點 + ${resCount} 項個人物資`
+        : '點右欄「📥 匯入資源點」',
+      action: pointCount === 0 ? `onclick="dspSeedPoints()"` : '',
+    },
+    {
+      done: needCount > 0,
+      label: '② 有待媒合需求',
+      detail: needCount > 0
+        ? `${needCount} 筆待處理`
+        : '點左欄「＋ 新增需求」或居民透過 LINE 回報',
+      action: needCount === 0 ? `onclick="dspAddNeedModal()"` : '',
+    },
+    {
+      done: mode === 'emergency',
+      label: '③ 緊急模式',
+      detail: mode === 'emergency' ? '已啟動' : '點上方「啟動緊急模式」',
+      action: mode !== 'emergency' ? `onclick="dspToggleMode()"` : '',
+    },
+    {
+      done: false,
+      label: '④ 執行媒合',
+      detail: '點「⚡ 立即執行媒合算法」',
+      action: '',
+      isAction: true,
+    },
+  ];
+
+  document.getElementById('dsp-steps').innerHTML = steps.map((s, i) => `
+    <div ${s.action} style="
+      display:flex;align-items:center;gap:6px;
+      background:${s.done ? '#f0fdf4' : s.isAction ? '#eff6ff' : '#fffbeb'};
+      border:1px solid ${s.done ? '#bbf7d0' : s.isAction ? '#bfdbfe' : '#fde68a'};
+      border-radius:8px;padding:8px 12px;font-size:12px;
+      ${s.action ? 'cursor:pointer;' : ''}
+      flex:1;min-width:140px;
+    ">
+      <span style="font-size:16px">${s.done ? '✅' : s.isAction ? '⚡' : '⬜'}</span>
+      <div>
+        <div style="font-weight:700;color:${s.done?'#15803d':s.isAction?'#1d4ed8':'#92400e'}">${s.label}</div>
+        <div style="color:var(--muted);margin-top:1px">${s.detail}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 function renderDspNeeds(needs) {

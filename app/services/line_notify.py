@@ -238,3 +238,80 @@ def reply_text(reply_token: str, text: str) -> None:
         reply_token=reply_token,
         messages=[TextMessage(text=text)],
     ))
+
+
+# ──────────────────────────────────────────────
+# 志工物資登記選單
+# ──────────────────────────────────────────────
+def send_resource_register_menu(line_uid: str, reply_token: str) -> None:
+    """發送物資類型選單給志工，讓他快速登記"""
+    flex = {
+        "type": "bubble",
+        "header": {
+            "type": "box", "layout": "vertical",
+            "backgroundColor": "#27ACB2",
+            "contents": [{"type": "text", "text": "📦 登記可提供物資",
+                          "color": "#ffffff", "size": "md", "weight": "bold"}],
+        },
+        "body": {
+            "type": "box", "layout": "vertical", "spacing": "sm",
+            "contents": [
+                {"type": "text", "text": "請選擇物資類型，或直接輸入：",
+                 "size": "sm", "color": "#555555", "wrap": True},
+                {"type": "text",
+                 "text": "我有 [類型] [數量] [地址]",
+                 "size": "sm", "color": "#27ACB2", "weight": "bold"},
+                {"type": "text",
+                 "text": "例：我有 水 20箱 台中市南區",
+                 "size": "xs", "color": "#888888"},
+            ],
+        },
+        "footer": {
+            "type": "box", "layout": "vertical", "spacing": "xs",
+            "contents": [
+                {
+                    "type": "box", "layout": "horizontal", "spacing": "xs",
+                    "contents": [
+                        {"type": "button", "style": "primary", "color": "#27ACB2",
+                         "flex": 1, "height": "sm",
+                         "action": {"type": "message", "label": "💧 飲用水",
+                                    "text": "我有 水"}},
+                        {"type": "button", "style": "primary", "color": "#27ACB2",
+                         "flex": 1, "height": "sm",
+                         "action": {"type": "message", "label": "🍱 食物",
+                                    "text": "我有 食物"}},
+                    ],
+                },
+                {
+                    "type": "box", "layout": "horizontal", "spacing": "xs",
+                    "contents": [
+                        {"type": "button", "style": "primary", "color": "#FF6B35",
+                         "flex": 1, "height": "sm",
+                         "action": {"type": "message", "label": "🩹 急救用品",
+                                    "text": "我有 藥品"}},
+                        {"type": "button", "style": "primary", "color": "#FF6B35",
+                         "flex": 1, "height": "sm",
+                         "action": {"type": "message", "label": "🚗 交通工具",
+                                    "text": "我有 車"}},
+                    ],
+                },
+                {
+                    "type": "box", "layout": "horizontal", "spacing": "xs",
+                    "contents": [
+                        {"type": "button", "style": "secondary",
+                         "flex": 1, "height": "sm",
+                         "action": {"type": "message", "label": "🔧 工具",
+                                    "text": "我有 工具"}},
+                        {"type": "button", "style": "secondary",
+                         "flex": 1, "height": "sm",
+                         "action": {"type": "message", "label": "🏠 庇護空間",
+                                    "text": "我有 空間"}},
+                    ],
+                },
+            ],
+        },
+    }
+    _get_api().reply_message(ReplyMessageRequest(
+        reply_token=reply_token,
+        messages=[FlexMessage(alt_text="登記可提供物資", contents=flex)],
+    ))
