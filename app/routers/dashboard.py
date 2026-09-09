@@ -1,5 +1,5 @@
 from datetime import date
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -144,7 +144,7 @@ def set_mode(mode: str, db: Session = Depends(get_db)):
 @router.post("/users")
 def create_user(
     name: str,
-    roles: list[str],
+    roles: list[str] = Query(...),
     line_uid: str | None = None,
     phone: str | None = None,
     address: str | None = None,
