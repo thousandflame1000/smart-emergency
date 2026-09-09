@@ -58,6 +58,7 @@ LINE Bot ──> FastAPI (Railway)
 - 管理員一鍵切換 → 儀表板閃紅色警示 → 廣播通知
 - 物資地圖顯示所有緊急站點
 - 恢復後自動回到日常模式
+- **管理員儀表板獨立於 LINE 運作**：即使 LINE 服務中斷，管理員仍可直接登入後台執行派遣、查看長者狀態、手動媒合物資
 
 ---
 
@@ -118,6 +119,17 @@ python seed.py
 python ingest_kb.py
 
 # 5. 開啟 http://localhost:8080
+```
+
+---
+
+## ✅ 測試
+
+核心業務邏輯（派遣確認關卡、分級通報、知識庫管理、SOS 自動建需求等）有 pytest 測試，全部跑在獨立的 sqlite 檔案上，不會碰到正式資料庫，也不會打真的 LINE / Gemini API。
+
+```bash
+pip install -r requirements-dev.txt
+pytest tests/ -v
 ```
 
 ---

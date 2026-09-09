@@ -58,8 +58,8 @@ def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime
     if already:
         return
 
-    # 依 notify_order 取聯絡人
-    relations = (
+    # 依 notify_order 取聯絡人，再依警報類型分層篩選對象
+    all_relations = (
         db.query(CareRelation)
         .filter(
             CareRelation.elderly_id == checkin.elderly_id,
@@ -68,6 +68,7 @@ def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime
         .order_by(CareRelation.notify_order)
         .all()
     )
+    relations = _relations_for_alert(all_relations, alert_type)
 
     notified_ids = []
     for rel in relations:
@@ -95,3 +96,26 @@ def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime
         checkin.status = "no_response"
 
     db.commit()
+
+
+def _relations_for_alert(relations: list[CareRelation], alert_type: str) -> list[CareRelation]:
+    """
+    依警報類型分層篩選通報對象，對應計畫書「1 小時通知家屬、3 小時
+    通知志工上門」的分級通報設計：
+      no_response_1h → 優先通知家屬（含未標角色的聯絡人，寧可多通知）
+      no_response_3h → 通知志工，請他們上門查看
+      其他（help_needed 等主動求助）→ 不分層，全部通知
+    任一層級篩不出符合角色的聯絡人時，退回通知全部聯絡人，
+    避免因為角色資料沒填而完全沒人被通知。
+    """
+    def _roles(rel: CareRelation) -> list[str]:
+        return (rel.contact.roles or []) if rel.contact else []
+
+    if alert_type == "no_response_1h":
+        tier = [r for r in relations if "volunteer" not in _roles(r) or "family" in _roles(r)]
+    elif alert_type == "no_response_3h":
+        tier = [r for r in relations if "volunteer" in _roles(r)]
+    else:
+        return relations
+
+    return tier or relations

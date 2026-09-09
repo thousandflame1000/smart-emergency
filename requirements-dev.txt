@@ -1,0 +1,4 @@
+# 測試用依賴（不需要部署到 Railway，本機/CI 跑測試才需要）
+-r requirements.txt
+pytest==9.1.1
+httpx==0.28.1

@@ -41,49 +41,61 @@ async def line_webhook(request: Request):
 @router.post("/line/simulate_checkin")
 async def simulate_checkin(elderly_name: str):
     """
-    Dev only: 手動觸發打卡，不需要真實 LINE 帳號
+    Dev only: 手動幫指定長者建立今日打卡記錄（並嘗試真的推播 LINE 訊息）
     POST /webhook/line/simulate_checkin?elderly_name=陳月英
     """
     if not _DEV_MODE:
         raise HTTPException(status_code=403, detail="只在開發模式下開放")
 
-    from app.services.checkin import send_daily_checkins
     from app.database import SessionLocal
     from app.models.checkin import DailyCheckin
     from app.models.user import User as U
     from datetime import date
 
     db = SessionLocal()
-    elderly = db.query(U).filter(
-        U.name == elderly_name,
-        U.roles.contains('elderly'),
-    ).first()
+    try:
+        elderly = db.query(U).filter(
+            U.name == elderly_name,
+            U.roles.contains(["elderly"]),
+        ).first()
 
-    if not elderly:
-        db.close()
-        return {"error": f"找不到長者：{elderly_name}"}
+        if not elderly:
+            return {"error": f"找不到長者：{elderly_name}"}
 
-    # 如果今天已有打卡記錄就回傳
-    existing = db.query(DailyCheckin).filter(
-        DailyCheckin.elderly_id == elderly.id,
-        DailyCheckin.date == date.today()
-    ).first()
+        existing = db.query(DailyCheckin).filter(
+            DailyCheckin.elderly_id == elderly.id,
+            DailyCheckin.date == date.today()
+        ).first()
+        if existing:
+            return {
+                "message": f"{elderly_name} 今日已有打卡記錄",
+                "checkin_id": str(existing.id),
+                "status": existing.status,
+                "note": "如需重新測試請先清除今日記錄或改用其他長者",
+            }
 
-    db.close()
+        checkin = DailyCheckin(elderly_id=elderly.id, date=date.today(), status="pending")
+        db.add(checkin)
+        db.commit()
+        db.refresh(checkin)
 
-    if existing:
+        line_sent = False
+        if elderly.line_uid:
+            try:
+                from app.services.line_notify import send_checkin_message
+                send_checkin_message(elderly.line_uid, str(checkin.id))
+                line_sent = True
+            except Exception:
+                pass
+
         return {
-            "message": f"{elderly_name} 今日已有打卡記錄",
-            "checkin_id": str(existing.id),
-            "status": existing.status,
-            "note": "如需重新測試請先執行 seed.py"
+            "message": f"已為 {elderly_name} 建立今日打卡記錄"
+                       + ("，並已推播 LINE 打卡訊息" if line_sent else "（此長者未綁定 LINE，僅建立記錄，可用 postback API 手動測試按鈕行為）"),
+            "checkin_id": str(checkin.id),
+            "line_sent": line_sent,
         }
-
-    return {
-        "message": f"此長者沒有綁定 LINE，無法發送（正式環境需先綁定）",
-        "elderly": elderly_name,
-        "tip": "用 /api/dashboard/elderly 看目前狀態"
-    }
+    finally:
+        db.close()
 
 
 # ──────────────────────────────────────────────
@@ -144,6 +156,7 @@ def handle_text(event: MessageEvent):
             "\n\n📦 志工指令：\n"
             "・「登記物資」— 登記您可提供的物資\n"
             "・「我的物資」— 查看已登記項目\n"
+            "・「新增長者 [姓名] [地址]」— 幫家中長者代辦註冊\n"
             "・直接輸入問題 — AI 急救 / 照護知識查詢 🤖"
         ) if is_vol else ""
         reply_text(event.reply_token,
@@ -189,6 +202,60 @@ def handle_text(event: MessageEvent):
                 lines.append(f"・{RES_TYPE_ZH.get(r.resource_type,r.resource_type)} — {r.name}"
                               f"（{r.quantity or '數量未填'}）{status}")
             reply_text(event.reply_token, "\n".join(lines))
+        return
+
+    # ── 家屬代理登記長者（降低長者本人須操作 LINE 的門檻）──────
+    # 計畫書「現有限制與改善方向」承諾的短期方向：家屬協助長者加入，
+    # 不需要長者本人先學會用 LINE，也不需要每次都找管理員手動建檔。
+    REGISTER_ELDER_PREFIXES = ["新增長者", "幫長者登記", "代辦長者", "登記長者"]
+    matched_prefix = next((p for p in REGISTER_ELDER_PREFIXES if text.startswith(p)), None)
+    if is_vol and matched_prefix:
+        rest = text[len(matched_prefix):].strip()
+        if not rest:
+            reply_text(event.reply_token,
+                       "請用以下格式：\n新增長者 [姓名] [地址]\n\n"
+                       "範例：\n新增長者 王奶奶 台中市南區崇倫街88號")
+            return
+
+        parts = rest.split(None, 1)
+        elder_name    = parts[0]
+        elder_address = parts[1] if len(parts) > 1 else None
+
+        from app.models.user import User as U
+        from app.models.care_relation import CareRelation
+
+        existing_elder = db.query(U).filter(
+            U.name == elder_name,
+            U.roles.contains(["elderly"]),
+        ).first()
+
+        if existing_elder:
+            elder = existing_elder
+            created = False
+        else:
+            elder = U(name=elder_name, roles=["elderly"], address=elder_address, is_active=True)
+            db.add(elder)
+            db.commit()
+            db.refresh(elder)
+            created = True
+
+        existing_rel = db.query(CareRelation).filter(
+            CareRelation.elderly_id == elder.id,
+            CareRelation.contact_id == user.id,
+        ).first()
+        if not existing_rel:
+            db.add(CareRelation(
+                elderly_id=elder.id, contact_id=user.id,
+                relation="家屬代理登記", notify_order=1, is_active=True,
+            ))
+            db.commit()
+
+        reply_text(event.reply_token,
+                   f"✅ 已{'建立' if created else '找到'}長者資料：{elder_name}\n"
+                   f"地址：{elder_address or '未填，請後續補充'}\n\n"
+                   "已將您設為此長者的照護聯絡人，未回應打卡時會優先通知您。\n"
+                   "若長者本人有 LINE，請他加入官方帳號並傳「我很好」即可完成綁定；\n"
+                   "若沒有智慧型手機，請聯絡管理員另行安排追蹤方式。")
         return
 
     # ── 自然語言物資登記：「我有水/食物/藥/車 數量 地址」 ──
@@ -310,12 +377,33 @@ def handle_text(event: MessageEvent):
             today_checkin.status = "help_needed"
             today_checkin.responded_at = datetime.now()
             db.commit()
-            # 通知家屬 / 志工
+            # 通知照護聯絡人（家屬 / 志工）
             try:
                 from app.services.alert import send_alerts_for_checkin
                 send_alerts_for_checkin(today_checkin.id, "help_needed", db)
             except Exception:
                 pass
+
+        # 自動建立緊急需求，進入物資派遣排程（避免求助只停留在通知，物資調度接不上）
+        from app.models.need import CommunityNeed
+        existing_sos = db.query(CommunityNeed).filter(
+            CommunityNeed.requester_id == user.id,
+            CommunityNeed.status.in_(["open", "suggested"]),
+            CommunityNeed.description == "LINE 一鍵求助（需要幫忙）",
+        ).first()
+        if not existing_sos:
+            sos_need = CommunityNeed(
+                requester_id=user.id,
+                need_type="other",
+                description="LINE 一鍵求助（需要幫忙）",
+                address=user.address,
+                lat=user.lat,
+                lng=user.lng,
+                urgency=5,
+            )
+            db.add(sos_need)
+            db.commit()
+
         reply_text(event.reply_token,
                    "🆘 已收到您的求助！\n正在通知家屬和志工，請稍候。")
         return
@@ -392,9 +480,7 @@ def handle_postback(event: PostbackEvent):
             from app.models.need import CommunityNeed
             need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
             if need:
-                need.status = "open"
-                need.matched_resource_id = None
-                # 把物資重新開放
+                # 先用原本的 matched_resource_id 把物資重新開放，再清空欄位
                 if need.matched_resource_id:
                     from app.models.resource import CommunityResource
                     res = db.query(CommunityResource).filter(
@@ -402,6 +488,8 @@ def handle_postback(event: PostbackEvent):
                     ).first()
                     if res:
                         res.is_available = True
+                need.status = "open"
+                need.matched_resource_id = None
                 db.commit()
         reply_text(event.reply_token,
                    "沒關係，我們會尋找其他志工。感謝您的回覆。")

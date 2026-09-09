@@ -16,6 +16,12 @@ class IngestRequest(BaseModel):
     category: str
 
 
+class ChunkUpdateRequest(BaseModel):
+    content: str | None = None
+    source: str | None = None
+    category: str | None = None
+
+
 @router.post("/query")
 def query_rag(req: QueryRequest):
     """
@@ -89,6 +95,119 @@ def ingest_all():
 def ingest_status():
     """查詢知識庫載入進度"""
     return _ingest_status
+
+
+@router.get("/chunks")
+def list_chunks(
+    source: str | None = None,
+    category: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+):
+    """
+    列出知識庫文件（管理員後台用），可查閱目前有哪些內容、來源與版本標記。
+    """
+    from app.database import SessionLocal
+    from app.models.knowledge import KnowledgeChunk
+
+    db = SessionLocal()
+    try:
+        q = db.query(KnowledgeChunk)
+        if source:
+            q = q.filter(KnowledgeChunk.source == source)
+        if category:
+            q = q.filter(KnowledgeChunk.category == category)
+        total = q.count()
+        chunks = (
+            q.order_by(KnowledgeChunk.source, KnowledgeChunk.created_at)
+            .offset(offset).limit(limit).all()
+        )
+        return {
+            "total": total,
+            "chunks": [
+                {
+                    "id":             str(c.id),
+                    "content":        c.content,
+                    "content_preview": (c.content[:80] + "…") if len(c.content) > 80 else c.content,
+                    "source":         c.source,
+                    "category":       c.category,
+                    "has_embedding":  c.embedding is not None,
+                    "created_at":     str(c.created_at),
+                }
+                for c in chunks
+            ],
+        }
+    finally:
+        db.close()
+
+
+@router.get("/chunks/{chunk_id}")
+def get_chunk(chunk_id: str):
+    """取得單一 chunk 完整內容（編輯用）"""
+    from app.database import SessionLocal
+    from app.models.knowledge import KnowledgeChunk
+
+    db = SessionLocal()
+    try:
+        c = db.query(KnowledgeChunk).filter(KnowledgeChunk.id == chunk_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="找不到此筆知識庫內容")
+        return {
+            "id": str(c.id), "content": c.content,
+            "source": c.source, "category": c.category,
+            "created_at": str(c.created_at),
+        }
+    finally:
+        db.close()
+
+
+@router.put("/chunks/{chunk_id}")
+def update_chunk(chunk_id: str, req: ChunkUpdateRequest):
+    """
+    更新一筆知識庫內容（管理員後台用）。
+    若內容有變更會重新向量化，確保搜尋結果與最新文字一致。
+    """
+    from app.database import SessionLocal
+    from app.models.knowledge import KnowledgeChunk
+    import json
+
+    db = SessionLocal()
+    try:
+        c = db.query(KnowledgeChunk).filter(KnowledgeChunk.id == chunk_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="找不到此筆知識庫內容")
+
+        content_changed = req.content is not None and req.content.strip() and req.content != c.content
+        if content_changed:
+            c.content = req.content.strip()
+            c.embedding = json.dumps(rag_svc._embed(c.content))
+        if req.source is not None and req.source.strip():
+            c.source = req.source.strip()
+        if req.category is not None and req.category.strip():
+            c.category = req.category.strip()
+
+        db.commit()
+        return {"message": "更新成功", "id": chunk_id, "re_embedded": content_changed}
+    finally:
+        db.close()
+
+
+@router.delete("/chunks/{chunk_id}")
+def delete_chunk(chunk_id: str):
+    """刪除一筆知識庫內容（管理員後台用）"""
+    from app.database import SessionLocal
+    from app.models.knowledge import KnowledgeChunk
+
+    db = SessionLocal()
+    try:
+        c = db.query(KnowledgeChunk).filter(KnowledgeChunk.id == chunk_id).first()
+        if not c:
+            raise HTTPException(status_code=404, detail="找不到此筆知識庫內容")
+        db.delete(c)
+        db.commit()
+        return {"message": "刪除成功", "id": chunk_id}
+    finally:
+        db.close()
 
 
 @router.get("/stats")

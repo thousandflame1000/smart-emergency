@@ -75,7 +75,8 @@ def _fetch_gov_shelters(city: str) -> list[dict]:
                 continue
     except Exception:
         pass
-    print("[gov] 政府 API 無法取得，使用預設資料")
+    print("[gov] 政府開放資料 API 暫無回應，改用靜態備份資料")
+    print("[gov] 靜態資料來源：內政部消防署全國避難收容所公告（data.gov.tw dataset/73242）")
     return []
 
 

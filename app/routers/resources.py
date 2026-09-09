@@ -222,10 +222,28 @@ def match_need(need_id: str, resource_id: str, db: Session = Depends(get_db)):
 
 @router.post("/dispatch")
 def run_dispatch():
-    """立即執行一次自動媒合（管理員手動觸發）"""
+    """
+    立即執行一次自動媒合（管理員手動觸發）。
+    只會產生「建議」（need.status = suggested），不會自動通知志工——
+    管理員需個別呼叫 /needs/{id}/confirm_dispatch 才會真正發送 LINE 通知。
+    """
     from app.services.dispatch import auto_dispatch
     result = auto_dispatch()
     return result
+
+
+@router.post("/needs/{need_id}/confirm_dispatch")
+def confirm_dispatch(need_id: str, db: Session = Depends(get_db)):
+    """管理員確認自動媒合建議，此時才真正 LINE 通知志工"""
+    from app.services.dispatch import confirm_dispatch as _confirm_dispatch
+    return _confirm_dispatch(need_id, db)
+
+
+@router.post("/needs/{need_id}/decline_suggestion")
+def decline_suggestion(need_id: str, db: Session = Depends(get_db)):
+    """管理員否決自動媒合建議，物資恢復可用、需求退回待媒合"""
+    from app.services.dispatch import decline_suggestion as _decline_suggestion
+    return _decline_suggestion(need_id, db)
 
 
 @router.get("/needs/{need_id}/candidates")
@@ -293,6 +311,7 @@ def update_resource_point(
     lat: float | None = None,
     lng: float | None = None,
     capacity: int | None = None,
+    current_load: int | None = None,
     phone: str | None = None,
     operating_hours: str | None = None,
     note: str | None = None,
@@ -307,12 +326,38 @@ def update_resource_point(
     if lat              is not None: pt.lat              = lat
     if lng              is not None: pt.lng              = lng
     if capacity         is not None: pt.capacity         = capacity
+    if current_load     is not None: pt.current_load     = max(0, current_load)
     if phone            is not None: pt.phone            = phone
     if operating_hours  is not None: pt.operating_hours  = operating_hours
     if note             is not None: pt.note             = note
     if is_active        is not None: pt.is_active        = is_active
     db.commit()
     return {"message": "更新成功"}
+
+
+@router.post("/points/{point_id}/checkin")
+def checkin_to_point(point_id: str, count: int = 1, db: Session = Depends(get_db)):
+    """
+    回報有人（例：災民、住戶）抵達此資源點（避難所/收容點），
+    current_load 隨即 +count；管理員在儀表板一鍵操作，不需要手動計算人數。
+    """
+    pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
+    if not pt:
+        raise HTTPException(status_code=404, detail="Not found")
+    pt.current_load = max(0, pt.current_load + count)
+    db.commit()
+    return {"id": point_id, "current_load": pt.current_load, "capacity": pt.capacity}
+
+
+@router.post("/points/{point_id}/checkout")
+def checkout_from_point(point_id: str, count: int = 1, db: Session = Depends(get_db)):
+    """回報有人離開此資源點，current_load 隨即 -count（不會低於 0）"""
+    pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
+    if not pt:
+        raise HTTPException(status_code=404, detail="Not found")
+    pt.current_load = max(0, pt.current_load - count)
+    db.commit()
+    return {"id": point_id, "current_load": pt.current_load, "capacity": pt.capacity}
 
 
 @router.delete("/points/{point_id}")

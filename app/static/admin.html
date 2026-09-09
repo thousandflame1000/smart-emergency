@@ -303,6 +303,19 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 600;
   background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0;
 }
+
+/* ── Dispatch factor chips ── */
+.factor-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 10px;
+}
+.factor-chip {
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: #fafbfc; padding: 12px 14px;
+}
+.factor-icon { font-size: 20px; margin-bottom: 4px; }
+.factor-name { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.factor-desc { font-size: 11.5px; color: var(--muted); line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -469,7 +482,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <div class="card-subtitle">點擊「可用 / 不可用」快速切換狀態</div>
           </div>
           <div style="display:flex;gap:8px">
-            <button class="btn btn-danger btn-sm" onclick="runDispatch()" id="dispatch-btn">
+            <button class="btn btn-danger btn-sm" onclick="runDispatch(this)" id="dispatch-btn">
               🚨 立即自動媒合
             </button>
             <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
@@ -564,7 +577,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
       <!-- 文件清單 -->
       <div class="card">
-        <div class="card-header"><div class="card-title">📚 目前知識文件分類</div></div>
+        <div class="card-header">
+          <div class="card-title">📚 知識庫內容（可查閱 / 編輯 / 刪除）</div>
+        </div>
         <div class="card-body" id="doc-list">
           <p style="font-size:12px;color:var(--muted)">載入中…</p>
         </div>
@@ -618,7 +633,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                 <th>名稱</th>
                 <th>類型</th>
                 <th>地址</th>
-                <th>容量</th>
+                <th>目前使用 / 容量</th>
                 <th>可提供物資</th>
                 <th>電話</th>
                 <th>來源</th>
@@ -673,7 +688,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <div style="display:flex;gap:8px">
             <button class="btn btn-ghost btn-sm" onclick="loadNeeds()">🔄 刷新</button>
             <button class="btn btn-primary btn-sm" onclick="openNeedModal()">＋ 新增需求</button>
-            <button class="btn btn-danger btn-sm" onclick="runDispatch()" id="dispatch-btn2">⚡ 立即媒合</button>
+            <button class="btn btn-danger btn-sm" onclick="runDispatch(this)" id="dispatch-btn2">⚡ 立即媒合</button>
           </div>
         </div>
         <!-- 狀態 + 緊急度篩選 -->
@@ -681,6 +696,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <div style="display:flex;gap:6px">
             <button class="filter-btn active" data-status="" onclick="filterNeeds(this,'')">全部</button>
             <button class="filter-btn" data-status="open" onclick="filterNeeds(this,'open')">待媒合</button>
+            <button class="filter-btn" data-status="suggested" onclick="filterNeeds(this,'suggested')">⏳ 待確認</button>
             <button class="filter-btn" data-status="matched" onclick="filterNeeds(this,'matched')">已媒合</button>
             <button class="filter-btn" data-status="fulfilled" onclick="filterNeeds(this,'fulfilled')">已完成</button>
           </div>
@@ -714,35 +730,71 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 
       <!-- 媒合演算法說明 -->
       <div class="card">
-        <div class="card-header"><div class="card-title">📐 媒合算法說明</div></div>
+        <div class="card-header">
+          <div>
+            <div class="card-title">📐 系統怎麼決定優先派給誰？</div>
+            <div class="card-subtitle">下面 5 個因素加總算出分數，分數最高者優先建議派遣——但都需要管理員確認後才會通知志工</div>
+          </div>
+        </div>
         <div class="card-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-            <div>
-              <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">評分公式</div>
-              <div style="background:#f8faff;border:1px solid #dbeafe;border-radius:8px;padding:12px;font-size:12px;font-family:monospace;line-height:1.8">
-                score = urgency × 12<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ affinity × 15<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- (dist/max_dist) × 25<br>
-                &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;- volunteer_tasks × 5
+          <div class="factor-grid">
+            <div class="factor-chip">
+              <div class="factor-icon">🚨</div>
+              <div class="factor-name">緊急程度</div>
+              <div class="factor-desc">求助越緊急，分數越高，是影響最大的因素</div>
+            </div>
+            <div class="factor-chip">
+              <div class="factor-icon">❤️</div>
+              <div class="factor-name">平時關懷分數</div>
+              <div class="factor-desc">打卡異常、警報未解決、身邊照顧者越少，分數越高</div>
+            </div>
+            <div class="factor-chip">
+              <div class="factor-icon">🎯</div>
+              <div class="factor-name">物資相符度</div>
+              <div class="factor-desc">物資種類要對得上需求才有效，類似物資打折計分</div>
+            </div>
+            <div class="factor-chip">
+              <div class="factor-icon">📍</div>
+              <div class="factor-name">距離</div>
+              <div class="factor-desc">越近越優先；但情況極緊急時，系統仍願意派到較遠處</div>
+            </div>
+            <div class="factor-chip">
+              <div class="factor-icon">⚖️</div>
+              <div class="factor-name">志工目前任務量</div>
+              <div class="factor-desc">已被指派越多任務，分數越低，避免工作集中在同一人</div>
+            </div>
+          </div>
+
+          <details style="margin-top:14px">
+            <summary style="cursor:pointer;font-size:12px;font-weight:700;color:var(--muted)">技術細節（評分公式 / 距離上限 / 物資來源）</summary>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px">
+              <div>
+                <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">評分公式</div>
+                <div style="background:#f8faff;border:1px solid #dbeafe;border-radius:8px;padding:12px;font-size:12px;font-family:monospace;line-height:1.8">
+                  score = 緊急程度 × 12<br>
+                  &nbsp;&nbsp;+ 平時關懷分數（0–28）<br>
+                  &nbsp;&nbsp;+ 物資相符度 × 15<br>
+                  &nbsp;&nbsp;− (距離 ÷ 距離上限) × 25<br>
+                  &nbsp;&nbsp;− 志工目前任務量 × 5
+                </div>
+              </div>
+              <div>
+                <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">距離上限（依緊急度）</div>
+                <table class="tbl" style="font-size:12px">
+                  <tr><td>5 極緊急</td><td><strong>2 km</strong></td></tr>
+                  <tr><td>4 緊急</td><td><strong>5 km</strong></td></tr>
+                  <tr><td>3 一般</td><td><strong>8 km</strong></td></tr>
+                  <tr><td>2 輕度</td><td><strong>15 km</strong></td></tr>
+                  <tr><td>1 觀察</td><td><strong>25 km</strong></td></tr>
+                </table>
               </div>
             </div>
-            <div>
-              <div style="font-size:12px;font-weight:700;margin-bottom:8px;color:var(--muted)">距離上限（依緊急度）</div>
-              <table class="tbl" style="font-size:12px">
-                <tr><td>5 極緊急</td><td><strong>2 km</strong></td></tr>
-                <tr><td>4 緊急</td><td><strong>5 km</strong></td></tr>
-                <tr><td>3 一般</td><td><strong>8 km</strong></td></tr>
-                <tr><td>2 輕度</td><td><strong>15 km</strong></td></tr>
-                <tr><td>1 觀察</td><td><strong>25 km</strong></td></tr>
-              </table>
+            <div style="margin-top:12px;font-size:12px;color:var(--muted);line-height:1.7">
+              <strong>物資來源（兩種）：</strong><br>
+              🙋 志工自行登記的個人物資（社區物資清單）<br>
+              📍 政府/社區固定資源點（避難所、消防分隊、衛生所…，從政府開放資料匯入）
             </div>
-          </div>
-          <div style="margin-top:14px;font-size:12px;color:var(--muted);line-height:1.7">
-            <strong>資料來源（三層）：</strong><br>
-            Layer 1 個人物資 — 志工自行登記的 CommunityResource<br>
-            Layer 2 固定資源點 — 政府開放資料匯入的 ResourcePoint（避難所、消防、衛生所）<br>
-            Layer 3 類型親合度矩陣 — water ↔ food 部分匹配；tool ↔ other 部分匹配
-          </div>
+          </details>
         </div>
       </div>
     </div>
@@ -813,6 +865,46 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-need')">取消</button>
       <button class="btn btn-primary" onclick="saveNeed()">新增需求</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════ -->
+<!-- Modal: 編輯知識庫文件                                 -->
+<!-- ════════════════════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-chunk" onclick="closeOnOverlay(event,'modal-chunk')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">編輯知識文件</span>
+      <button class="modal-close" onclick="closeModal('modal-chunk')">✕</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="chunk-id">
+      <div class="form-row col-2" style="margin-bottom:12px">
+        <div class="form-group">
+          <label class="form-label">來源名稱</label>
+          <input type="text" id="chunk-source" class="form-control">
+        </div>
+        <div class="form-group">
+          <label class="form-label">分類</label>
+          <select id="chunk-category" class="form-select">
+            <option value="first_aid">🩹 急救</option>
+            <option value="eldercare">👴 長者照護</option>
+            <option value="disaster">🌀 災時應變</option>
+            <option value="volunteer">🙋 志工管理</option>
+            <option value="other">📄 其他</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">內容</label>
+        <textarea id="chunk-content" class="form-control" rows="8"></textarea>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">修改內容會自動重新向量化，確保搜尋結果與最新文字一致。</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modal-chunk')">取消</button>
+      <button class="btn btn-primary" onclick="saveChunk()">儲存</button>
     </div>
   </div>
 </div>
@@ -960,6 +1052,12 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <label class="form-label">容量（人數）</label>
           <input type="number" class="form-control" id="pt-capacity" placeholder="200">
         </div>
+        <div class="form-group">
+          <label class="form-label">目前使用人數</label>
+          <input type="number" min="0" class="form-control" id="pt-load" placeholder="0">
+        </div>
+      </div>
+      <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label">電話</label>
           <input type="text" class="form-control" id="pt-phone" placeholder="04-22xxxxxx">
@@ -1443,25 +1541,90 @@ async function loadKB() {
       noticeEl.style.display = 'none';
     }
 
-    loadDocList(cats, stats);
+    loadDocList();
   } catch(e) {
     document.getElementById('stat-total').textContent = '!';
   }
 }
 
-function loadDocList(cats, stats) {
+async function loadDocList() {
   const el = document.getElementById('doc-list');
-  if (!cats || !cats.length) {
-    el.innerHTML = '<p style="font-size:12px;color:var(--muted)">知識庫目前為空，請新增文件。</p>';
-    return;
+  try {
+    const data = await fetch('/api/rag/chunks?limit=200').then(r => r.json());
+    const chunks = data.chunks || [];
+    if (!chunks.length) {
+      el.innerHTML = '<p style="font-size:12px;color:var(--muted)">知識庫目前為空，請新增文件。</p>';
+      return;
+    }
+    el.innerHTML = `
+      <div style="overflow-x:auto">
+        <table class="tbl">
+          <thead><tr><th>來源</th><th>分類</th><th>內容預覽</th><th>向量化</th><th>操作</th></tr></thead>
+          <tbody>
+            ${chunks.map(c => `
+              <tr>
+                <td style="white-space:nowrap">${c.source}</td>
+                <td><span class="cat-chip">${CAT_LABEL[c.category] || c.category}</span></td>
+                <td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.content_preview}</td>
+                <td>${c.has_embedding ? '✅' : '—'}</td>
+                <td style="white-space:nowrap">
+                  <button class="btn btn-ghost-edit btn-sm" onclick="editChunk('${c.id}')">編輯</button>
+                  <button class="btn btn-ghost-danger btn-sm" onclick="deleteChunk('${c.id}')">刪除</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+      <p style="font-size:11px;color:var(--muted);margin-top:8px">
+        共 ${data.total} 筆（最多顯示 200 筆）
+      </p>`;
+  } catch(e) {
+    el.innerHTML = `<p style="font-size:12px;color:var(--danger)">載入失敗：${e.message}</p>`;
   }
-  el.innerHTML = `
-    <div class="cat-chips" style="margin-bottom:10px">
-      ${cats.map(c => `<span class="cat-chip">${CAT_LABEL[c] || c}</span>`).join('')}
-    </div>
-    <p style="font-size:12px;color:var(--muted)">
-      共 ${stats.total_chunks || 0} 個 chunks，${stats.chunks_with_embedding || 0} 個已向量化
-    </p>`;
+}
+
+async function editChunk(id) {
+  const c = await fetch(`/api/rag/chunks/${id}`).then(r => r.json());
+  if (c.detail) { alert('載入失敗：' + c.detail); return; }
+  document.getElementById('chunk-id').value       = c.id;
+  document.getElementById('chunk-source').value   = c.source;
+  document.getElementById('chunk-category').value = c.category;
+  document.getElementById('chunk-content').value  = c.content;
+  openModal('modal-chunk');
+}
+
+async function saveChunk() {
+  const id       = document.getElementById('chunk-id').value;
+  const source   = document.getElementById('chunk-source').value.trim();
+  const category = document.getElementById('chunk-category').value;
+  const content  = document.getElementById('chunk-content').value.trim();
+  if (!content) { alert('內容不可為空'); return; }
+
+  try {
+    const res  = await fetch(`/api/rag/chunks/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, source, category }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
+    closeModal('modal-chunk');
+    loadKB();
+  } catch(e) {
+    alert('儲存失敗：' + e.message);
+  }
+}
+
+async function deleteChunk(id) {
+  if (!confirm('確定刪除這筆知識庫內容？此操作無法復原。')) return;
+  try {
+    const res  = await fetch(`/api/rag/chunks/${id}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
+    loadKB();
+  } catch(e) {
+    alert('刪除失敗：' + e.message);
+  }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -1544,9 +1707,9 @@ async function testQuery() {
 // ════════════════════════════════════════════════
 // Dispatch
 // ════════════════════════════════════════════════
-async function runDispatch() {
-  const btn = document.getElementById('dispatch-btn');
-  if (!confirm('立即執行物資自動媒合？\n（系統需在緊急模式下才會媒合）')) return;
+async function runDispatch(btn) {
+  if (!confirm('立即執行物資自動媒合？\n（系統需在緊急模式下才會媒合；個人物資媒合會先產生「待確認」建議，需要你到「緊急需求」頁逐筆確認後才會通知志工）')) return;
+  const original = btn.textContent;
   btn.disabled = true; btn.textContent = '媒合中…';
   try {
     const res  = await fetch('/api/resources/dispatch', { method: 'POST' });
@@ -1554,13 +1717,13 @@ async function runDispatch() {
     if (data.reason === 'not_emergency') {
       alert('⚠️ 目前為日常模式，請先從儀表板切換至緊急模式');
     } else {
-      alert(`媒合完成！\n✅ 成功：${data.matched} 筆\n📤 通知：${data.notified} 人\n⏭️ 跳過：${data.skipped} 筆`);
+      alert(`媒合完成！\n⏳ 待確認建議：${data.suggested} 筆（需到「緊急需求」頁確認才會通知志工）\n✅ 資源點直接媒合：${data.matched} 筆\n⏭️ 跳過：${data.skipped} 筆`);
       loadAll();
     }
   } catch(e) {
     alert('執行失敗：' + e.message);
   } finally {
-    btn.disabled = false; btn.textContent = '🚨 立即自動媒合';
+    btn.disabled = false; btn.textContent = original;
   }
 }
 
@@ -1642,7 +1805,15 @@ function renderPoints(data) {
       <td><strong>${PT_ICON[p.point_type]||'📍'} ${p.name}</strong></td>
       <td><span class="badge badge-blue">${PT_LABEL[p.point_type]||p.point_type}</span></td>
       <td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.address||'—'}</td>
-      <td class="muted">${p.capacity ? p.capacity.toLocaleString() + ' 人' : '—'}</td>
+      <td class="muted" style="white-space:nowrap">
+        ${p.capacity
+          ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px" onclick="pointCheckout('${p.id}')">－</button>
+             <strong style="color:${p.current_load >= p.capacity ? 'var(--danger,#dc2626)' : 'inherit'}">${p.current_load}</strong> / ${p.capacity.toLocaleString()} 人
+             <button class="btn btn-ghost btn-sm" style="padding:2px 8px" onclick="pointCheckin('${p.id}')">＋</button>`
+          : `<button class="btn btn-ghost btn-sm" style="padding:2px 8px" onclick="pointCheckout('${p.id}')">－</button>
+             <strong>${p.current_load}</strong> 人
+             <button class="btn btn-ghost btn-sm" style="padding:2px 8px" onclick="pointCheckin('${p.id}')">＋</button>`}
+      </td>
       <td><div class="supply-chips">${supplyChips}</div></td>
       <td class="muted">${p.phone||'—'}</td>
       <td><span class="src-badge ${srcClass}">${srcLabel}</span></td>
@@ -1663,6 +1834,7 @@ function openPointModal(pt = null) {
   document.getElementById('pt-lat').value      = pt?.lat || '';
   document.getElementById('pt-lng').value      = pt?.lng || '';
   document.getElementById('pt-capacity').value = pt?.capacity || '';
+  document.getElementById('pt-load').value     = pt?.current_load ?? 0;
   document.getElementById('pt-phone').value    = pt?.phone || '';
   document.getElementById('pt-hours').value    = pt?.operating_hours || '';
   document.getElementById('pt-note').value     = pt?.note || '';
@@ -1683,6 +1855,7 @@ async function savePoint() {
   const lat   = document.getElementById('pt-lat').value;
   const lng   = document.getElementById('pt-lng').value;
   const cap   = document.getElementById('pt-capacity').value;
+  const load  = document.getElementById('pt-load').value;
   const phone = document.getElementById('pt-phone').value.trim();
   const hours = document.getElementById('pt-hours').value.trim();
   const note  = document.getElementById('pt-note').value.trim();
@@ -1690,6 +1863,7 @@ async function savePoint() {
   if (lat)   p.set('lat', lat);
   if (lng)   p.set('lng', lng);
   if (cap)   p.set('capacity', cap);
+  if (id && load !== '') p.set('current_load', load);
   if (phone) p.set('phone', phone);
   if (hours) p.set('operating_hours', hours);
   if (note)  p.set('note', note);
@@ -1703,6 +1877,16 @@ async function savePoint() {
 async function deletePoint(id, name) {
   if (!confirm(`確定刪除資源點「${name}」？`)) return;
   await fetch(`/api/resources/points/${id}`, { method: 'DELETE' });
+  loadPoints();
+}
+
+async function pointCheckin(id) {
+  await fetch(`/api/resources/points/${id}/checkin?count=1`, { method: 'POST' });
+  loadPoints();
+}
+
+async function pointCheckout(id) {
+  await fetch(`/api/resources/points/${id}/checkout?count=1`, { method: 'POST' });
   loadPoints();
 }
 
@@ -1725,10 +1909,11 @@ async function seedPoints() {
 const NEED_TYPE_ICON = { water:'💧', food:'🍱', first_aid:'🩹',
                           shelter:'🛏️', vehicle:'🚗', tool:'🔧', other:'📦' };
 const STATUS_BADGE = {
-  open:     '<span class="badge badge-amber">待媒合</span>',
-  matched:  '<span class="badge badge-blue">已媒合</span>',
-  fulfilled:'<span class="badge badge-green">已完成</span>',
-  cancelled:'<span class="badge badge-gray">已取消</span>',
+  open:      '<span class="badge badge-amber">待媒合</span>',
+  suggested: '<span class="badge badge-red">⏳ 待管理員確認</span>',
+  matched:   '<span class="badge badge-blue">已媒合</span>',
+  fulfilled: '<span class="badge badge-green">已完成</span>',
+  cancelled: '<span class="badge badge-gray">已取消</span>',
 };
 
 let allNeeds = [];
@@ -1736,15 +1921,16 @@ let needStatusFilter = '';
 
 async function loadNeeds() {
   try {
-    const [open, matched, fulfilled] = await Promise.all([
+    const [open, suggested, matched, fulfilled] = await Promise.all([
       fetch('/api/resources/needs?status=open').then(r => r.json()),
+      fetch('/api/resources/needs?status=suggested').then(r => r.json()),
       fetch('/api/resources/needs?status=matched').then(r => r.json()),
       fetch('/api/resources/needs?status=fulfilled').then(r => r.json()),
     ]);
-    allNeeds = [...open, ...matched, ...fulfilled];
+    allNeeds = [...open, ...suggested, ...matched, ...fulfilled];
     const lbl = document.getElementById('needs-count-label');
     if (lbl) lbl.textContent =
-      `待媒合 ${open.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆`;
+      `待媒合 ${open.length} 筆 · 待確認 ${suggested.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆`;
     renderNeeds(allNeeds);
   } catch(e) {
     document.getElementById('needs-tbody').innerHTML =
@@ -1810,7 +1996,7 @@ function renderNeeds(data) {
     return;
   }
   data = [...data].sort((a, b) => {
-    const so = {open:0,matched:1,fulfilled:2,cancelled:3};
+    const so = {suggested:0,open:1,matched:2,fulfilled:3,cancelled:4};
     if (so[a.status] !== so[b.status]) return so[a.status] - so[b.status];
     return b.urgency - a.urgency;
   });
@@ -1828,6 +2014,9 @@ function renderNeeds(data) {
       <td id="match-${n.id}">
         ${n.status === 'open'
           ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">查看候選</button>`
+          : n.status === 'suggested'
+          ? `<button class="btn btn-success btn-sm" onclick="confirmDispatch('${n.id}')">✅ 確認派遣</button>
+             <button class="btn btn-ghost-danger btn-sm" onclick="declineSuggestion('${n.id}')">否決</button>`
           : '—'}
       </td>
       <td>
@@ -1843,6 +2032,23 @@ function renderNeeds(data) {
     </tr>`).join('');
 }
 
+async function confirmDispatch(needId) {
+  if (!confirm('確認採用系統建議的媒合？\n這一步才會真正發 LINE 通知志工。')) return;
+  const res  = await fetch(`/api/resources/needs/${needId}/confirm_dispatch`, { method: 'POST' });
+  const data = await res.json();
+  if (data.error) { alert('確認失敗：' + data.error); return; }
+  alert(data.volunteer_notified ? '✅ 已確認派遣，志工已收到 LINE 通知' : '✅ 已確認派遣（志工未綁定 LINE，請自行聯繫）');
+  loadNeeds();
+}
+
+async function declineSuggestion(needId) {
+  if (!confirm('否決此建議？物資會恢復可用，需求退回待媒合。')) return;
+  const res  = await fetch(`/api/resources/needs/${needId}/decline_suggestion`, { method: 'POST' });
+  const data = await res.json();
+  if (data.error) { alert('操作失敗：' + data.error); return; }
+  loadNeeds();
+}
+
 async function showCandidates(needId) {
   const row  = document.getElementById(`cand-row-${needId}`);
   const list = document.getElementById(`cand-list-${needId}`);
@@ -1850,9 +2056,14 @@ async function showCandidates(needId) {
   row.style.display = 'table-row';
   list.textContent = '評分中…';
   try {
-    const cands = await fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json());
+    const data  = await fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json());
+    const cands = data.candidates || [];
+    const vuln  = data.vulnerability ?? 0;
     if (!cands.length) { list.textContent = '無候選資源'; return; }
     list.innerHTML = `
+      <div class="muted" style="margin:4px 0 8px">
+        脆弱度 <strong style="color:${vuln >= 14 ? 'var(--danger,#dc2626)' : 'inherit'}">${vuln}</strong> / 28
+      </div>
       <table class="tbl" style="margin:8px 0">
         <thead><tr>
           <th>評分</th><th>來源</th><th>名稱</th><th>志工/資源點</th><th>距離</th><th>操作</th>

@@ -9,12 +9,23 @@
 
 算法（多因子評分 + 優先佇列）
 -------------------------------------
-  score = urgency_pts + affinity_pts - dist_penalty - load_penalty
+  score = urgency_pts + vulnerability_pts + affinity_pts
+          - dist_penalty - load_penalty
 
-  urgency_pts  = urgency × 12          # 12–60
-  affinity_pts = affinity × 15         # 0–15  (類型匹配度)
-  dist_penalty = (dist/max_dist) × 25  # 0–25  (距離懲罰)
-  load_penalty = vol_tasks × 5         # 0–∞   (志工負荷平衡)
+  urgency_pts       = urgency × 12          # 12–60
+  vulnerability_pts = 見 _vulnerability_pts # 0–28  (平時關懷資料轉換而來)
+  affinity_pts      = affinity × 15         # 0–15  (類型匹配度)
+  dist_penalty      = (dist/max_dist) × 25  # 0–25  (距離懲罰)
+  load_penalty      = vol_tasks × 5         # 0–∞   (志工負荷平衡)
+
+  各因子設計依據
+  - urgency 係數最高（×12）：緊急度直接關係生命安全，應凌駕效率考量
+  - vulnerability_pts 與 urgency 同量級：平時累積的脆弱度訊號與即時緊急度並列，
+    體現「平時照顧資料 → 災時派遣優先權」的核心設計
+  - affinity 次之（×15）：物資類型不符即使近在咫尺也無實際效用
+  - dist_penalty 以 max_km（依緊急度分級）作為歸一化上限，而非硬性排除距離外的候選：
+    極緊急情況仍值得跨遠距離調度；各等級距離上限參考社區志工徒步/機車可及範圍訂定
+  - load_penalty 線性遞增（×5）：防止單一志工連續被派任，保障任務完成率與志工安全
 
   距離上限 (urgency → max km)
     5 極緊急 → 2 km
@@ -28,7 +39,7 @@
 """
 import json
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import NamedTuple
 from sqlalchemy.orm import Session
 
@@ -36,6 +47,9 @@ from app.database import SessionLocal
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.resource_point import ResourcePoint, POINT_SUPPLY_TYPES
+from app.models.checkin import DailyCheckin
+from app.models.alert import Alert
+from app.models.care_relation import CareRelation
 from app.models.config import SystemConfig
 from app.services.line_notify import send_task_message
 
@@ -62,6 +76,67 @@ URGENCY_MAX_KM: dict[int, float] = {
     1: 25.0,
 }
 DEFAULT_MAX_KM = 10.0
+
+
+# ──────────────────────────────────────────────────────────
+# 脆弱度評分 — 把「平時關懷資料」轉換成「災時派遣權重」
+# ──────────────────────────────────────────────────────────
+VULNERABILITY_LOOKBACK_DAYS = 7
+PTS_PER_RISK_CHECKIN = 4.0   # 近 7 天內每次「未回應/求助」打卡
+MAX_CHECKIN_PTS = 12.0
+PTS_PER_ACTIVE_ALERT = 5.0   # 每筆尚未解決的警報
+MAX_ALERT_PTS = 10.0
+ISOLATION_PTS = {0: 6.0, 1: 3.0}   # 主動關懷聯絡人數 → 孤立加權
+
+
+def _vulnerability_pts(requester_id, db: Session) -> float:
+    """
+    平時照顧、災時派遣的串接點。
+
+    依三項已在系統中持續累積的關懷資料算出加權（0–28 分）：
+      checkin_pts   = min(近 7 天「未回應/求助」打卡次數 × 4, 12)
+      alert_pts     = min(尚未解決的警報數 × 5, 10)
+      isolation_pts = 主動關懷聯絡人 0 人 → 6 分；1 人 → 3 分；≥2 人 → 0 分
+
+    回傳值會直接加進緊急度評分，讓「平時就被持續關注、追蹤、
+    身邊照顧者很少」的人，在派遣排序中自動取得優先權——這份
+    優先權不是對方在 LINE 上臨時描述出來的，而是平時日常打卡
+    累積下來的真實紀錄。
+    """
+    cutoff = datetime.utcnow().date() - timedelta(days=VULNERABILITY_LOOKBACK_DAYS)
+
+    risk_checkins = (
+        db.query(DailyCheckin)
+        .filter(
+            DailyCheckin.elderly_id == requester_id,
+            DailyCheckin.date >= cutoff,
+            DailyCheckin.status.in_(["no_response", "help_needed"]),
+        )
+        .count()
+    )
+    checkin_pts = min(risk_checkins * PTS_PER_RISK_CHECKIN, MAX_CHECKIN_PTS)
+
+    active_alerts = (
+        db.query(Alert)
+        .filter(
+            Alert.elderly_id == requester_id,
+            Alert.status == "sent",
+        )
+        .count()
+    )
+    alert_pts = min(active_alerts * PTS_PER_ACTIVE_ALERT, MAX_ALERT_PTS)
+
+    contacts = (
+        db.query(CareRelation)
+        .filter(
+            CareRelation.elderly_id == requester_id,
+            CareRelation.is_active == True,
+        )
+        .count()
+    )
+    isolation_pts = ISOLATION_PTS.get(contacts, 0.0)
+
+    return checkin_pts + alert_pts + isolation_pts
 
 
 # ──────────────────────────────────────────────────────────
@@ -103,6 +178,7 @@ def _score(
     affinity: float,
     dist_km: float,
     vol_active_tasks: int,
+    vulnerability_pts: float = 0.0,
 ) -> float:
     max_km = URGENCY_MAX_KM.get(urgency, DEFAULT_MAX_KM)
     if dist_km > max_km:
@@ -115,7 +191,7 @@ def _score(
     affinity_pts = affinity * 15
     dist_pts = (dist_km / max_km) * 25
     load_pts = vol_active_tasks * 5
-    return urgency_pts + affinity_pts - dist_pts - load_pts
+    return urgency_pts + vulnerability_pts + affinity_pts - dist_pts - load_pts
 
 
 # ──────────────────────────────────────────────────────────
@@ -133,6 +209,7 @@ def _collect_from_resources(
     need: CommunityNeed,
     db: Session,
     volunteer_load: dict[str, int],
+    vulnerability: float = 0.0,
 ) -> list[Candidate]:
     compat = _compat_types(need.need_type)
     type_aff = {t: a for t, a in compat}
@@ -151,7 +228,7 @@ def _collect_from_resources(
         affinity = type_aff.get(r.resource_type, 0.0)
         dist = _haversine(need.lat, need.lng, r.lat, r.lng)
         vol_load = volunteer_load.get(str(r.owner_id), 0)
-        s = _score(need.urgency, affinity, dist, vol_load)
+        s = _score(need.urgency, affinity, dist, vol_load, vulnerability)
         if s < 0:
             continue
         owner = r.owner
@@ -176,6 +253,7 @@ def _collect_from_points(
     need: CommunityNeed,
     db: Session,
     volunteer_load: dict[str, int],
+    vulnerability: float = 0.0,
 ) -> list[Candidate]:
     """
     資源點本身不是志工，不會發 LINE 通知；
@@ -204,7 +282,7 @@ def _collect_from_points(
 
         dist = _haversine(need.lat, need.lng, pt.lat, pt.lng)
         # 資源點無志工負荷問題
-        s = _score(need.urgency, best_aff, dist, 0)
+        s = _score(need.urgency, best_aff, dist, 0, vulnerability)
         if s < 0:
             continue
 
@@ -229,13 +307,18 @@ def _collect_from_points(
 def auto_dispatch() -> dict:
     """
     緊急模式下每 30 分鐘執行一次。
-    回傳統計：{matched, skipped, notified, details}
+    注意：這裡只「建議」個人物資媒合，不會自動通知志工——
+    所有建議會先進入 need.status = "suggested"，管理員必須在後台按下
+    confirm_dispatch 才會真的發 LINE 通知（對應計畫書「所有建議仍須
+    管理員確認後才會執行」的承諾）。資源點（固定設施）媒合本來就不會
+    通知志工，維持直接標記完成。
+    回傳統計：{matched, suggested, skipped, notified, details}
     """
     db: Session = SessionLocal()
     try:
         cfg = db.query(SystemConfig).filter(SystemConfig.key == "mode").first()
         if not cfg or cfg.value != "emergency":
-            return {"matched": 0, "skipped": 0, "notified": 0,
+            return {"matched": 0, "suggested": 0, "skipped": 0, "notified": 0,
                     "reason": "not_emergency"}
 
         # 按緊急度 DESC → 建立時間 ASC（FIFO 相同緊急度）
@@ -247,6 +330,7 @@ def auto_dispatch() -> dict:
         )
 
         matched   = 0
+        suggested = 0
         skipped   = 0
         notified  = 0
         details   = []
@@ -255,10 +339,13 @@ def auto_dispatch() -> dict:
         volunteer_load: dict[str, int] = {}
 
         for need in open_needs:
+            # 把這位求助者「平時的關懷紀錄」轉換成派遣優先權重
+            vulnerability = _vulnerability_pts(need.requester_id, db)
+
             # 從兩個來源蒐集候選
             cands = (
-                _collect_from_resources(need, db, volunteer_load) +
-                _collect_from_points(need, db, volunteer_load)
+                _collect_from_resources(need, db, volunteer_load, vulnerability) +
+                _collect_from_points(need, db, volunteer_load, vulnerability)
             )
 
             if not cands:
@@ -267,66 +354,61 @@ def auto_dispatch() -> dict:
                     "need_id": str(need.id),
                     "result": "skipped",
                     "reason": "無相符物資",
+                    "vulnerability": round(vulnerability, 1),
                 })
                 continue
 
             # 取最高分
             best = max(cands, key=lambda c: c.score)
 
-            # 更新 need
-            need.status = "matched"
-            if best.resource_id:
-                need.matched_resource_id = best.resource_id
-                # 標記個人物資為不可用（防重複媒合）
-                res_obj = db.query(CommunityResource).filter(
-                    CommunityResource.id == best.resource_id
-                ).first()
-                if res_obj:
-                    res_obj.is_available = False
-
-            matched += 1
-
-            # 更新志工負荷（僅個人物資的擁有者）
             if best.source == "resource" and best.resource_id:
+                # 個人物資：這裡只「建議」，不自動通知志工——
+                # 計畫書明文承諾「所有建議仍須管理員確認後才會執行」，
+                # 真正發 LINE 通知要等管理員按下確認（見 confirm_dispatch）。
+                need.status = "suggested"
+                need.matched_resource_id = best.resource_id
                 res_obj = db.query(CommunityResource).filter(
                     CommunityResource.id == best.resource_id
                 ).first()
                 if res_obj:
+                    res_obj.is_available = False  # 先保留，避免同時被建議給別人
                     vid = str(res_obj.owner_id)
                     volunteer_load[vid] = volunteer_load.get(vid, 0) + 1
 
-            # LINE 通知（個人物資才有志工可通知）
-            notif_sent = False
-            if best.vol_line_uid:
-                try:
-                    send_task_message(
-                        line_uid=best.vol_line_uid,
-                        need_description=need.description or need.need_type,
-                        address=need.address or "地址未填",
-                        resource_name=best.res_name,
-                        need_id=str(need.id),
-                    )
-                    notif_sent = True
-                    notified += 1
-                except Exception:
-                    pass
-
-            details.append({
-                "need_id":   str(need.id),
-                "result":    "matched",
-                "source":    best.source,
-                "matched":   best.res_name,
-                "dist_km":   round(best.dist_km, 2) if not math.isinf(best.dist_km) else None,
-                "score":     round(best.score, 1),
-                "notified":  notif_sent,
-            })
+                suggested += 1
+                details.append({
+                    "need_id":       str(need.id),
+                    "result":        "suggested",
+                    "source":        best.source,
+                    "matched":       best.res_name,
+                    "dist_km":       round(best.dist_km, 2) if not math.isinf(best.dist_km) else None,
+                    "score":         round(best.score, 1),
+                    "vulnerability": round(vulnerability, 1),
+                })
+            else:
+                # 資源點（固定設施）：本來就不會發 LINE 通知志工，
+                # 只是把「有哪個資源點可用」標記出來給管理員手動協調，
+                # 不牽涉「自動指派志工」，維持直接標記完成。
+                need.status = "matched"
+                matched += 1
+                details.append({
+                    "need_id":       str(need.id),
+                    "result":        "matched",
+                    "source":        best.source,
+                    "matched":       best.res_name,
+                    "dist_km":       round(best.dist_km, 2) if not math.isinf(best.dist_km) else None,
+                    "score":         round(best.score, 1),
+                    "vulnerability": round(vulnerability, 1),
+                    "notified":      False,
+                })
 
         db.commit()
         return {
-            "matched":  matched,
-            "skipped":  skipped,
-            "notified": notified,
-            "details":  details,
+            "matched":   matched,
+            "suggested": suggested,
+            "skipped":   skipped,
+            "notified":  notified,
+            "details":   details,
         }
 
     finally:
@@ -375,30 +457,105 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
 
 
 # ──────────────────────────────────────────────────────────
+# 確認 / 否決 自動媒合建議（管理員確認關卡）
+# ──────────────────────────────────────────────────────────
+def confirm_dispatch(need_id: str, db: Session) -> dict:
+    """
+    管理員確認一筆 auto_dispatch 產生的建議 —— 這一步才會真正發
+    LINE 通知志工。對應計畫書「所有建議仍須管理員確認後才會執行」。
+    """
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need or need.status != "suggested":
+        return {"error": "此需求目前沒有待確認的媒合建議"}
+
+    resource = db.query(CommunityResource).filter(
+        CommunityResource.id == need.matched_resource_id
+    ).first()
+    if not resource:
+        need.status = "open"
+        need.matched_resource_id = None
+        db.commit()
+        return {"error": "候選物資已不存在，需求已退回待媒合"}
+
+    notified = False
+    owner = resource.owner
+    if owner and owner.line_uid:
+        try:
+            send_task_message(
+                line_uid=owner.line_uid,
+                need_description=need.description or need.need_type,
+                address=need.address or "地址未填",
+                resource_name=resource.name,
+                need_id=str(need.id),
+            )
+            notified = True
+        except Exception:
+            pass
+
+    need.status = "matched"
+    db.commit()
+
+    return {
+        "message":            "已確認派遣，志工已收到 LINE 通知" if notified
+                              else "已確認派遣（志工未綁定 LINE，請自行聯繫）",
+        "need_id":            need_id,
+        "volunteer_notified": notified,
+    }
+
+
+def decline_suggestion(need_id: str, db: Session) -> dict:
+    """管理員否決一筆自動媒合建議 —— 釋放物資、需求退回待媒合佇列。"""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need or need.status != "suggested":
+        return {"error": "此需求目前沒有待確認的媒合建議"}
+
+    if need.matched_resource_id:
+        resource = db.query(CommunityResource).filter(
+            CommunityResource.id == need.matched_resource_id
+        ).first()
+        if resource:
+            resource.is_available = True
+
+    need.status = "open"
+    need.matched_resource_id = None
+    db.commit()
+
+    return {"message": "已否決此建議，需求退回待媒合", "need_id": need_id}
+
+
+# ──────────────────────────────────────────────────────────
 # 評分預覽（給管理員在 UI 查看候選排序）
 # ──────────────────────────────────────────────────────────
-def preview_candidates(need_id: str, db: Session) -> list[dict]:
+def preview_candidates(need_id: str, db: Session) -> dict:
     """
-    回傳此需求所有候選資源，依評分排序（不執行媒合）
+    回傳此需求的脆弱度評分 + 所有候選資源排序（不執行媒合）。
+    讓管理員在 UI 上能直接看到「這個人為什麼被排到前面」——
+    脆弱度分數是平時打卡/警報/照顧關係資料即時算出來的，
+    不是憑空給的優先權。
     """
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        return []
+        return {"vulnerability": 0.0, "candidates": []}
+
+    vulnerability = _vulnerability_pts(need.requester_id, db)
 
     cands = (
-        _collect_from_resources(need, db, {}) +
-        _collect_from_points(need, db, {})
+        _collect_from_resources(need, db, {}, vulnerability) +
+        _collect_from_points(need, db, {}, vulnerability)
     )
     cands.sort(key=lambda c: c.score, reverse=True)
 
-    return [
-        {
-            "score":    round(c.score, 1),
-            "source":   c.source,
-            "name":     c.res_name,
-            "vol":      c.vol_name,
-            "dist_km":  round(c.dist_km, 2) if not math.isinf(c.dist_km) else None,
-            "id":       c.resource_id or c.point_id,
-        }
-        for c in cands[:20]
-    ]
+    return {
+        "vulnerability": round(vulnerability, 1),
+        "candidates": [
+            {
+                "score":    round(c.score, 1),
+                "source":   c.source,
+                "name":     c.res_name,
+                "vol":      c.vol_name,
+                "dist_km":  round(c.dist_km, 2) if not math.isinf(c.dist_km) else None,
+                "id":       c.resource_id or c.point_id,
+            }
+            for c in cands[:20]
+        ],
+    }
