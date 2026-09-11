@@ -15,6 +15,13 @@ line-bot-sdk==3.13.0
 # Gemini
 google-generativeai==0.8.3
 
+# RAG 向量運算（app/services/rag.py 直接 import numpy 做 cosine
+# similarity；過去一直靠 pgvector 套件順帶把 numpy 裝進來，從沒有
+# 明確宣告過這個依賴——拿掉 pgvector 之後這裡就直接斷了，讓部署因為
+# ModuleNotFoundError: No module named 'numpy' 在 healthcheck 階段
+# 失敗。明確宣告，不要再依賴別的套件順便帶進來。
+numpy==2.4.6
+
 # Scheduler
 apscheduler==3.10.4
 
