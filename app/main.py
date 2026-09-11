@@ -1,12 +1,11 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
-from slowapi.util import get_remote_address
 import os
 
 from app.database import engine, Base
@@ -77,22 +76,6 @@ def admin_page():
 @limiter.exempt
 def health():
     return {"status": "ok", "service": "鄰里守望平台"}
-
-
-@app.get("/debug/rate-limit-key")
-@limiter.exempt
-def debug_rate_limit_key(request: Request):
-    """
-    臨時診斷端點：正式環境限流一直沒生效，用來確認 slowapi 在 Railway
-    的網路環境下實際解析出來的 client key 到底是什麼、穩不穩定。
-    確認完問題就會拿掉，不是正式功能。
-    """
-    return {
-        "remote_address_key": get_remote_address(request),
-        "client_host": request.client.host if request.client else None,
-        "x_forwarded_for": request.headers.get("x-forwarded-for"),
-        "x_real_ip": request.headers.get("x-real-ip"),
-    }
 
 @app.get("/")
 def dashboard():

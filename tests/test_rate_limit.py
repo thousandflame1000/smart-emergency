@@ -13,7 +13,7 @@ middleware 疊層），而不是像其他測試那樣自己組一個乾淨的 Fa
 import pytest
 from fastapi.testclient import TestClient
 
-from app.rate_limit import limiter
+from app.rate_limit import limiter, _client_ip_key
 
 
 @pytest.fixture(autouse=True)
@@ -50,3 +50,49 @@ def test_normal_browsing_volume_is_not_rate_limited(client, db):
     for _ in range(20):
         r = client.get("/api/dashboard/summary")
         assert r.status_code == 200
+
+
+class _FakeClient:
+    host = "127.0.0.1"
+
+
+class _FakeRequest:
+    """最小化模擬 Starlette Request，只提供 _client_ip_key 用得到的
+    headers / client 屬性。"""
+    def __init__(self, headers=None, client_host="127.0.0.1"):
+        self.headers = headers or {}
+        self.client = _FakeClient()
+        self.client.host = client_host
+
+
+def test_key_func_prefers_x_real_ip_over_direct_tcp_peer():
+    """
+    這是這次正式環境限流完全沒生效的根因回歸測試：Railway 的 edge
+    網路透過會逐次變動的內部 CGNAT 位址（100.64.0.0/10）轉發請求，
+    如果直接用 request.client.host 當限流 key，每個請求都會被當成
+    不同來源，計數永遠不會累積。X-Real-IP 是 Railway 依照它自己
+    觀察到的真實來源設定的，才是穩定可信的 key。
+    """
+    req = _FakeRequest(
+        headers={"x-real-ip": "218.166.140.120", "x-forwarded-for": "218.166.140.120, 79.127.228.18"},
+        client_host="100.64.0.4",  # 模擬 Railway 每次都不同的內部位址
+    )
+    assert _client_ip_key(req) == "218.166.140.120"
+
+    req2 = _FakeRequest(
+        headers={"x-real-ip": "218.166.140.120", "x-forwarded-for": "218.166.140.120, 79.127.228.17"},
+        client_host="100.64.0.7",  # 下一個請求，內部位址變了
+    )
+    assert _client_ip_key(req2) == "218.166.140.120", "同一個真實使用者，兩次請求應該解析出同一個 key"
+
+
+def test_key_func_falls_back_to_forwarded_for_first_hop_without_real_ip():
+    req = _FakeRequest(headers={"x-forwarded-for": "203.0.113.5, 10.0.0.1"})
+    assert _client_ip_key(req) == "203.0.113.5"
+
+
+def test_key_func_falls_back_to_client_host_for_local_dev():
+    """本機開發沒有任何 proxy header，行為要跟原本一樣直接用
+    request.client.host。"""
+    req = _FakeRequest(headers={}, client_host="127.0.0.1")
+    assert _client_ip_key(req) == "127.0.0.1"
