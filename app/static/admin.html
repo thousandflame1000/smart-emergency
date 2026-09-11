@@ -920,12 +920,23 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     </div>
     <div class="modal-body">
       <input type="hidden" id="user-id">
-      <input type="hidden" id="user-role">
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label">姓名 <span class="req">*</span></label>
           <input type="text" class="form-control" id="user-name" placeholder="王大明">
         </div>
+        <div class="form-group">
+          <label class="form-label">角色 <span class="req">*</span></label>
+          <select class="form-select" id="user-role">
+            <option value="elderly">長者</option>
+            <option value="volunteer">志工</option>
+            <option value="family">家屬</option>
+            <option value="admin">管理員</option>
+          </select>
+          <span class="form-hint">編輯既有使用者時也可以在這裡修正角色</span>
+        </div>
+      </div>
+      <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label">電話</label>
           <input type="text" class="form-control" id="user-phone" placeholder="0912345678">
@@ -1377,10 +1388,10 @@ async function saveUser() {
   if (lat)     p.set('lat', lat);
   if (lng)     p.set('lng', lng);
 
+  p.append('roles', role);
   if (id) {
     await fetch(`/api/dashboard/users/${id}?${p}`, { method: 'PUT' });
   } else {
-    p.append('roles', role);
     await fetch(`/api/dashboard/users?${p}`, { method: 'POST' });
   }
   closeModal('modal-user');

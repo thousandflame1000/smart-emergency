@@ -204,8 +204,15 @@ def update_user(
     lat: float | None = None,
     lng: float | None = None,
     is_active: bool | None = None,
+    roles: list[str] | None = Query(default=None),
     db: Session = Depends(get_db),
 ):
+    """
+    更新使用者。roles 之前完全沒辦法透過這個端點修改——LINE bot 自動
+    註冊的新用戶預設一律是 elderly，如果來的其實是志工/家屬/管理員
+    本人在測試，之前沒有任何辦法（不管是 API 還是後台 UI）把角色改
+    回來，只能留著錯的角色或整筆刪掉重建。
+    """
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         from fastapi import HTTPException
@@ -217,6 +224,7 @@ def update_user(
     if lat      is not None: user.lat      = lat
     if lng      is not None: user.lng      = lng
     if is_active is not None: user.is_active = is_active
+    if roles    is not None: user.roles    = roles
     db.commit()
     return {"message": "更新成功", "id": user_id}
 
