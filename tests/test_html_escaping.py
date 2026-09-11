@@ -46,6 +46,10 @@ global.L = { map: () => ({ setView(){return this}, eachLayer(){}, invalidateSize
 global.confirm = () => true;
 global.alert = () => {};
 global.prompt = () => null;
+// index.html 用 Chart.js 畫趨勢分析圖表，同樣是外部 CDN 全域物件，
+// 在 Node 裡沒有真的載入，一樣用假物件頂著讓腳本跑到底。
+global.Chart = function() { return { destroy(){} }; };
+global.Chart.defaults = { font: {}, color: '' };
 """
 
 

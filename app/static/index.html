@@ -6,79 +6,111 @@
 <title>鄰里守望</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
-/* ── Reset & Base ── */
+/* ══════════════════════════════════════════════════════════
+   鄰里守望 — command-console 視覺系統
+   深色作戰室風格：銳角、細邊框、等寬數據字體、青色主色
+   ══════════════════════════════════════════════════════════ */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 :root {
-  --bg:       #f6f8fb;
-  --sidebar:  #111827;
-  --card:     #ffffff;
-  --border:   #e5e9f0;
-  --primary:  #2563eb;
-  --success:  #16a34a;
-  --danger:   #dc2626;
-  --warning:  #d97706;
-  --muted:    #6b7280;
-  --text:     #111827;
-  --radius:   12px;
-  --shadow:   0 1px 4px rgba(0,0,0,.08);
+  --bg:          #0a0d12;
+  --bg-grid:     #0b0f15;
+  --sidebar:     #060809;
+  --card:        #10141b;
+  --card-hover:  #141a23;
+  --border:      #1d2531;
+  --border-bright: #2a3644;
+  --primary:     #22d3ee;
+  --primary-dim: #0e7490;
+  --success:     #2dd4a7;
+  --danger:      #f5455c;
+  --warning:     #f4b740;
+  --muted:       #5b6878;
+  --text:        #dce4ee;
+  --text-dim:    #8b98a9;
+  --radius:      3px;
+  --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  --sans: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+  --shadow-glow: 0 0 0 1px rgba(34,211,238,.15), 0 0 20px rgba(34,211,238,.08);
 }
-body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif;
-       color: var(--text); font-size: 14px; display: flex; height: 100vh; overflow: hidden; }
+html { color-scheme: dark; }
+body {
+  background:
+    linear-gradient(rgba(255,255,255,.015) 1px, transparent 1px) 0 0/100% 24px,
+    linear-gradient(90deg, rgba(255,255,255,.015) 1px, transparent 1px) 0 0/24px 100%,
+    var(--bg);
+  font-family: var(--sans);
+  color: var(--text); font-size: 13.5px; display: flex; height: 100vh; overflow: hidden;
+  letter-spacing: .01em;
+}
 
 /* ── Sidebar ── */
 .sidebar {
   width: 220px; flex-shrink: 0;
   background: var(--sidebar);
+  border-right: 1px solid var(--border);
   display: flex; flex-direction: column;
   padding: 0;
   overflow: hidden;
 }
 .sidebar-logo {
   padding: 20px 20px 16px;
-  border-bottom: 1px solid rgba(255,255,255,.08);
+  border-bottom: 1px solid var(--border);
 }
-.sidebar-logo h1 { font-size: 15px; font-weight: 700; color: #fff; }
-.sidebar-logo span { font-size: 11px; color: #6b7280; margin-top: 2px; display: block; }
-.nav-section { padding: 16px 12px 4px; font-size: 10px; font-weight: 600;
-               color: #4b5563; letter-spacing: .08em; text-transform: uppercase; }
+.sidebar-logo h1 { font-size: 14px; font-weight: 700; color: var(--text);
+                    letter-spacing: .04em; text-transform: uppercase; }
+.sidebar-logo span { font-size: 10.5px; color: var(--muted); margin-top: 3px; display: block;
+                      font-family: var(--mono); letter-spacing: .06em; }
+.nav-section { padding: 18px 16px 6px; font-size: 9.5px; font-weight: 700;
+               color: var(--muted); letter-spacing: .14em; text-transform: uppercase;
+               font-family: var(--mono); }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 12px; border-radius: 8px; margin: 1px 8px;
-  color: #9ca3af; cursor: pointer; transition: all .15s;
-  font-size: 13.5px; font-weight: 500; user-select: none;
+  padding: 8px 16px; margin: 0;
+  border-left: 2px solid transparent;
+  color: var(--text-dim); cursor: pointer; transition: all .12s;
+  font-size: 12.5px; font-weight: 500; user-select: none;
 }
-.nav-item:hover { background: rgba(255,255,255,.06); color: #e5e7eb; }
-.nav-item.active { background: var(--primary); color: #fff; }
-.nav-item .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.nav-item:hover { background: rgba(255,255,255,.03); color: var(--text); }
+.nav-item.active {
+  background: rgba(34,211,238,.08); color: var(--primary);
+  border-left-color: var(--primary);
+}
+.nav-item .icon { font-size: 14px; width: 18px; text-align: center; flex-shrink: 0;
+                   filter: grayscale(.4) brightness(1.3); }
 .sidebar-bottom {
-  margin-top: auto; padding: 12px 8px;
-  border-top: 1px solid rgba(255,255,255,.08);
+  margin-top: auto; padding: 12px;
+  border-top: 1px solid var(--border);
 }
 #mode-pill {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  padding: 8px; border-radius: 8px; font-size: 12px; font-weight: 600;
-  background: rgba(22,163,74,.15); color: #4ade80;
-  border: 1px solid rgba(22,163,74,.25); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px; border-radius: var(--radius); font-size: 11px; font-weight: 700;
+  font-family: var(--mono); letter-spacing: .06em; text-transform: uppercase;
+  background: rgba(45,212,167,.08); color: var(--success);
+  border: 1px solid rgba(45,212,167,.3); cursor: pointer;
   transition: all .2s;
 }
 #mode-pill.emergency {
-  background: rgba(220,38,38,.2); color: #f87171;
-  border-color: rgba(220,38,38,.35);
-  animation: pulse-pill 2s ease-in-out infinite;
+  background: rgba(245,69,92,.12); color: var(--danger);
+  border-color: rgba(245,69,92,.45);
+  animation: pulse-pill 1.4s ease-in-out infinite;
 }
-@keyframes pulse-pill { 0%,100%{opacity:1} 50%{opacity:.65} }
+@keyframes pulse-pill { 0%,100%{opacity:1; box-shadow: 0 0 0 0 rgba(245,69,92,.4);} 50%{opacity:.75; box-shadow: 0 0 0 4px rgba(245,69,92,0);} }
 
 /* ── Main ── */
 .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 .topbar {
-  height: 52px; background: var(--card); border-bottom: 1px solid var(--border);
+  height: 48px; background: var(--sidebar); border-bottom: 1px solid var(--border);
   display: flex; align-items: center; padding: 0 24px;
   justify-content: space-between; flex-shrink: 0;
 }
-.topbar-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.topbar-title { font-size: 12px; font-weight: 700; color: var(--text);
+                text-transform: uppercase; letter-spacing: .1em; font-family: var(--mono); }
 .topbar-right { display: flex; align-items: center; gap: 10px; }
-.topbar-right .ts { font-size: 12px; color: var(--muted); }
+.topbar-right .ts { font-size: 11px; color: var(--muted); font-family: var(--mono); }
 .content { flex: 1; overflow-y: auto; padding: 20px 24px; }
 
 /* ── Pages ── */
@@ -86,15 +118,17 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
 .page.active { display: block; }
 
 /* ── Metrics ── */
-.metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 20px; }
+.metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 1px; margin-bottom: 20px;
+           background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .metric {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 16px 18px;
+  background: var(--card);
+  padding: 16px 18px;
 }
-.metric-label { font-size: 11px; font-weight: 600; color: var(--muted);
-                text-transform: uppercase; letter-spacing: .05em; margin-bottom: 6px; }
-.metric-value { font-size: 32px; font-weight: 800; line-height: 1; }
-.metric-sub { font-size: 11px; color: var(--muted); margin-top: 4px; }
+.metric-label { font-size: 10px; font-weight: 700; color: var(--muted);
+                text-transform: uppercase; letter-spacing: .08em; margin-bottom: 8px;
+                font-family: var(--mono); }
+.metric-value { font-size: 30px; font-weight: 800; line-height: 1; font-family: var(--mono); }
+.metric-sub { font-size: 10.5px; color: var(--muted); margin-top: 5px; text-transform: uppercase; letter-spacing: .04em; }
 .c-green { color: var(--success); }
 .c-red   { color: var(--danger); }
 .c-amber { color: var(--warning); }
@@ -108,112 +142,123 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
 .card { background: var(--card); border: 1px solid var(--border);
         border-radius: var(--radius); overflow: hidden; }
 .card-header {
-  padding: 14px 18px 12px; border-bottom: 1px solid var(--border);
+  padding: 12px 16px; border-bottom: 1px solid var(--border);
   display: flex; align-items: center; justify-content: space-between;
+  background: rgba(255,255,255,.012);
 }
-.card-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.card-title { font-size: 11.5px; font-weight: 700; color: var(--text);
+              text-transform: uppercase; letter-spacing: .06em; }
 .card-body { padding: 0; }
 
 /* ── Table ── */
 .tbl { width: 100%; border-collapse: collapse; }
-.tbl th { font-size: 11px; font-weight: 600; color: var(--muted);
-          text-transform: uppercase; letter-spacing: .04em;
-          padding: 10px 16px; border-bottom: 1px solid var(--border); text-align: left; }
-.tbl td { padding: 11px 16px; border-bottom: 1px solid #f3f4f6;
-          font-size: 13px; vertical-align: middle; }
+.tbl th { font-size: 10px; font-weight: 700; color: var(--muted);
+          text-transform: uppercase; letter-spacing: .07em; font-family: var(--mono);
+          padding: 9px 16px; border-bottom: 1px solid var(--border); text-align: left; }
+.tbl td { padding: 10px 16px; border-bottom: 1px solid var(--border);
+          font-size: 12.5px; vertical-align: middle; }
 .tbl tr:last-child td { border-bottom: none; }
-.tbl tr:hover td { background: #f9fafb; }
+.tbl tr:hover td { background: rgba(34,211,238,.03); }
 
 /* ── Status badges ── */
 .badge {
   display: inline-flex; align-items: center; gap: 4px;
-  padding: 3px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  padding: 3px 8px; border-radius: 2px; font-size: 10px; font-weight: 700;
+  font-family: var(--mono); letter-spacing: .04em; text-transform: uppercase;
+  border: 1px solid transparent;
 }
-.badge-green  { background: #dcfce7; color: #15803d; }
-.badge-red    { background: #fee2e2; color: #b91c1c; }
-.badge-amber  { background: #fef3c7; color: #92400e; }
-.badge-gray   { background: #f3f4f6; color: #6b7280; }
-.badge-blue   { background: #dbeafe; color: #1d4ed8; }
+.badge-green  { background: rgba(45,212,167,.1);  color: var(--success); border-color: rgba(45,212,167,.3); }
+.badge-red    { background: rgba(245,69,92,.1);   color: var(--danger);  border-color: rgba(245,69,92,.3); }
+.badge-amber  { background: rgba(244,183,64,.1);  color: var(--warning); border-color: rgba(244,183,64,.3); }
+.badge-gray   { background: rgba(255,255,255,.04); color: var(--text-dim); border-color: var(--border); }
+.badge-blue   { background: rgba(34,211,238,.1);  color: var(--primary); border-color: rgba(34,211,238,.3); }
 
 /* ── Map ── */
-#map { height: 360px; border-radius: 0 0 var(--radius) var(--radius); }
+#map { height: 360px; border-radius: 0 0 var(--radius) var(--radius); background: #0a0d12; }
+/* 只反轉底圖圖磚本身（.leaflet-tile-pane），標記/彈窗/縮放控制項是
+   獨立的圖層（.leaflet-marker-pane 等），本來就不受這個濾鏡影響，
+   不需要額外處理。 */
+#map .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88) saturate(.8); }
 
 /* ── Alert list ── */
 .alert-row {
-  display: flex; align-items: center; padding: 12px 16px;
-  border-bottom: 1px solid #f3f4f6; gap: 10px;
+  display: flex; align-items: center; padding: 11px 16px;
+  border-bottom: 1px solid var(--border); gap: 10px;
 }
 .alert-row:last-child { border-bottom: none; }
-.alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.alert-dot.high { background: var(--danger); }
-.alert-dot.mid  { background: var(--warning); }
-.alert-name { font-weight: 600; font-size: 13px; }
-.alert-type { font-size: 11px; color: var(--muted); margin-top: 1px; }
-.alert-time { margin-left: auto; font-size: 11px; color: var(--muted); }
+.alert-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.alert-dot.high { background: var(--danger); box-shadow: 0 0 6px rgba(245,69,92,.7); }
+.alert-dot.mid  { background: var(--warning); box-shadow: 0 0 6px rgba(244,183,64,.6); }
+.alert-name { font-weight: 600; font-size: 12.5px; }
+.alert-type { font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+.alert-time { margin-left: auto; font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
 
 /* ── Resource rows ── */
 .res-row {
-  display: flex; align-items: center; padding: 11px 16px;
-  border-bottom: 1px solid #f3f4f6; gap: 10px;
+  display: flex; align-items: center; padding: 10px 16px;
+  border-bottom: 1px solid var(--border); gap: 10px;
 }
 .res-row:last-child { border-bottom: none; }
-.res-icon { font-size: 20px; flex-shrink: 0; }
-.res-name { font-weight: 600; font-size: 13px; }
-.res-qty  { font-size: 11px; color: var(--muted); }
+.res-icon { font-size: 18px; flex-shrink: 0; filter: saturate(.6); }
+.res-name { font-weight: 600; font-size: 12.5px; }
+.res-qty  { font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
 .res-avail { margin-left: auto; }
 
 /* ── RAG panel ── */
 .rag-wrap { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
 .rag-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .rag-chip {
-  padding: 4px 10px; border-radius: 20px; font-size: 12px;
-  border: 1px solid var(--border); background: var(--bg);
-  cursor: pointer; transition: all .12s; color: var(--text);
+  padding: 5px 11px; border-radius: 2px; font-size: 11px;
+  border: 1px solid var(--border); background: rgba(255,255,255,.02); color: var(--text-dim);
+  cursor: pointer; transition: all .12s; font-family: var(--mono);
 }
-.rag-chip:hover { border-color: var(--primary); color: var(--primary); background: #eff6ff; }
+.rag-chip:hover { border-color: var(--primary); color: var(--primary); background: rgba(34,211,238,.06); }
 .rag-input-row { display: flex; gap: 8px; }
 .rag-input {
-  flex: 1; border: 1px solid var(--border); border-radius: 8px;
-  padding: 8px 12px; font-size: 13px; outline: none;
+  flex: 1; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg);
+  color: var(--text); padding: 9px 12px; font-size: 12.5px; outline: none;
   transition: border-color .15s;
 }
-.rag-input:focus { border-color: var(--primary); }
+.rag-input:focus { border-color: var(--primary); box-shadow: var(--shadow-glow); }
 .btn-primary {
-  background: var(--primary); color: #fff; border: none;
-  border-radius: 8px; padding: 8px 16px; font-size: 13px;
-  font-weight: 600; cursor: pointer; transition: opacity .15s;
+  background: var(--primary); color: #04141a; border: none;
+  border-radius: var(--radius); padding: 9px 18px; font-size: 12px;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  cursor: pointer; transition: opacity .15s;
 }
-.btn-primary:hover { opacity: .88; }
-.btn-primary:disabled { opacity: .5; cursor: not-allowed; }
+.btn-primary:hover { opacity: .85; }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; }
 .rag-answer {
-  background: #f8faff; border: 1px solid #dbeafe; border-radius: 8px;
+  background: rgba(34,211,238,.04); border: 1px solid var(--border-bright); border-radius: var(--radius);
   padding: 14px; white-space: pre-wrap; line-height: 1.75;
-  font-size: 13px; max-height: 300px; overflow-y: auto;
+  font-size: 12.5px; max-height: 300px; overflow-y: auto; font-family: var(--mono);
 }
-.rag-src { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.rag-src { font-size: 10.5px; color: var(--muted); margin-top: 6px; }
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* ── Empty state ── */
-.empty { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 13px; }
-.empty-icon { font-size: 28px; margin-bottom: 8px; }
+.empty { text-align: center; padding: 32px 16px; color: var(--muted); font-size: 12.5px; }
+.empty-icon { font-size: 26px; margin-bottom: 8px; opacity: .5; filter: grayscale(1); }
 
 /* ── Input ── */
 .search-input {
-  border: 1px solid var(--border); border-radius: 6px;
-  padding: 5px 10px; font-size: 12px; outline: none;
-  transition: border-color .15s; width: 160px;
+  border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text);
+  padding: 5px 10px; font-size: 11.5px; outline: none;
+  transition: border-color .15s; width: 160px; font-family: var(--mono);
 }
 .search-input:focus { border-color: var(--primary); }
 
 /* ── Topbar btn ── */
 .topbar-btn {
-  background: transparent; border: 1px solid var(--border); color: var(--text);
-  border-radius: 6px; padding: 5px 12px; font-size: 12px;
-  font-weight: 600; cursor: pointer; transition: all .15s;
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: var(--radius); padding: 5px 12px; font-size: 11px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .04em;
+  cursor: pointer; transition: all .15s; font-family: var(--mono);
 }
 .topbar-btn:hover { border-color: var(--primary); color: var(--primary); }
 
@@ -224,89 +269,93 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
   border-radius: var(--radius); padding: 16px 20px; margin-bottom: 16px;
 }
 .dispatch-mode-label {
-  font-size: 15px; font-weight: 700;
+  font-size: 14px; font-weight: 700; font-family: var(--mono); letter-spacing: .03em;
 }
 .dispatch-header.emergency {
-  background: #fff5f5; border-color: #fecaca;
+  background: rgba(245,69,92,.06); border-color: rgba(245,69,92,.4);
+  box-shadow: 0 0 24px rgba(245,69,92,.08);
 }
 .btn-dispatch-mode {
-  background: transparent; border: 1px solid var(--border); color: var(--text);
-  border-radius: 8px; padding: 7px 16px; font-size: 12.5px; font-weight: 600;
+  background: transparent; border: 1px solid var(--border); color: var(--text-dim);
+  border-radius: var(--radius); padding: 7px 16px; font-size: 11.5px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .04em;
   cursor: pointer; transition: all .15s;
 }
 .btn-dispatch-mode:hover { border-color: var(--danger); color: var(--danger); }
 .btn-dispatch-run {
-  background: var(--danger); color: #fff; border: none;
-  border-radius: 8px; padding: 9px 22px; font-size: 13px; font-weight: 700;
+  background: var(--danger); color: #1a0508; border: none;
+  border-radius: var(--radius); padding: 9px 22px; font-size: 12px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .05em;
   cursor: pointer; transition: opacity .15s;
-  box-shadow: 0 2px 8px rgba(220,38,38,.3);
+  box-shadow: 0 0 20px rgba(245,69,92,.35);
 }
 .btn-dispatch-run:hover { opacity: .88; }
-.btn-dispatch-run:disabled { opacity: .5; cursor: not-allowed; }
+.btn-dispatch-run:disabled { opacity: .4; cursor: not-allowed; }
 .dsp-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
 }
 /* Need card */
 .need-card {
   display: flex; align-items: flex-start; gap: 10px;
-  padding: 12px 16px; border-bottom: 1px solid #f3f4f6; cursor: pointer;
+  padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer;
   transition: background .12s;
 }
 .need-card:last-child { border-bottom: none; }
-.need-card:hover { background: #f9fafb; }
-.need-card.selected { background: #eff6ff; border-left: 3px solid var(--primary); }
+.need-card:hover { background: rgba(255,255,255,.02); }
+.need-card.selected { background: rgba(34,211,238,.05); border-left: 2px solid var(--primary); }
 .need-urgency {
-  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  width: 26px; height: 26px; border-radius: 2px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 800; color: #fff;
+  font-size: 12px; font-weight: 800; color: #04070a; font-family: var(--mono);
 }
-.u5 { background: #dc2626; }
-.u4 { background: #ea580c; }
-.u3 { background: #d97706; }
-.u2 { background: #65a30d; }
-.u1 { background: #9ca3af; }
+.u5 { background: var(--danger); box-shadow: 0 0 10px rgba(245,69,92,.5); }
+.u4 { background: #f4763f; }
+.u3 { background: var(--warning); }
+.u2 { background: #8fc93a; }
+.u1 { background: var(--muted); }
 .need-body { flex: 1; min-width: 0; }
 .need-type { font-size: 12px; font-weight: 700; }
-.need-desc { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.need-addr { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.need-desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.need-addr { font-size: 10.5px; color: var(--muted); margin-top: 2px; font-family: var(--mono); }
 .need-actions { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
 /* Resource row */
 .dsp-res-row {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 16px; border-bottom: 1px solid #f3f4f6;
+  padding: 10px 16px; border-bottom: 1px solid var(--border);
 }
 .dsp-res-row:last-child { border-bottom: none; }
-.dsp-res-icon { font-size: 18px; flex-shrink: 0; }
-.dsp-res-name { font-size: 13px; font-weight: 600; }
-.dsp-res-meta { font-size: 11px; color: var(--muted); }
+.dsp-res-icon { font-size: 16px; flex-shrink: 0; filter: saturate(.6); }
+.dsp-res-name { font-size: 12.5px; font-weight: 600; }
+.dsp-res-meta { font-size: 10.5px; color: var(--muted); font-family: var(--mono); }
 .dsp-src-dot {
-  width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
 }
-.dot-personal { background: var(--primary); }
-.dot-point    { background: var(--success); }
+.dot-personal { background: var(--primary); box-shadow: 0 0 5px rgba(34,211,238,.6); }
+.dot-point    { background: var(--success); box-shadow: 0 0 5px rgba(45,212,167,.6); }
 /* Candidates panel */
 .cand-panel {
-  background: #f8faff; border-top: 1px solid #dbeafe;
+  background: rgba(34,211,238,.03); border-top: 1px solid var(--border-bright);
   padding: 12px 16px;
 }
 .cand-row {
   display: flex; align-items: center; gap: 8px;
-  padding: 6px 0; border-bottom: 1px solid #e9f0ff; font-size: 12px;
+  padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 11.5px;
 }
 .cand-row:last-child { border-bottom: none; }
 .cand-score {
-  font-weight: 800; font-size: 14px; min-width: 36px; text-align: center;
+  font-weight: 800; font-size: 13px; min-width: 36px; text-align: center; font-family: var(--mono);
 }
 .score-best { color: var(--success); }
 /* Notice */
 .dsp-notice {
-  padding: 12px 16px; border-radius: 8px; font-size: 13px;
-  display: flex; align-items: center; gap: 8px;
+  padding: 12px 16px; border-radius: var(--radius); font-size: 12.5px;
+  display: flex; align-items: center; gap: 8px; border: 1px solid transparent;
+  font-family: var(--mono);
 }
-.dsp-notice.success { background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; }
-.dsp-notice.danger  { background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c; }
-.dsp-notice.info    { background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; }
-.dsp-notice.warning { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+.dsp-notice.success { background: rgba(45,212,167,.08); border-color: rgba(45,212,167,.35); color: var(--success); }
+.dsp-notice.danger  { background: rgba(245,69,92,.08);  border-color: rgba(245,69,92,.35);  color: var(--danger); }
+.dsp-notice.info    { background: rgba(34,211,238,.08); border-color: rgba(34,211,238,.35); color: var(--primary); }
+.dsp-notice.warning { background: rgba(244,183,64,.08); border-color: rgba(244,183,64,.35); color: var(--warning); }
 </style>
 </head>
 <body>
@@ -335,6 +384,9 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
   <div class="nav-section">工具</div>
   <div class="nav-item" onclick="showPage('dispatch-page')">
     <span class="icon">🚨</span> 緊急調度
+  </div>
+  <div class="nav-item" onclick="showPage('analytics-page')">
+    <span class="icon">📈</span> 趨勢分析
   </div>
   <div class="nav-item" onclick="showPage('ai-page')">
     <span class="icon">🤖</span> AI 助手
@@ -524,6 +576,50 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
 
     </div>
 
+    <!-- ── Page: 趨勢分析 ── -->
+    <div class="page" id="page-analytics-page">
+      <div class="metrics" id="trend-summary-metrics" style="margin-bottom:16px">
+        <div class="metric">
+          <div class="metric-label">14日平均回應率</div>
+          <div class="metric-value c-green" id="trend-avg-response">—</div>
+          <div class="metric-sub">打卡按時回應比例</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">14日警報總數</div>
+          <div class="metric-value c-red" id="trend-total-alerts">—</div>
+          <div class="metric-sub">未回應 / 主動求助</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">14日需求總數</div>
+          <div class="metric-value c-blue" id="trend-total-needs">—</div>
+          <div class="metric-sub">物資調度請求</div>
+        </div>
+        <div class="metric">
+          <div class="metric-label">需求完成率</div>
+          <div class="metric-value c-amber" id="trend-fulfill-rate">—</div>
+          <div class="metric-sub">已媒合並送達</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">📈 每日打卡回應趨勢（近 14 日）</span>
+        </div>
+        <div style="padding:16px 20px 12px"><canvas id="chart-checkin" height="80"></canvas></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header"><span class="card-title">🔔 每日警報量</span></div>
+          <div style="padding:16px 20px 12px"><canvas id="chart-alerts" height="100"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">🆘 每日需求量 vs. 完成量</span></div>
+          <div style="padding:16px 20px 12px"><canvas id="chart-needs" height="100"></canvas></div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Page: AI 助手 ── -->
     <div class="page" id="page-ai-page">
       <div class="card">
@@ -589,7 +685,7 @@ const RES_ICON = { water:'💧',food:'🍱',first_aid:'🩹',shelter:'🏠',vehi
 const PAGE_TITLES = {
   overview: '總覽', elderly: '長者狀態',
   'map-page': '社區地圖', 'resources-page': '物資',
-  'dispatch-page': '緊急調度中心', 'ai-page': 'AI 助手',
+  'dispatch-page': '緊急調度中心', 'analytics-page': '趨勢分析', 'ai-page': 'AI 助手',
 };
 
 // ── Navigation ─────────────────────────────
@@ -604,18 +700,23 @@ function showPage(id) {
   currentPage = id;
   if (id === 'map-page' && map) setTimeout(() => map.invalidateSize(), 100);
   if (id === 'dispatch-page') loadDispatchPage();
+  if (id === 'analytics-page') loadTrends();
 }
 
 // ── Map ────────────────────────────────────
 function initMap() {
   map = L.map('map').setView([24.125, 120.678], 14);
+  // 免費深色底圖服務（CartoDB 等）陸續改成要 API key，demo 現場最忌諱
+  // 臨時失效——改用最穩定、永遠免費、不需要 key 的標準 OSM 圖磚，
+  // 用 CSS 濾鏡（反轉+旋轉色相）做出深色效果，不依賴任何第三方服務
+  // 的商業政策變動。
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     { attribution: '© OpenStreetMap' }).addTo(map);
 }
 
 function updateMap(elderly, resources) {
   map.eachLayer(l => { if (l instanceof L.Marker || l instanceof L.CircleMarker) map.removeLayer(l); });
-  const C = { ok:'#16a34a', no_response:'#dc2626', pending:'#d97706', help_needed:'#b91c1c' };
+  const C = { ok:'#2dd4a7', no_response:'#f5455c', pending:'#f4b740', help_needed:'#f5455c' };
   elderly.forEach(e => {
     if (!e.lat || !e.lng) return;
     const [label] = STATUS[e.today_status] || ['—'];
@@ -874,15 +975,15 @@ function renderDspSteps(mode, pointCount, resCount, needCount) {
   document.getElementById('dsp-steps').innerHTML = steps.map((s, i) => `
     <div ${s.action} style="
       display:flex;align-items:center;gap:6px;
-      background:${s.done ? '#f0fdf4' : s.isAction ? '#eff6ff' : '#fffbeb'};
-      border:1px solid ${s.done ? '#bbf7d0' : s.isAction ? '#bfdbfe' : '#fde68a'};
-      border-radius:8px;padding:8px 12px;font-size:12px;
+      background:${s.done ? 'rgba(45,212,167,.06)' : s.isAction ? 'rgba(34,211,238,.06)' : 'rgba(244,183,64,.06)'};
+      border:1px solid ${s.done ? 'rgba(45,212,167,.3)' : s.isAction ? 'rgba(34,211,238,.3)' : 'rgba(244,183,64,.3)'};
+      border-radius:3px;padding:8px 12px;font-size:12px;
       ${s.action ? 'cursor:pointer;' : ''}
       flex:1;min-width:140px;
     ">
       <span style="font-size:16px">${s.done ? '✅' : s.isAction ? '⚡' : '⬜'}</span>
       <div>
-        <div style="font-weight:700;color:${s.done?'#15803d':s.isAction?'#1d4ed8':'#92400e'}">${s.label}</div>
+        <div style="font-weight:700;color:${s.done?'var(--success)':s.isAction?'var(--primary)':'var(--warning)'}">${s.label}</div>
         <div style="color:var(--muted);margin-top:1px">${s.detail}</div>
       </div>
     </div>
@@ -911,7 +1012,7 @@ function renderDspNeeds(needs) {
   el.innerHTML = needs.map(n => {
     if (n.status === 'suggested') {
       return `
-        <div class="need-card" style="background:#fff7ed;cursor:default">
+        <div class="need-card" style="background:rgba(244,183,64,.06);cursor:default">
           <div class="need-urgency u${n.urgency}">${n.urgency}</div>
           <div class="need-body">
             <div class="need-type">
@@ -1027,7 +1128,7 @@ async function dspSelectNeed(needId) {
       ${cands.slice(0,5).map((c, i) => `
         <div class="cand-row">
           <span class="cand-score ${i===0?'score-best':''}">${c.score}</span>
-          <span style="font-size:11px;background:${c.source==='resource'?'#dbeafe':'#dcfce7'};color:${c.source==='resource'?'#1d4ed8':'#15803d'};padding:2px 6px;border-radius:4px;white-space:nowrap">
+          <span style="font-size:11px;background:${c.source==='resource'?'rgba(34,211,238,.1)':'rgba(45,212,167,.1)'};color:${c.source==='resource'?'var(--primary)':'var(--success)'};padding:2px 6px;border-radius:2px;white-space:nowrap">
             ${c.source==='resource'?'個人物資':'資源點'}
           </span>
           <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
@@ -1160,6 +1261,105 @@ function dspAddNeedModal() {
       else throw new Error(JSON.stringify(d));
     })
     .catch(e => showDspNotice('danger', '新增失敗：' + e.message));
+}
+
+// ════════════════════════════════════════════
+// 趨勢分析
+// ════════════════════════════════════════════
+const CHART_COLORS = {
+  cyan: '#22d3ee', green: '#2dd4a7', red: '#f5455c', amber: '#f4b740',
+  muted: '#5b6878', border: '#1d2531', text: '#8b98a9',
+};
+let chartCheckin = null, chartAlerts = null, chartNeeds = null;
+
+Chart.defaults.font.family = "'JetBrains Mono','SF Mono',Consolas,monospace";
+Chart.defaults.font.size = 10.5;
+Chart.defaults.color = CHART_COLORS.text;
+
+async function loadTrends() {
+  try {
+    const data = await fetch('/api/dashboard/trends?days=14').then(r => r.json());
+    const days = data.days || [];
+    const labels = days.map(d => d.date.slice(5));
+
+    // 摘要指標
+    const totalOk = days.reduce((s, d) => s + d.checkin_ok, 0);
+    const totalNo = days.reduce((s, d) => s + d.checkin_no_response, 0);
+    const totalHelp = days.reduce((s, d) => s + d.checkin_help_needed, 0);
+    const totalResponded = totalOk + totalNo + totalHelp;
+    const avgResponse = totalResponded ? Math.round(totalOk / totalResponded * 100) : 0;
+    const totalAlerts = days.reduce((s, d) => s + d.alerts, 0);
+    const totalNeeds = days.reduce((s, d) => s + d.needs, 0);
+    const totalFulfilled = days.reduce((s, d) => s + d.needs_fulfilled, 0);
+    const fulfillRate = totalNeeds ? Math.round(totalFulfilled / totalNeeds * 100) : 0;
+
+    document.getElementById('trend-avg-response').textContent = avgResponse + '%';
+    document.getElementById('trend-total-alerts').textContent = totalAlerts;
+    document.getElementById('trend-total-needs').textContent = totalNeeds;
+    document.getElementById('trend-fulfill-rate').textContent = fulfillRate + '%';
+
+    const commonGrid = { color: CHART_COLORS.border };
+    const commonScales = {
+      x: { grid: commonGrid, ticks: { color: CHART_COLORS.text } },
+      y: { grid: commonGrid, ticks: { color: CHART_COLORS.text }, beginAtZero: true },
+    };
+
+    if (chartCheckin) chartCheckin.destroy();
+    chartCheckin = new Chart(document.getElementById('chart-checkin'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: '已回應', data: days.map(d => d.checkin_ok), backgroundColor: CHART_COLORS.green, stack: 's' },
+          { label: '未回應', data: days.map(d => d.checkin_no_response), backgroundColor: CHART_COLORS.red, stack: 's' },
+          { label: '主動求助', data: days.map(d => d.checkin_help_needed), backgroundColor: CHART_COLORS.amber, stack: 's' },
+          { label: '等待中', data: days.map(d => d.checkin_pending), backgroundColor: CHART_COLORS.muted, stack: 's' },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: { x: { ...commonScales.x, stacked: true }, y: { ...commonScales.y, stacked: true } },
+        plugins: { legend: { labels: { color: CHART_COLORS.text, boxWidth: 10 } } },
+      },
+    });
+
+    if (chartAlerts) chartAlerts.destroy();
+    chartAlerts = new Chart(document.getElementById('chart-alerts'), {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: '警報數', data: days.map(d => d.alerts),
+          borderColor: CHART_COLORS.red, backgroundColor: 'rgba(245,69,92,.12)',
+          fill: true, tension: .25, pointRadius: 2,
+        }],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: commonScales,
+        plugins: { legend: { display: false } },
+      },
+    });
+
+    if (chartNeeds) chartNeeds.destroy();
+    chartNeeds = new Chart(document.getElementById('chart-needs'), {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          { label: '需求量', data: days.map(d => d.needs), backgroundColor: CHART_COLORS.cyan },
+          { label: '已完成', data: days.map(d => d.needs_fulfilled), backgroundColor: CHART_COLORS.green },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        scales: commonScales,
+        plugins: { legend: { labels: { color: CHART_COLORS.text, boxWidth: 10 } } },
+      },
+    });
+  } catch (e) {
+    console.error('loadTrends failed:', e);
+  }
 }
 
 // ── Init ───────────────────────────────────

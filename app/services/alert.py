@@ -1,4 +1,5 @@
 from datetime import date, datetime
+import logging
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -6,6 +7,8 @@ from app.models.checkin import DailyCheckin
 from app.models.alert import Alert
 from app.models.care_relation import CareRelation
 from app.services.line_notify import send_alert_message
+
+logger = logging.getLogger(__name__)
 
 
 def send_alerts_for_checkin(checkin_id, alert_type: str, db: Session) -> None:
@@ -74,13 +77,20 @@ def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime
     for rel in relations:
         contact = rel.contact
         if contact and contact.line_uid:
-            send_alert_message(
-                line_uid=contact.line_uid,
-                elderly_name=checkin.elderly.name,
-                alert_type=alert_type,
-                checkin_id=str(checkin.id),
-            )
-            notified_ids.append(contact.id)
+            # 單一聯絡人發送失敗不該讓整個升級流程中斷——不然下面
+            # 建立 Alert 記錄那段完全執行不到，這筆警報永遠不會被
+            # 標記成「已發過」，排程每 15 分鐘重跑就會卡在同一步
+            # 一直重試、其他排在後面的聯絡人也永遠收不到通知。
+            try:
+                send_alert_message(
+                    line_uid=contact.line_uid,
+                    elderly_name=checkin.elderly.name,
+                    alert_type=alert_type,
+                    checkin_id=str(checkin.id),
+                )
+                notified_ids.append(contact.id)
+            except Exception as e:
+                logger.error(f"[alert] 發送警報訊息失敗（{contact.name}）：{e}")
 
     alert = Alert(
         elderly_id=checkin.elderly_id,

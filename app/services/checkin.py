@@ -1,10 +1,13 @@
 from datetime import date
+import logging
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models.user import User
 from app.models.checkin import DailyCheckin
 from app.services.line_notify import send_checkin_message
+
+logger = logging.getLogger(__name__)
 
 
 def send_daily_checkins() -> None:
@@ -44,7 +47,14 @@ def send_daily_checkins() -> None:
             db.commit()
             db.refresh(checkin)
 
-            send_checkin_message(elderly.line_uid, str(checkin.id))
+            # 單一使用者發送失敗（LINE ID 失效、API 暫時性錯誤…）不該讓
+            # 整個迴圈中斷——後面排隊的其他長者當天就完全收不到打卡
+            # 訊息了。打卡記錄已經建立，只是這次推播沒送到，不影響
+            # 之後補打卡或管理員後台判斷。
+            try:
+                send_checkin_message(elderly.line_uid, str(checkin.id))
+            except Exception as e:
+                logger.error(f"[checkin] 發送打卡訊息失敗（{elderly.name}）：{e}")
 
     finally:
         db.close()

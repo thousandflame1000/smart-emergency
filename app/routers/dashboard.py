@@ -44,6 +44,83 @@ def get_summary(db: Session = Depends(get_db)):
     }
 
 
+_TAIPEI_OFFSET_HOURS = 8  # 排程本身用 Asia/Taipei（見 app/scheduler.py），
+                          # 但 created_at 一律是 server_default=func.now()
+                          # 存的 UTC 時間；SQLite 跟 Postgres 兩種資料庫
+                          # 的日期函式又不同語法，這裡改成撈原始時間戳，
+                          # 統一在 Python 端 +8 小時換算成台灣日曆日再分桶，
+                          # 避免午夜到早上 8 點這段時間的資料被歸到前一天。
+
+
+def _taipei_date(dt) -> str:
+    from datetime import timedelta
+    return str((dt + timedelta(hours=_TAIPEI_OFFSET_HOURS)).date())
+
+
+@router.get("/trends")
+def get_trends(days: int = 14, db: Session = Depends(get_db)):
+    """
+    近 N 天的歷史趨勢：每日打卡狀態分布、警報量、需求量。
+    給分析儀表板畫圖用，沒有資料的日子補 0，圖表才不會斷開。
+    """
+    from datetime import timedelta, datetime as dt_cls
+
+    days = max(1, min(days, 90))
+    cutoff = date.today() - timedelta(days=days - 1)
+    # 抓寬一天再用 Python 依台灣時區重新分桶，覆蓋掉 UTC/台灣日期
+    # 交界處可能漏掉的資料。
+    fetch_from = dt_cls.combine(cutoff - timedelta(days=1), dt_cls.min.time())
+
+    checkin_rows = (
+        db.query(DailyCheckin.date, DailyCheckin.status, func.count(DailyCheckin.id))
+        .filter(DailyCheckin.date >= cutoff)
+        .group_by(DailyCheckin.date, DailyCheckin.status)
+        .all()
+    )
+    alert_times = db.query(Alert.created_at).filter(Alert.created_at >= fetch_from).all()
+    need_times = db.query(CommunityNeed.created_at, CommunityNeed.status).filter(
+        CommunityNeed.created_at >= fetch_from
+    ).all()
+
+    checkin_by_date: dict[str, dict[str, int]] = {}
+    for d, status, count in checkin_rows:
+        checkin_by_date.setdefault(str(d), {})[status] = count
+
+    alert_by_date: dict[str, int] = {}
+    for (created_at,) in alert_times:
+        if created_at is None:
+            continue
+        d = _taipei_date(created_at)
+        alert_by_date[d] = alert_by_date.get(d, 0) + 1
+
+    need_by_date: dict[str, int] = {}
+    need_fulfilled_by_date: dict[str, int] = {}
+    for created_at, status in need_times:
+        if created_at is None:
+            continue
+        d = _taipei_date(created_at)
+        need_by_date[d] = need_by_date.get(d, 0) + 1
+        if status == "fulfilled":
+            need_fulfilled_by_date[d] = need_fulfilled_by_date.get(d, 0) + 1
+
+    result = []
+    for i in range(days):
+        d = str(cutoff + timedelta(days=i))
+        cs = checkin_by_date.get(d, {})
+        result.append({
+            "date": d,
+            "checkin_ok": cs.get("ok", 0),
+            "checkin_no_response": cs.get("no_response", 0),
+            "checkin_help_needed": cs.get("help_needed", 0),
+            "checkin_pending": cs.get("pending", 0),
+            "alerts": alert_by_date.get(d, 0),
+            "needs": need_by_date.get(d, 0),
+            "needs_fulfilled": need_fulfilled_by_date.get(d, 0),
+        })
+
+    return {"days": result}
+
+
 @router.get("/elderly")
 def list_elderly(db: Session = Depends(get_db)):
     """所有長者及今日打卡狀態"""
