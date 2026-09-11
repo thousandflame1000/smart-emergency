@@ -1,5 +1,5 @@
 from datetime import date
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -10,6 +10,7 @@ from app.models.alert import Alert
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.config import SystemConfig
+from app.rate_limit import limiter
 
 router = APIRouter()
 
@@ -96,8 +97,13 @@ def list_alerts(db: Session = Depends(get_db)):
 
 
 @router.post("/mode")
-def set_mode(mode: str, db: Session = Depends(get_db)):
-    """切換系統模式：normal / emergency，並廣播 LINE 通知"""
+@limiter.limit("5/minute")
+def set_mode(request: Request, mode: str, db: Session = Depends(get_db)):
+    """
+    切換系統模式：normal / emergency，並廣播 LINE 通知。
+    這個端點會廣播訊息給所有真實用戶，比其他端點多一層更嚴格的限流
+    （5次/分鐘），避免被亂打時直接騷擾到真人。
+    """
     if mode not in ("normal", "emergency"):
         return {"error": "mode must be 'normal' or 'emergency'"}
 

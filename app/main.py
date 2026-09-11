@@ -3,10 +3,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
 import os
 
 from app.database import engine, Base
 from app.scheduler import start_scheduler, shutdown_scheduler
+from app.rate_limit import limiter
 from app.routers import linebot, dashboard, resources, rag
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
@@ -49,6 +53,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# 系統目前沒有登入驗證，先用限流擋掉「短時間內狂打同一個 IP」的濫用
+# 情境（見 app/rate_limit.py 的說明）。/health 特別排除在外，因為
+# Railway 靠這個路徑判斷服務是否存活（railway.toml healthcheckPath），
+# 一旦被限流回 429，Railway 會誤判服務掛掉而重啟部署。
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_middleware(SlowAPIMiddleware)
+
 app.include_router(linebot.router,   prefix="/webhook",       tags=["LINE Bot"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(resources.router, prefix="/api/resources", tags=["Resources"])
@@ -61,6 +73,7 @@ def admin_page():
 
 
 @app.get("/health")
+@limiter.exempt
 def health():
     return {"status": "ok", "service": "鄰里守望平台"}
 
