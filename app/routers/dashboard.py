@@ -229,6 +229,26 @@ def update_user(
     return {"message": "更新成功", "id": user_id}
 
 
+@router.post("/users/{user_id}/resolve_alerts")
+def resolve_user_alerts(user_id: str, db: Session = Depends(get_db)):
+    """
+    批次解決某使用者名下所有未解決的警報。
+
+    情境：角色被誤判（例如 LINE 自動註冊預設是 elderly，但其實是志工
+    在測試）修正後，之前系統排程每天累積下來的一堆「未回應」警報還
+    是掛在那裡，逐筆用 confirm_safe 一天一天解要點一百次；這裡直接
+    整批清掉。
+    """
+    from datetime import datetime
+    count = (
+        db.query(Alert)
+        .filter(Alert.elderly_id == user_id, Alert.status == "sent")
+        .update({"status": "resolved", "resolved_at": datetime.now()})
+    )
+    db.commit()
+    return {"message": f"已解決 {count} 筆警報", "resolved": count}
+
+
 @router.delete("/users/{user_id}")
 def delete_user(user_id: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.id == user_id).first()
