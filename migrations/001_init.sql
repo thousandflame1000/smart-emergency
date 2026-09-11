@@ -1,6 +1,16 @@
 -- ============================================================
--- 鄰里守望平台 - Database Schema
--- Run this on Supabase SQL Editor
+-- 鄰里守望平台 - Database Schema（歷史參考文件，已過時，不會被任何
+-- 程式碼執行）
+--
+-- 這份檔案是專案早期規劃用 Supabase + pgvector 時寫的手動 migration，
+-- 後來實際部署改成 Railway PostgreSQL，且資料表改成完全由
+-- app/main.py 的 Base.metadata.create_all() 在啟動時自動建立
+-- （SQLAlchemy model 定義才是目前的 schema 真相來源，見 app/models/）。
+-- 這裡描述的 pgvector vector(3072) 欄位、roles TEXT[] 原生陣列型別，
+-- 都跟現在實際跑的 schema 不一樣（roles/embedding 現在都是用
+-- ArrayOfText/JSON 字串存在 TEXT 欄位裡，用 numpy cosine 做向量搜尋，
+-- 不是 pgvector）。保留這份檔案只是留個歷史紀錄，不要照著這份文件
+-- 手動建表。
 -- ============================================================
 
 CREATE EXTENSION IF NOT EXISTS vector;

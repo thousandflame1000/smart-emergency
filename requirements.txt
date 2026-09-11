@@ -8,7 +8,6 @@ pydantic-settings==2.6.1
 # Database
 sqlalchemy==2.0.36
 psycopg2-binary==2.9.10
-pgvector==0.3.6
 
 # LINE Bot SDK v3
 line-bot-sdk==3.13.0
