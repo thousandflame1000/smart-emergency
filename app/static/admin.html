@@ -1166,6 +1166,23 @@ const PAGE_TITLE = {
 let allUsers = [];
 
 // ════════════════════════════════════════════════
+// HTML escaping —— 使用者輸入（長者/志工姓名、地址、需求說明…）
+// 一路都是直接塞進 innerHTML 樣板字串，任何人只要把 LINE 顯示名稱
+// 設成含 <script>/onerror= 的字串再傳訊息觸發自動註冊，就能在
+// 管理員打開後台時於其瀏覽器執行任意程式碼——而且這個後台本身
+// 完全沒有登入驗證。所有「使用者可控」欄位輸出前都要過這一層。
+// ════════════════════════════════════════════════
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ════════════════════════════════════════════════
 // Navigation
 // ════════════════════════════════════════════════
 function showPage(id) {
@@ -1236,9 +1253,9 @@ function renderElderly(data) {
   }
   tbody.innerHTML = data.map(u => `
     <tr>
-      <td><strong>${u.name}</strong></td>
-      <td class="muted">${u.phone || '—'}</td>
-      <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.address || '—'}</td>
+      <td><strong>${esc(u.name)}</strong></td>
+      <td class="muted">${esc(u.phone) || '—'}</td>
+      <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.address) || '—'}</td>
       <td>${u.line_uid
         ? `<span class="badge badge-green">✓ 已綁定</span>`
         : `<span class="badge badge-red">未綁定</span>`}</td>
@@ -1246,8 +1263,8 @@ function renderElderly(data) {
         ? `<span class="badge badge-green">啟用</span>`
         : `<span class="badge badge-gray">停用</span>`}</td>
       <td>
-        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
-        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${esc(JSON.stringify(u))})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}',${esc(JSON.stringify(u.name))})">刪除</button>
       </td>
     </tr>`).join('');
 }
@@ -1266,9 +1283,9 @@ function renderVolunteers(data) {
   }
   tbody.innerHTML = data.map(u => `
     <tr>
-      <td><strong>${u.name}</strong></td>
-      <td>${u.roles.map(r => `<span class="badge ${ROLE_BADGE[r]||'badge-gray'}" style="margin-right:3px">${ROLE_LABEL[r]||r}</span>`).join('')}</td>
-      <td class="muted">${u.phone || '—'}</td>
+      <td><strong>${esc(u.name)}</strong></td>
+      <td>${u.roles.map(r => `<span class="badge ${ROLE_BADGE[r]||'badge-gray'}" style="margin-right:3px">${esc(ROLE_LABEL[r]||r)}</span>`).join('')}</td>
+      <td class="muted">${esc(u.phone) || '—'}</td>
       <td>${u.line_uid
         ? `<span class="badge badge-green">✓ 已綁定</span>`
         : `<span class="badge badge-red">未綁定</span>`}</td>
@@ -1276,8 +1293,8 @@ function renderVolunteers(data) {
         ? `<span class="badge badge-green">啟用</span>`
         : `<span class="badge badge-gray">停用</span>`}</td>
       <td>
-        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${JSON.stringify(u)})'>編輯</button>
-        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}','${u.name}')">刪除</button>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${esc(JSON.stringify(u))})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}',${esc(JSON.stringify(u.name))})">刪除</button>
       </td>
     </tr>`).join('');
 }
@@ -1296,11 +1313,11 @@ function renderResources(data) {
   }
   tbody.innerHTML = data.map(r => `
     <tr>
-      <td><strong>${r.name}</strong></td>
-      <td>${RES_ICON[r.resource_type]||'📦'} <span class="muted">${r.resource_type}</span></td>
-      <td class="muted">${r.quantity || '—'}</td>
-      <td class="muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.address || '—'}</td>
-      <td class="muted">${r.owner || '—'}</td>
+      <td><strong>${esc(r.name)}</strong></td>
+      <td>${RES_ICON[r.resource_type]||'📦'} <span class="muted">${esc(r.resource_type)}</span></td>
+      <td class="muted">${esc(r.quantity) || '—'}</td>
+      <td class="muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.address) || '—'}</td>
+      <td class="muted">${esc(r.owner) || '—'}</td>
       <td>
         <button class="toggle-btn ${r.is_available ? 'toggle-avail' : 'toggle-unavail'}"
           onclick="toggleResource('${r.id}')">
@@ -1308,8 +1325,8 @@ function renderResources(data) {
         </button>
       </td>
       <td>
-        <button class="btn btn-ghost-edit btn-sm" onclick='editResource(${JSON.stringify(r)})'>編輯</button>
-        <button class="btn btn-ghost-danger btn-sm" onclick="deleteResource('${r.id}','${r.name}')">刪除</button>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editResource(${esc(JSON.stringify(r))})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deleteResource('${r.id}',${esc(JSON.stringify(r.name))})">刪除</button>
       </td>
     </tr>`).join('');
 }
@@ -1318,7 +1335,7 @@ function populateOwnerSelect(volunteers) {
   const sel = document.getElementById('res-owner-id');
   const cur = sel.value;
   sel.innerHTML = '<option value="">— 選擇 —</option>' +
-    volunteers.map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+    volunteers.map(v => `<option value="${v.id}">${esc(v.name)}</option>`).join('');
   sel.value = cur;
 }
 
@@ -1449,9 +1466,9 @@ async function loadRelations() {
     const elderly  = users.filter(u => u.roles.includes('elderly'));
     const contacts = users.filter(u => !u.roles.includes('elderly'));
     document.getElementById('rel-elderly-id').innerHTML =
-      elderly.map(u => `<option value="${u.id}">${u.name}</option>`).join('');
+      elderly.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
     document.getElementById('rel-contact-id').innerHTML =
-      contacts.map(u => `<option value="${u.id}">${u.name}（${u.roles.map(r=>ROLE_LABEL[r]||r).join('/')}）</option>`).join('');
+      contacts.map(u => `<option value="${u.id}">${esc(u.name)}（${u.roles.map(r=>esc(ROLE_LABEL[r]||r)).join('/')}）</option>`).join('');
 
     const RMAP = { family:'家屬', volunteer:'志工', neighbor:'鄰居' };
     const tbody = document.getElementById('relations-tbody');
@@ -1464,15 +1481,15 @@ async function loadRelations() {
     }
     tbody.innerHTML = rels.map(r => `
       <tr>
-        <td><strong>${r.elderly_name}</strong></td>
-        <td>${r.contact_name}</td>
-        <td><span class="badge badge-gray">${RMAP[r.relation] || r.relation}</span></td>
+        <td><strong>${esc(r.elderly_name)}</strong></td>
+        <td>${esc(r.contact_name)}</td>
+        <td><span class="badge badge-gray">${esc(RMAP[r.relation] || r.relation)}</span></td>
         <td style="text-align:center">
           <span class="badge badge-blue">${r.notify_order}</span>
         </td>
         <td>
           <button class="btn btn-ghost-danger btn-sm"
-            onclick="deleteRelation('${r.id}','${r.elderly_name}','${r.contact_name}')">刪除</button>
+            onclick="deleteRelation('${r.id}',${esc(JSON.stringify(r.elderly_name))},${esc(JSON.stringify(r.contact_name))})">刪除</button>
         </td>
       </tr>`).join('');
   } catch(e) {
@@ -1526,7 +1543,7 @@ async function loadKB() {
     const catsEl = document.getElementById('stat-cats');
     const cats = stats.categories || [];
     catsEl.innerHTML = cats.length
-      ? cats.map(c => `<span class="cat-chip">${CAT_LABEL[c] || c}</span>`).join('')
+      ? cats.map(c => `<span class="cat-chip">${esc(CAT_LABEL[c] || c)}</span>`).join('')
       : '<span style="font-size:12px;color:var(--muted)">（無分類資料）</span>';
 
     const noticeEl = document.getElementById('ingest-notice');
@@ -1563,9 +1580,9 @@ async function loadDocList() {
           <tbody>
             ${chunks.map(c => `
               <tr>
-                <td style="white-space:nowrap">${c.source}</td>
-                <td><span class="cat-chip">${CAT_LABEL[c.category] || c.category}</span></td>
-                <td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.content_preview}</td>
+                <td style="white-space:nowrap">${esc(c.source)}</td>
+                <td><span class="cat-chip">${esc(CAT_LABEL[c.category] || c.category)}</span></td>
+                <td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.content_preview)}</td>
                 <td>${c.has_embedding ? '✅' : '—'}</td>
                 <td style="white-space:nowrap">
                   <button class="btn btn-ghost-edit btn-sm" onclick="editChunk('${c.id}')">編輯</button>
@@ -1802,9 +1819,9 @@ function renderPoints(data) {
     const srcLabel = SRC_LABEL[p.source] || p.source;
     return `
     <tr>
-      <td><strong>${PT_ICON[p.point_type]||'📍'} ${p.name}</strong></td>
-      <td><span class="badge badge-blue">${PT_LABEL[p.point_type]||p.point_type}</span></td>
-      <td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.address||'—'}</td>
+      <td><strong>${PT_ICON[p.point_type]||'📍'} ${esc(p.name)}</strong></td>
+      <td><span class="badge badge-blue">${esc(PT_LABEL[p.point_type]||p.point_type)}</span></td>
+      <td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(p.address)||'—'}</td>
       <td class="muted" style="white-space:nowrap">
         ${p.capacity
           ? `<button class="btn btn-ghost btn-sm" style="padding:2px 8px" onclick="pointCheckout('${p.id}')">－</button>
@@ -1815,11 +1832,11 @@ function renderPoints(data) {
              <button class="btn btn-ghost btn-sm" style="padding:2px 8px" onclick="pointCheckin('${p.id}')">＋</button>`}
       </td>
       <td><div class="supply-chips">${supplyChips}</div></td>
-      <td class="muted">${p.phone||'—'}</td>
-      <td><span class="src-badge ${srcClass}">${srcLabel}</span></td>
+      <td class="muted">${esc(p.phone)||'—'}</td>
+      <td><span class="src-badge ${srcClass}">${esc(srcLabel)}</span></td>
       <td>
-        <button class="btn btn-ghost-edit btn-sm" onclick='editPoint(${JSON.stringify(p)})'>編輯</button>
-        <button class="btn btn-ghost-danger btn-sm" onclick="deletePoint('${p.id}','${p.name}')">刪除</button>
+        <button class="btn btn-ghost-edit btn-sm" onclick='editPoint(${esc(JSON.stringify(p))})'>編輯</button>
+        <button class="btn btn-ghost-danger btn-sm" onclick="deletePoint('${p.id}',${esc(JSON.stringify(p.name))})">刪除</button>
       </td>
     </tr>`;
   }).join('');
@@ -1950,7 +1967,7 @@ function openNeedModal() {
   // 填入可用的申請人下拉選單
   document.getElementById('need-requester').innerHTML =
     '<option value="">— 不指定（系統自動選擇）—</option>' +
-    allUsers.map(u => `<option value="${u.id}">${u.name}（${u.roles.map(r=>ROLE_LABEL[r]||r).join('/')}）</option>`).join('');
+    allUsers.map(u => `<option value="${u.id}">${esc(u.name)}（${u.roles.map(r=>esc(ROLE_LABEL[r]||r)).join('/')}）</option>`).join('');
   // reset
   document.getElementById('need-type').value    = 'water';
   document.getElementById('need-urgency').value = '3';
@@ -2006,9 +2023,9 @@ function renderNeeds(data) {
         <span class="urgency-dot u${n.urgency}" style="display:inline-block;margin-right:4px"></span>
         <strong style="font-size:15px">${n.urgency}</strong>
       </td>
-      <td>${NEED_TYPE_ICON[n.need_type]||'📦'} ${n.need_type}</td>
-      <td class="muted">${n.description || '—'}</td>
-      <td class="muted" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${n.address||'—'}</td>
+      <td>${NEED_TYPE_ICON[n.need_type]||'📦'} ${esc(n.need_type)}</td>
+      <td class="muted">${esc(n.description) || '—'}</td>
+      <td class="muted" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.address)||'—'}</td>
       <td>${STATUS_BADGE[n.status]||n.status}</td>
       <td class="muted" style="white-space:nowrap">${n.created_at.slice(0,16).replace('T',' ')}</td>
       <td id="match-${n.id}">
@@ -2073,8 +2090,8 @@ async function showCandidates(needId) {
             <tr style="${i===0?'background:#f0fdf4':''}">
               <td><strong style="color:${i===0?'var(--success)':'inherit'}">${c.score}</strong></td>
               <td><span class="src-badge ${c.source==='resource'?'src-line':'src-gov'}">${c.source==='resource'?'個人物資':'資源點'}</span></td>
-              <td>${c.name}</td>
-              <td class="muted">${c.vol}</td>
+              <td>${esc(c.name)}</td>
+              <td class="muted">${esc(c.vol)}</td>
               <td class="muted">${c.dist_km != null ? c.dist_km + ' km' : '無座標'}</td>
               <td>
                 ${c.source==='resource'
@@ -2104,9 +2121,6 @@ async function cancelNeed(needId) {
   await fetch(`/api/resources/needs/${needId}?status=cancelled`, { method: 'PUT' }).catch(() => {});
   loadNeeds();
 }
-
-// dispatch 也更新需求列表
-const _origRunDispatch = runDispatch;
 
 // ════════════════════════════════════════════════
 // Init

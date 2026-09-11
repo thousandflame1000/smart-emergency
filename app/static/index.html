@@ -562,6 +562,21 @@ body { background: var(--bg); font-family: -apple-system, 'Segoe UI', sans-serif
 // ── State ──────────────────────────────────
 let map, allElderly = [], currentPage = 'overview';
 
+// 使用者輸入（長者/志工姓名、地址、需求說明…）一路直接塞進 innerHTML
+// 樣板字串——任何人只要把 LINE 顯示名稱設成含 <script>/onerror= 的字串
+// 再傳訊息觸發自動註冊，就能在有人打開這個公開儀表板時於其瀏覽器執行
+// 任意程式碼，而且這個系統完全沒有登入驗證。所有使用者可控欄位輸出前
+// 都要過這一層。
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const STATUS = {
   ok:             ['已回應',   'badge-green'],
   no_response:    ['未回應',   'badge-red'],
@@ -606,12 +621,12 @@ function updateMap(elderly, resources) {
     const [label] = STATUS[e.today_status] || ['—'];
     L.circleMarker([e.lat, e.lng], {
       radius:10, color:'#fff', fillColor: C[e.today_status]||'#9ca3af', fillOpacity:.9, weight:2.5
-    }).bindPopup(`<b>${e.name}</b><br>${label}<br><small>${e.address||''}</small>`).addTo(map);
+    }).bindPopup(`<b>${esc(e.name)}</b><br>${label}<br><small>${esc(e.address)||''}</small>`).addTo(map);
   });
   resources.forEach(r => {
     if (!r.lat || !r.lng) return;
     L.marker([r.lat, r.lng]).bindPopup(
-      `<b>${RES_ICON[r.resource_type]||'📦'} ${r.name}</b><br>數量：${r.quantity||'—'}`
+      `<b>${RES_ICON[r.resource_type]||'📦'} ${esc(r.name)}</b><br>數量：${esc(r.quantity)||'—'}`
     ).addTo(map);
   });
 }
@@ -630,8 +645,8 @@ function renderElderly(data, tbodyId) {
   tbody.innerHTML = data.map(e => {
     const time = e.responded_at ? e.responded_at.slice(11,16) : '—';
     return `<tr>
-      <td style="font-weight:600">${e.name}</td>
-      ${tbodyId === 'elderly-tbody2' ? `<td style="color:var(--muted)">${e.phone||'—'}</td><td style="color:var(--muted);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${e.address||'—'}</td>` : ''}
+      <td style="font-weight:600">${esc(e.name)}</td>
+      ${tbodyId === 'elderly-tbody2' ? `<td style="color:var(--muted)">${esc(e.phone)||'—'}</td><td style="color:var(--muted);max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(e.address)||'—'}</td>` : ''}
       <td>${renderStatus(e.today_status)}</td>
       <td style="color:var(--muted)">${time}</td>
     </tr>`;
@@ -656,8 +671,8 @@ function renderAlerts(data) {
     return `<div class="alert-row">
       <div class="alert-dot ${cls}"></div>
       <div>
-        <div class="alert-name">${a.elderly}</div>
-        <div class="alert-type">${typeLabel[a.alert_type]||a.alert_type}</div>
+        <div class="alert-name">${esc(a.elderly)}</div>
+        <div class="alert-type">${esc(typeLabel[a.alert_type]||a.alert_type)}</div>
       </div>
       <div class="alert-time">${(a.created_at||'').slice(11,16)}</div>
     </div>`;
@@ -672,8 +687,8 @@ function renderResources(data) {
     <div class="res-row">
       <span class="res-icon">${RES_ICON[r.resource_type]||'📦'}</span>
       <div>
-        <div class="res-name">${r.name}</div>
-        <div class="res-qty">${r.quantity||''} · ${r.address||''}</div>
+        <div class="res-name">${esc(r.name)}</div>
+        <div class="res-qty">${esc(r.quantity)||''} · ${esc(r.address)||''}</div>
       </div>
       <div class="res-avail">
         <span class="badge ${r.is_available?'badge-green':'badge-gray'}">
@@ -775,9 +790,10 @@ let dspSelectedNeed = null;
 
 async function loadDispatchPage() {
   try {
-    const [summary, openNeeds, resources, points] = await Promise.all([
+    const [summary, openNeeds, suggestedNeeds, resources, points] = await Promise.all([
       fetch('/api/dashboard/summary').then(r => r.json()),
       fetch('/api/resources/needs?status=open').then(r => r.json()),
+      fetch('/api/resources/needs?status=suggested').then(r => r.json()),
       fetch('/api/resources/?available_only=true').then(r => r.json()),
       fetch('/api/resources/points?active_only=true').then(r => r.json()),
     ]);
@@ -797,20 +813,24 @@ async function loadDispatchPage() {
     document.getElementById('dsp-toggle-btn').textContent =
       isEmg ? '解除緊急模式' : '啟動緊急模式';
 
-    dspNeeds     = openNeeds;
+    // 待確認的排在前面，比較急迫需要管理員動作
+    const allNeeds = [...suggestedNeeds, ...openNeeds];
+    dspNeeds     = allNeeds;
     dspResources = resources;
     dspPoints    = points;
 
     // 統計
     document.getElementById('dsp-needs-count').textContent =
-      openNeeds.length ? `${openNeeds.length} 筆待媒合` : '目前無待媒合需求';
+      allNeeds.length
+        ? `${openNeeds.length} 筆待媒合` + (suggestedNeeds.length ? ` · ${suggestedNeeds.length} 筆待確認` : '')
+        : '目前無待媒合需求';
     document.getElementById('dsp-res-count').textContent =
       `個人物資 ${resources.length} 項 · 資源點 ${points.length} 個`;
 
     // 步驟引導
     renderDspSteps(summary.mode, points.length, resources.length, openNeeds.length);
 
-    renderDspNeeds(openNeeds);
+    renderDspNeeds(allNeeds);
     renderDspResources(resources, points);
   } catch(e) {
     document.getElementById('dsp-needs-list').innerHTML =
@@ -881,22 +901,71 @@ function renderDspNeeds(needs) {
     </div>`;
     return;
   }
-  // 依緊急度排序
-  needs = [...needs].sort((a, b) => b.urgency - a.urgency);
-  el.innerHTML = needs.map(n => `
+  // 待確認排最前，其餘依緊急度排序
+  needs = [...needs].sort((a, b) => {
+    if ((a.status === 'suggested') !== (b.status === 'suggested')) {
+      return a.status === 'suggested' ? -1 : 1;
+    }
+    return b.urgency - a.urgency;
+  });
+  el.innerHTML = needs.map(n => {
+    if (n.status === 'suggested') {
+      return `
+        <div class="need-card" style="background:#fff7ed;cursor:default">
+          <div class="need-urgency u${n.urgency}">${n.urgency}</div>
+          <div class="need-body">
+            <div class="need-type">
+              ${DSP_NEED_ICON[n.need_type]||'📦'} ${esc(n.need_type)} ${n.description ? '— ' + esc(n.description) : ''}
+              <span class="badge badge-red" style="margin-left:6px">⏳ 待確認</span>
+            </div>
+            <div class="need-addr">📍 ${esc(n.address) || '未填地址'}</div>
+          </div>
+          <div class="need-actions">
+            <button onclick="event.stopPropagation(); dspConfirmDispatch('${n.id}')"
+                    style="background:var(--success);color:#fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
+              ✅ 確認派遣
+            </button>
+            <button onclick="event.stopPropagation(); dspDeclineSuggestion('${n.id}')"
+                    style="background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">
+              否決
+            </button>
+          </div>
+        </div>`;
+    }
+    return `
     <div class="need-card ${dspSelectedNeed === n.id ? 'selected' : ''}"
          onclick="dspSelectNeed('${n.id}')">
       <div class="need-urgency u${n.urgency}">${n.urgency}</div>
       <div class="need-body">
-        <div class="need-type">${DSP_NEED_ICON[n.need_type]||'📦'} ${n.need_type} ${n.description ? '— ' + n.description : ''}</div>
-        <div class="need-addr">📍 ${n.address || '未填地址'}</div>
+        <div class="need-type">${DSP_NEED_ICON[n.need_type]||'📦'} ${esc(n.need_type)} ${n.description ? '— ' + esc(n.description) : ''}</div>
+        <div class="need-addr">📍 ${esc(n.address) || '未填地址'}</div>
       </div>
       <div class="need-actions">
         <span style="font-size:10px;color:var(--muted)">${n.created_at?.slice(5,16)||''}</span>
       </div>
     </div>
     <div class="cand-panel" id="cand-${n.id}" style="display:none"></div>
-  `).join('');
+  `;
+  }).join('');
+}
+
+async function dspConfirmDispatch(needId) {
+  if (!confirm('確認採用系統建議的媒合？\n這一步才會真正發 LINE 通知志工。')) return;
+  const res  = await fetch(`/api/resources/needs/${needId}/confirm_dispatch`, { method: 'POST' });
+  const data = await res.json();
+  if (data.error) { showDspNotice('danger', '確認失敗：' + data.error); return; }
+  showDspNotice('success', data.volunteer_notified
+    ? '✅ 已確認派遣，志工已收到 LINE 通知'
+    : '✅ 已確認派遣（志工未綁定 LINE，請自行聯繫）');
+  loadDispatchPage();
+}
+
+async function dspDeclineSuggestion(needId) {
+  if (!confirm('否決此建議？物資會恢復可用，需求退回待媒合。')) return;
+  const res  = await fetch(`/api/resources/needs/${needId}/decline_suggestion`, { method: 'POST' });
+  const data = await res.json();
+  if (data.error) { showDspNotice('danger', '操作失敗：' + data.error); return; }
+  loadDispatchPage();
 }
 
 function renderDspResources(resources, points) {
@@ -917,8 +986,8 @@ function renderDspResources(resources, points) {
         <span class="dsp-src-dot dot-personal" title="個人物資"></span>
         <span class="dsp-res-icon">${DSP_NEED_ICON[r.resource_type]||'📦'}</span>
         <div style="flex:1;min-width:0">
-          <div class="dsp-res-name">${r.name}</div>
-          <div class="dsp-res-meta">數量：${r.quantity||'—'} · 登記：${r.owner||'—'}</div>
+          <div class="dsp-res-name">${esc(r.name)}</div>
+          <div class="dsp-res-meta">數量：${esc(r.quantity)||'—'} · 登記：${esc(r.owner)||'—'}</div>
         </div>
         <span style="font-size:10px;color:var(--muted)">個人物資</span>
       </div>`),
@@ -927,8 +996,8 @@ function renderDspResources(resources, points) {
         <span class="dsp-src-dot dot-point" title="固定資源點"></span>
         <span class="dsp-res-icon">${{shelter:'🏠',fire_station:'🚒',hospital:'🏥',clinic:'💊',community:'🏘️',store:'🛒',warehouse:'📦'}[p.point_type]||'📍'}</span>
         <div style="flex:1;min-width:0">
-          <div class="dsp-res-name">${p.name}</div>
-          <div class="dsp-res-meta">${p.address||'—'} · ${(p.supply_types||[]).join('/')||'—'}</div>
+          <div class="dsp-res-name">${esc(p.name)}</div>
+          <div class="dsp-res-meta">${esc(p.address)||'—'} · ${(p.supply_types||[]).join('/')||'—'}</div>
         </div>
         <span style="font-size:10px;color:var(--success)">固定資源點</span>
       </div>`),
@@ -961,7 +1030,7 @@ async function dspSelectNeed(needId) {
           <span style="font-size:11px;background:${c.source==='resource'?'#dbeafe':'#dcfce7'};color:${c.source==='resource'?'#1d4ed8':'#15803d'};padding:2px 6px;border-radius:4px;white-space:nowrap">
             ${c.source==='resource'?'個人物資':'資源點'}
           </span>
-          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name}</span>
+          <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.name)}</span>
           <span style="color:var(--muted);white-space:nowrap">${c.dist_km != null ? c.dist_km+'km' : '?'}</span>
           ${c.source==='resource'
             ? `<button onclick="dspManualMatch('${needId}','${c.id}')" style="background:var(--success);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">媒合</button>`
@@ -992,11 +1061,11 @@ async function dspRunDispatch() {
       showDspNotice('warning', '⚠️ 系統目前為日常模式，請先點「啟動緊急模式」再執行');
     } else {
       const detailText = (data.details||[])
-        .filter(d => d.result === 'matched')
-        .map(d => `　• ${d.matched}（${d.dist_km != null ? d.dist_km+'km' : '?'}，評分 ${d.score}）${d.notified?'📱':''}`)
+        .filter(d => d.result === 'suggested' || d.result === 'matched')
+        .map(d => `　• ${d.matched}（${d.dist_km != null ? d.dist_km+'km' : '?'}，評分 ${d.score}）${d.result === 'suggested' ? '⏳ 待確認' : ''}`)
         .join('\n');
       showDspNotice('success',
-        `⚡ 媒合完成：成功 ${data.matched} 筆 / 跳過 ${data.skipped} 筆 / 已通知 ${data.notified} 位志工` +
+        `⚡ 媒合完成：⏳ 待確認 ${data.suggested} 筆（需在下方名單按「確認派遣」才會通知志工）／✅ 資源點直接媒合 ${data.matched} 筆／⏭️ 跳過 ${data.skipped} 筆` +
         (detailText ? `\n${detailText}` : ''));
       renderDispatchHistory(data);
     }
@@ -1016,25 +1085,26 @@ function renderDispatchHistory(data) {
   }
   el.innerHTML = `
     <div style="display:flex;gap:16px;margin-bottom:12px">
-      <span style="color:var(--success);font-weight:700">✅ 媒合 ${data.matched}</span>
+      <span style="color:var(--danger);font-weight:700">⏳ 待確認 ${data.suggested}</span>
+      <span style="color:var(--success);font-weight:700">✅ 資源點媒合 ${data.matched}</span>
       <span style="color:var(--muted)">⏭️ 跳過 ${data.skipped}</span>
-      <span style="color:var(--primary)">📱 通知 ${data.notified}</span>
     </div>
     <table class="tbl" style="font-size:12px">
       <thead><tr>
-        <th>需求 ID</th><th>結果</th><th>媒合至</th><th>距離</th><th>評分</th><th>通知</th>
+        <th>需求 ID</th><th>結果</th><th>媒合至</th><th>距離</th><th>評分</th>
       </tr></thead>
       <tbody>
         ${data.details.map(d => `
           <tr>
             <td style="font-family:monospace;font-size:10px">${d.need_id.slice(0,8)}…</td>
-            <td>${d.result==='matched'
+            <td>${d.result==='suggested'
+              ? '<span style="color:var(--danger);font-weight:600">⏳ 待確認</span>'
+              : d.result==='matched'
               ? '<span style="color:var(--success);font-weight:600">已媒合</span>'
               : '<span style="color:var(--muted)">跳過</span>'}</td>
-            <td>${d.matched||d.reason||'—'}</td>
+            <td>${esc(d.matched)||esc(d.reason)||'—'}</td>
             <td>${d.dist_km != null ? d.dist_km+' km' : '—'}</td>
             <td>${d.score != null ? d.score : '—'}</td>
-            <td>${d.notified ? '📱 已送' : '—'}</td>
           </tr>`).join('')}
       </tbody>
     </table>`;

@@ -49,7 +49,7 @@ def list_elderly(db: Session = Depends(get_db)):
     today = date.today()
     elderly = (
         db.query(User)
-        .filter(User.roles.contains(["elderly"]), User.is_active == True)
+        .filter(User.role_filter("elderly"), User.is_active == True)
         .all()
     )
 
@@ -236,7 +236,7 @@ def trigger_checkin(db: Session = Depends(get_db)):
     threading.Thread(target=_run, daemon=True).start()
     elderly_count = (
         db.query(User)
-        .filter(User.roles.contains(["elderly"]), User.is_active == True,
+        .filter(User.role_filter("elderly"), User.is_active == True,
                 User.line_uid != None)
         .count()
     )

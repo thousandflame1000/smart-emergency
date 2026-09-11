@@ -56,7 +56,7 @@ async def simulate_checkin(elderly_name: str):
     try:
         elderly = db.query(U).filter(
             U.name == elderly_name,
-            U.roles.contains(["elderly"]),
+            U.role_filter("elderly"),
         ).first()
 
         if not elderly:
@@ -226,7 +226,7 @@ def handle_text(event: MessageEvent):
 
         existing_elder = db.query(U).filter(
             U.name == elder_name,
-            U.roles.contains(["elderly"]),
+            U.role_filter("elderly"),
         ).first()
 
         if existing_elder:

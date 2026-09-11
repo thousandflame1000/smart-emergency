@@ -93,7 +93,7 @@ LINE Bot ──> FastAPI (Railway)
 | 資料庫 | PostgreSQL (Railway) | 穩定、免費額度夠用 |
 | 向量搜尋 | numpy cosine | SQLite 相容，無需 pgvector |
 | Embedding | gemini-embedding-001 | 免費、3072 維高品質向量 |
-| 生成模型 | gemini-2.0-flash-lite | 免費 tier、繁中支援好 |
+| 生成模型 | gemini-2.5-flash | 免費 tier、繁中支援好 |
 | LINE SDK | line-bot-sdk v3 | 官方最新版 |
 | 排程 | APScheduler | 輕量、內嵌於 FastAPI |
 | 部署 | Railway | 一鍵部署、免費 PostgreSQL |

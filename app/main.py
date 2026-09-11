@@ -42,7 +42,9 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    # 系統沒有 cookie/session 機制，allow_credentials=True 跟萬用 origin
+    # 同時開是規範上互斥的組合（瀏覽器規格禁止 credentialed 請求搭配
+    # Access-Control-Allow-Origin: *），而且完全沒用到就沒必要留著。
     allow_methods=["*"],
     allow_headers=["*"],
 )

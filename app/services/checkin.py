@@ -15,7 +15,7 @@ def send_daily_checkins() -> None:
         elderly_list = (
             db.query(User)
             .filter(
-                User.roles.contains(["elderly"]),
+                User.role_filter("elderly"),
                 User.is_active == True,
                 User.line_uid != None,
             )
