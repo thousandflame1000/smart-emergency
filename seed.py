@@ -11,7 +11,7 @@ try:
 except Exception:
     pass
 
-from app.database import SessionLocal
+from app.database import SessionLocal, _is_sqlite
 from app.models.user import User
 from app.models.care_relation import CareRelation
 from app.models.resource import CommunityResource
@@ -20,8 +20,24 @@ from app.models.config import SystemConfig
 from datetime import date, datetime
 
 
-def run():
+def run(force: bool = False):
     db = SessionLocal()
+
+    # 安全檢查：這個腳本會清空 users/care_relations/community_resources/
+    # daily_checkins/system_config 五張表。startup.py 只在資料庫是空的
+    # 時候才會呼叫 run()，天生安全；但這個腳本也可以直接
+    # `python seed.py` 執行——如果那時候 .env 的 DATABASE_URL 不小心
+    # 指到正式環境的 Postgres（例如手滑複製貼上），會在沒有任何提示
+    # 的情況下把正式資料全部刪光。這裡擋下「非 SQLite + 已經有資料」
+    # 的組合，除非明確加 --force。
+    existing = db.query(User).count()
+    if existing > 0 and not _is_sqlite and not force:
+        db.close()
+        raise SystemExit(
+            f"🛑 偵測到非 SQLite 資料庫（可能是正式環境）且已有 {existing} 筆使用者資料，"
+            "為了避免誤刪正式資料，預設拒絕執行。\n"
+            "如果你確定要清空這個資料庫重新塞測試資料，改用：python seed.py --force"
+        )
 
     print("=" * 50)
     print("開始塞入假資料")
@@ -149,4 +165,4 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    run(force="--force" in sys.argv)
