@@ -321,12 +321,31 @@ def auto_dispatch() -> dict:
             return {"matched": 0, "suggested": 0, "skipped": 0, "notified": 0,
                     "reason": "not_emergency"}
 
-        # 按緊急度 DESC → 建立時間 ASC（FIFO 相同緊急度）
         open_needs = (
             db.query(CommunityNeed)
             .filter(CommunityNeed.status == "open")
-            .order_by(CommunityNeed.urgency.desc(), CommunityNeed.created_at)
             .all()
+        )
+
+        # 排序依「緊急度 → 脆弱度 → 建立時間 FIFO」。這裡曾經是真的
+        # bug：只用 urgency.desc() + created_at 排序處理順序，脆弱度
+        # 只有在同一筆需求「內部」比較候選資源時才加分，資源不足、
+        # 兩筆需求緊急度剛好一樣、要搶同一份物資時，完全沒有反映
+        # 「平時打卡異常/警報未解決/照顧網絡孤立」這些關懷資料——
+        # 跟計畫書「脆弱度偏高會被自動排入優先派遣名單」的核心敘述
+        # 對不起來。這裡先幫每筆需求把脆弱度算好，一起排進處理順序，
+        # 同時避免迴圈內每筆需求重算一次的重複查詢。
+        needs_with_vuln = [
+            (need, _vulnerability_pts(need.requester_id, db))
+            for need in open_needs
+        ]
+        needs_with_vuln.sort(
+            key=lambda item: (
+                item[0].urgency,
+                item[1],
+                -(item[0].created_at.timestamp() if item[0].created_at else 0),
+            ),
+            reverse=True,
         )
 
         matched   = 0
@@ -338,10 +357,7 @@ def auto_dispatch() -> dict:
         # 追蹤本批次志工已派任數（負荷平衡）
         volunteer_load: dict[str, int] = {}
 
-        for need in open_needs:
-            # 把這位求助者「平時的關懷紀錄」轉換成派遣優先權重
-            vulnerability = _vulnerability_pts(need.requester_id, db)
-
+        for need, vulnerability in needs_with_vuln:
             # 從兩個來源蒐集候選
             cands = (
                 _collect_from_resources(need, db, volunteer_load, vulnerability) +
@@ -374,6 +390,14 @@ def auto_dispatch() -> dict:
                     res_obj.is_available = False  # 先保留，避免同時被建議給別人
                     vid = str(res_obj.owner_id)
                     volunteer_load[vid] = volunteer_load.get(vid, 0) + 1
+                    # SessionLocal 是 autoflush=False（見 app/database.py），
+                    # 這裡如果不主動 flush，上面這行 is_available 的變更只存在
+                    # Python 端的物件狀態、還沒真的送進資料庫——迴圈跑到下一筆
+                    # 需求時，_collect_from_resources() 會重新對資料庫下
+                    # SELECT ... WHERE is_available=True，撈到的還是舊值，
+                    # 導致同一份實際只有一份的物資被「建議」給兩筆不同需求
+                    # （這是真的用測試重現過的 bug，不是理論上的疑慮）。
+                    db.flush()
 
                 suggested += 1
                 details.append({
