@@ -18,6 +18,12 @@
    物資時，完全沒有反映「平時打卡異常/警報未解決/照顧網絡孤立」
    這些關懷資料——跟計畫書「脆弱度偏高會被自動排入優先派遣名單」
    的核心敘述對不起來。
+
+3. 貪婪法不保證全域最優：處理順序在前的需求會搶走「對它自己來說
+   最好、但對後面的需求來說是唯一選項」的資源，即使把該資源讓給
+   後面的需求、自己退而求其次仍然能被滿足，貪婪法也看不到這個
+   更好的整體解——這是 auto_dispatch() 從貪婪法改成批次匈牙利演算法
+   （scipy.optimize.linear_sum_assignment）要解決的問題。
 """
 from datetime import datetime, timedelta, date
 
@@ -143,4 +149,56 @@ def test_urgency_still_takes_priority_over_vulnerability(db):
     db2 = SessionLocal()
     n_urgent = db2.query(CommunityNeed).filter(CommunityNeed.id == need_urgent_id).first()
     assert str(n_urgent.matched_resource_id) == res_id, "緊急度 5 應該優先於脆弱度分數，先搶到資源"
+    db2.close()
+
+
+def test_batch_assignment_beats_greedy_first_come(db):
+    """
+    經典指派問題反例：A 兩個候選都能用（X 較近、Y 略遠但仍在範圍內），
+    B 只有一個候選能用（X，Y 已超出 B 的緊急度距離上限）。
+
+    貪婪法依 (urgency, vulnerability) 排序先處理 A（脆弱度較高），A
+    會搶走「對自己來說分數最高」的 X，導致 B 完全沒有資源可用——即使
+    把 X 讓給 B、A 退而求其次改用 Y，兩筆需求明明都能被滿足。
+
+    批次最佳指派（匈牙利演算法）看的是全域總分數最大化，會找到
+    A→Y、B→X 這個兩筆需求都被滿足的解，即使 A 單筆的分數因此變低。
+    """
+    vol1 = User(name="志工1", roles=["volunteer"], line_uid="Uvol_x", lat=24.150, lng=120.670)
+    vol2 = User(name="志工2", roles=["volunteer"], line_uid="Uvol_y", lat=24.150, lng=120.670)
+    db.add_all([vol1, vol2]); db.commit()
+
+    res_x = CommunityResource(owner_id=vol1.id, resource_type="water", name="X",
+                               lat=24.150, lng=120.670, is_available=True)
+    res_y = CommunityResource(owner_id=vol2.id, resource_type="water", name="Y",
+                               lat=24.204, lng=120.670, is_available=True)
+    db.add_all([res_x, res_y]); db.commit()
+
+    elder_a = User(name="A", roles=["elderly"], lat=24.159, lng=120.670)  # ~1km 自 X，~5km 自 Y
+    elder_b = User(name="B", roles=["elderly"], lat=24.105, lng=120.670)  # ~5km 自 X，~11km 自 Y（超出上限）
+    db.add_all([elder_a, elder_b]); db.commit()
+
+    # A 脆弱度較高，貪婪排序會先處理 A
+    for d in range(1, 4):
+        db.add(DailyCheckin(elderly_id=elder_a.id, date=date.today() - timedelta(days=d), status="no_response"))
+    db.commit()
+
+    need_a = CommunityNeed(requester_id=elder_a.id, need_type="water", urgency=3, lat=24.159, lng=120.670)
+    need_b = CommunityNeed(requester_id=elder_b.id, need_type="water", urgency=3, lat=24.105, lng=120.670)
+    db.add_all([need_a, need_b])
+    db.commit()
+    need_a_id, need_b_id = str(need_a.id), str(need_b.id)
+
+    db.add(SystemConfig(key="mode", value="emergency"))
+    db.commit()
+    db.close()
+
+    result = dispatch.auto_dispatch()
+    assert result["suggested"] == 2, f"兩筆需求都該被滿足，實際：{result}"
+
+    db2 = SessionLocal()
+    n_a = db2.query(CommunityNeed).filter(CommunityNeed.id == need_a_id).first()
+    n_b = db2.query(CommunityNeed).filter(CommunityNeed.id == need_b_id).first()
+    assert n_a.status == "suggested" and n_b.status == "suggested"
+    assert n_a.matched_resource_id != n_b.matched_resource_id
     db2.close()

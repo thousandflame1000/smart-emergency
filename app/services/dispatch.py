@@ -7,14 +7,15 @@
   Layer 2  固定資源點 ResourcePoint     — 從政府開放資料匯入（避難所、消防分隊…）
   Layer 3  快速需求   CommunityNeed     — 居民透過 LINE 回報
 
-算法（多因子評分 + 優先佇列）
+算法（多因子評分 + 批次最佳指派）
 -------------------------------------
-  score = urgency_pts + vulnerability_pts + affinity_pts
+  score = urgency_pts + vulnerability_pts + affinity_pts + wait_pts
           - dist_penalty - load_penalty
 
   urgency_pts       = urgency × 12          # 12–60
   vulnerability_pts = 見 _vulnerability_pts # 0–28  (平時關懷資料轉換而來)
   affinity_pts      = affinity × 15         # 0–15  (類型匹配度)
+  wait_pts          = min(等待小時 × 1, 15) # 0–15  (deprivation cost 簡化版)
   dist_penalty      = (dist/max_dist) × 25  # 0–25  (距離懲罰)
   load_penalty      = vol_tasks × 5         # 0–∞   (志工負荷平衡)
 
@@ -37,14 +38,23 @@
 類型親合度矩陣 (need_type → [(resource_type, affinity)])
   完全匹配 = 1.0，部分匹配 = 0.2–0.4，不匹配 = 不列入候選
 
-本質上是稀缺資源下的優先權貪婪排程（priority-based greedy scheduling），
-概念參照災害物流的緊急度優先分配研究，以及 Crisis Cleanup（美國災後
-志工任務媒合平台）的媒合模式。
+Layer 1（個人物資，真正稀缺、一份只能給一筆需求）採批次最佳指派：
+每次執行蒐集當下所有待處理需求 × 候選物資的分數，一次用匈牙利演算法
+（scipy.optimize.linear_sum_assignment）解出總分數最大化的全域指派，
+取代舊版「依序處理、每筆搶當下最高分」的貪婪法——貪婪法不保證全域
+最優，先處理的需求可能搶走對另一筆需求而言更關鍵的資源。
+Layer 2（資源點，固定設施、非稀缺）維持獨立逐筆比對，因為同一個
+資源點可以同時是多筆需求的最佳解，不需要、也不該被排他性指派。
+
+概念參照災害物流的緊急度優先分配研究、指派問題的匈牙利演算法應用，
+以及 Crisis Cleanup（美國災後志工任務媒合平台）的媒合模式。
 """
 import json
 import math
 from datetime import datetime, timedelta
 from typing import NamedTuple
+import numpy as np
+from scipy.optimize import linear_sum_assignment
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
@@ -80,6 +90,20 @@ URGENCY_MAX_KM: dict[int, float] = {
     1: 25.0,
 }
 DEFAULT_MAX_KM = 10.0
+
+# 等待時間懲罰（deprivation cost 的線性簡化版，見 Pérez-Rodríguez &
+# Holguín-Veras 2016, Transportation Science 50(4) 的剝奪成本概念）：
+# 同樣分數的候選中，開得越久的需求該被往前排，而不是只在 tie-break
+# 時比 created_at。
+WAIT_PTS_PER_HOUR = 1.0
+WAIT_PTS_CAP = 15.0
+
+
+def _wait_pts(need: CommunityNeed) -> float:
+    if not need.created_at:
+        return 0.0
+    hours = (datetime.utcnow() - need.created_at).total_seconds() / 3600
+    return min(max(hours, 0.0) * WAIT_PTS_PER_HOUR, WAIT_PTS_CAP)
 
 
 # ──────────────────────────────────────────────────────────
@@ -174,30 +198,49 @@ class Candidate(NamedTuple):
     vol_name:    str
     res_name:    str
     dist_km:     float
+    breakdown:   dict         # 給 preview_candidates() 攤開子項用
 
 
 # ──────────────────────────────────────────────────────────
 # 評分函數
 # ──────────────────────────────────────────────────────────
+def _score_breakdown(
+    urgency: int,
+    affinity: float,
+    dist_km: float,
+    vol_active_tasks: int,
+    vulnerability_pts: float = 0.0,
+    wait_pts: float = 0.0,
+) -> dict | None:
+    """回傳 None 代表超出距離限制，不列入候選。"""
+    max_km = URGENCY_MAX_KM.get(urgency, DEFAULT_MAX_KM)
+    if dist_km > max_km:
+        return None
+    eff_dist = dist_km if not math.isinf(dist_km) else max_km * 0.8
+
+    urgency_pts = urgency * 12
+    affinity_pts = affinity * 15
+    dist_penalty = (eff_dist / max_km) * 25
+    load_penalty = vol_active_tasks * 5
+    total = urgency_pts + vulnerability_pts + affinity_pts + wait_pts - dist_penalty - load_penalty
+    return {
+        "urgency_pts": urgency_pts, "vulnerability_pts": vulnerability_pts,
+        "affinity_pts": affinity_pts, "wait_pts": wait_pts,
+        "dist_penalty": dist_penalty, "load_penalty": load_penalty,
+        "total": total,
+    }
+
+
 def _score(
     urgency: int,
     affinity: float,
     dist_km: float,
     vol_active_tasks: int,
     vulnerability_pts: float = 0.0,
+    wait_pts: float = 0.0,
 ) -> float:
-    max_km = URGENCY_MAX_KM.get(urgency, DEFAULT_MAX_KM)
-    if dist_km > max_km:
-        return -1.0  # 超出距離限制
-    if math.isinf(dist_km):
-        # 無座標 — 保守給低分但不排除
-        dist_km = max_km * 0.8
-
-    urgency_pts = urgency * 12
-    affinity_pts = affinity * 15
-    dist_pts = (dist_km / max_km) * 25
-    load_pts = vol_active_tasks * 5
-    return urgency_pts + vulnerability_pts + affinity_pts - dist_pts - load_pts
+    b = _score_breakdown(urgency, affinity, dist_km, vol_active_tasks, vulnerability_pts, wait_pts)
+    return b["total"] if b else -1.0
 
 
 # ──────────────────────────────────────────────────────────
@@ -229,17 +272,18 @@ def _collect_from_resources(
         .all()
     )
 
+    wait_pts = _wait_pts(need)
     candidates = []
     for r in res_list:
         affinity = type_aff.get(r.resource_type, 0.0)
         dist = _haversine(need.lat, need.lng, r.lat, r.lng)
         vol_load = volunteer_load.get(str(r.owner_id), 0)
-        s = _score(need.urgency, affinity, dist, vol_load, vulnerability)
-        if s < 0:
+        b = _score_breakdown(need.urgency, affinity, dist, vol_load, vulnerability, wait_pts)
+        if b is None:
             continue
         owner = r.owner
         candidates.append(Candidate(
-            score=s,
+            score=b["total"],
             source="resource",
             obj_id=str(r.id),
             resource_id=str(r.id),
@@ -248,6 +292,7 @@ def _collect_from_resources(
             vol_name=owner.name if owner else "未知志工",
             res_name=r.name,
             dist_km=dist,
+            breakdown=b,
         ))
     return candidates
 
@@ -275,6 +320,7 @@ def _collect_from_points(
         .all()
     )
 
+    wait_pts = _wait_pts(need)
     candidates = []
     for pt in all_points:
         # 確認此資源點有相容的供應類型
@@ -288,13 +334,13 @@ def _collect_from_points(
 
         dist = _haversine(need.lat, need.lng, pt.lat, pt.lng)
         # 資源點無志工負荷問題
-        s = _score(need.urgency, best_aff, dist, 0, vulnerability)
-        if s < 0:
+        b = _score_breakdown(need.urgency, best_aff, dist, 0, vulnerability, wait_pts)
+        if b is None:
             continue
 
         # 降權 0.8 — 資源點是固定設施，個人物資更靈活
         candidates.append(Candidate(
-            score=s * 0.8,
+            score=b["total"] * 0.8,
             source="resource_point",
             obj_id=str(pt.id),
             resource_id=None,
@@ -303,6 +349,7 @@ def _collect_from_points(
             vol_name=f"資源點：{pt.name}",
             res_name=pt.name,
             dist_km=dist,
+            breakdown={**b, "total": b["total"] * 0.8, "fixed_facility_discount": 0.8},
         ))
     return candidates
 
@@ -310,6 +357,58 @@ def _collect_from_points(
 # ──────────────────────────────────────────────────────────
 # 自動媒合（主排程）
 # ──────────────────────────────────────────────────────────
+def _assign_resources_optimally(
+    needs_with_vuln: list[tuple[CommunityNeed, float]],
+    db: Session,
+) -> dict[str, Candidate]:
+    """
+    Layer 1（CommunityResource）批次最佳指派。每份物資只能給一筆需求，
+    這是真正的稀缺資源，適合用匈牙利演算法一次解出總分數最大化的
+    全域指派——不是「先處理的需求先搶」。
+    volunteer_load 在整批次內固定不變（不像舊版貪婪法邊指派邊累加）：
+    批次求解本來就沒有「先後」，用同一套負荷快照對所有需求一視同仁；
+    唯一的取捨是同一位志工在同一批次擁有多份物資時，這幾份物資之間
+    不會再互相加重負荷懲罰，影響很小（多數志工同時只有 1 份物資）。
+    回傳 {need_id: Candidate}，只包含真的指派成功的需求。
+    """
+    volunteer_load: dict[str, int] = {}
+    cands_by_need: dict[str, list[Candidate]] = {}
+    resource_ids: list[str] = []
+    seen_resources: set[str] = set()
+
+    for need, vulnerability in needs_with_vuln:
+        cands = _collect_from_resources(need, db, volunteer_load, vulnerability)
+        cands_by_need[str(need.id)] = cands
+        for c in cands:
+            if c.resource_id not in seen_resources:
+                seen_resources.add(c.resource_id)
+                resource_ids.append(c.resource_id)
+
+    if not resource_ids:
+        return {}
+
+    need_ids = [str(n.id) for n, _ in needs_with_vuln]
+    r_index = {rid: j for j, rid in enumerate(resource_ids)}
+    BIG = 1e6  # 代表「不相容/超出距離」，minimize 時演算法會盡量避開
+    cost = np.full((len(need_ids), len(resource_ids)), BIG)
+    lookup: dict[tuple[int, int], Candidate] = {}
+
+    for i, nid in enumerate(need_ids):
+        for c in cands_by_need[nid]:
+            j = r_index[c.resource_id]
+            cost[i, j] = -c.score  # linear_sum_assignment 是 minimize，取負號變成 maximize
+            lookup[(i, j)] = c
+
+    row_ind, col_ind = linear_sum_assignment(cost)
+
+    assignment: dict[str, Candidate] = {}
+    for r, c in zip(row_ind, col_ind):
+        if cost[r, c] >= BIG:
+            continue  # 矩陣形狀逼出來的配對，實際上不相容，不採用
+        assignment[need_ids[r]] = lookup[(r, c)]
+    return assignment
+
+
 def auto_dispatch() -> dict:
     """
     緊急模式下每 30 分鐘執行一次。
@@ -332,19 +431,12 @@ def auto_dispatch() -> dict:
             .filter(CommunityNeed.status == "open")
             .all()
         )
-
-        # 排序依「緊急度 → 脆弱度 → 建立時間 FIFO」。這裡曾經是真的
-        # bug：只用 urgency.desc() + created_at 排序處理順序，脆弱度
-        # 只有在同一筆需求「內部」比較候選資源時才加分，資源不足、
-        # 兩筆需求緊急度剛好一樣、要搶同一份物資時，完全沒有反映
-        # 「平時打卡異常/警報未解決/照顧網絡孤立」這些關懷資料——
-        # 跟計畫書「脆弱度偏高會被自動排入優先派遣名單」的核心敘述
-        # 對不起來。這裡先幫每筆需求把脆弱度算好，一起排進處理順序，
-        # 同時避免迴圈內每筆需求重算一次的重複查詢。
         needs_with_vuln = [
             (need, _vulnerability_pts(need.requester_id, db))
             for need in open_needs
         ]
+        # 排序只影響回傳的 details 顯示順序（批次指派本身跟處理順序
+        # 無關），維持「緊急度 → 脆弱度 → 先到先得」方便閱讀。
         needs_with_vuln.sort(
             key=lambda item: (
                 item[0].urgency,
@@ -354,23 +446,21 @@ def auto_dispatch() -> dict:
             reverse=True,
         )
 
-        matched   = 0
-        suggested = 0
-        skipped   = 0
-        notified  = 0
-        details   = []
+        resource_assignment = _assign_resources_optimally(needs_with_vuln, db)
 
-        # 追蹤本批次志工已派任數（負荷平衡）
-        volunteer_load: dict[str, int] = {}
+        matched = suggested = skipped = notified = 0
+        details = []
 
         for need, vulnerability in needs_with_vuln:
-            # 從兩個來源蒐集候選
-            cands = (
-                _collect_from_resources(need, db, volunteer_load, vulnerability) +
-                _collect_from_points(need, db, volunteer_load, vulnerability)
-            )
+            best = resource_assignment.get(str(need.id))
 
-            if not cands:
+            if best is None:
+                # Layer 2（資源點）非稀缺，不需要參與批次指派，逐筆
+                # 獨立比對即可——同一個資源點可以同時是多筆需求的解。
+                point_cands = _collect_from_points(need, db, {}, vulnerability)
+                best = max(point_cands, key=lambda c: c.score) if point_cands else None
+
+            if best is None:
                 skipped += 1
                 details.append({
                     "need_id": str(need.id),
@@ -379,9 +469,6 @@ def auto_dispatch() -> dict:
                     "vulnerability": round(vulnerability, 1),
                 })
                 continue
-
-            # 取最高分
-            best = max(cands, key=lambda c: c.score)
 
             if best.source == "resource" and best.resource_id:
                 # 個人物資：這裡只「建議」，不自動通知志工——
@@ -393,17 +480,7 @@ def auto_dispatch() -> dict:
                     CommunityResource.id == best.resource_id
                 ).first()
                 if res_obj:
-                    res_obj.is_available = False  # 先保留，避免同時被建議給別人
-                    vid = str(res_obj.owner_id)
-                    volunteer_load[vid] = volunteer_load.get(vid, 0) + 1
-                    # SessionLocal 是 autoflush=False（見 app/database.py），
-                    # 這裡如果不主動 flush，上面這行 is_available 的變更只存在
-                    # Python 端的物件狀態、還沒真的送進資料庫——迴圈跑到下一筆
-                    # 需求時，_collect_from_resources() 會重新對資料庫下
-                    # SELECT ... WHERE is_available=True，撈到的還是舊值，
-                    # 導致同一份實際只有一份的物資被「建議」給兩筆不同需求
-                    # （這是真的用測試重現過的 bug，不是理論上的疑慮）。
-                    db.flush()
+                    res_obj.is_available = False
 
                 suggested += 1
                 details.append({
@@ -585,6 +662,7 @@ def preview_candidates(need_id: str, db: Session) -> dict:
                 "vol":      c.vol_name,
                 "dist_km":  round(c.dist_km, 2) if not math.isinf(c.dist_km) else None,
                 "id":       c.resource_id or c.point_id,
+                "breakdown": {k: round(v, 1) for k, v in c.breakdown.items()},
             }
             for c in cands[:20]
         ],

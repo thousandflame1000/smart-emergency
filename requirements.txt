@@ -21,6 +21,7 @@ google-generativeai==0.8.3
 # ModuleNotFoundError: No module named 'numpy' 在 healthcheck 階段
 # 失敗。明確宣告，不要再依賴別的套件順便帶進來。
 numpy==2.4.6
+scipy==1.18.1  # linear_sum_assignment（匈牙利演算法）用於 dispatch.py 批次最佳指派
 
 # Scheduler
 apscheduler==3.10.4

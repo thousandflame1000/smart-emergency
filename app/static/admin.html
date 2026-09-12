@@ -2175,9 +2175,12 @@ async function showCandidates(needId) {
           <th>評分</th><th>來源</th><th>名稱</th><th>志工/資源點</th><th>距離</th><th>操作</th>
         </tr></thead>
         <tbody>
-          ${cands.map((c, i) => `
+          ${cands.map((c, i) => { const bd = c.breakdown || {}; const tip =
+              `緊急度 +${bd.urgency_pts}｜脆弱度 +${bd.vulnerability_pts}｜類型 +${bd.affinity_pts}｜`
+            + `等待 +${bd.wait_pts}｜距離 -${bd.dist_penalty}｜負荷 -${bd.load_penalty}`;
+            return `
             <tr style="${i===0?'background:rgba(45,212,167,.06)':''}">
-              <td><strong style="color:${i===0?'var(--success)':'inherit'}">${c.score}</strong></td>
+              <td><strong style="color:${i===0?'var(--success)':'inherit'};cursor:help" title="${esc(tip)}">${c.score}</strong></td>
               <td><span class="src-badge ${c.source==='resource'?'src-line':'src-gov'}">${c.source==='resource'?'個人物資':'資源點'}</span></td>
               <td>${esc(c.name)}</td>
               <td class="muted">${esc(c.vol)}</td>
@@ -2187,7 +2190,7 @@ async function showCandidates(needId) {
                   ? `<button class="btn btn-success btn-sm" onclick="matchNeed('${needId}','${c.id}')">媒合</button>`
                   : '<span class="muted">—</span>'}
               </td>
-            </tr>`).join('')}
+            </tr>`; }).join('')}
         </tbody>
       </table>`;
   } catch(e) {
