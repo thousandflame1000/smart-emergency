@@ -352,6 +352,107 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .factor-icon { font-size: 20px; margin-bottom: 4px; filter: saturate(.7); }
 .factor-name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
 .factor-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
+
+/* ── Scenario sandbox: stat strip ── */
+.scn-stats {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px; background: var(--border);
+}
+.scn-stat {
+  background: var(--card); padding: 14px 16px;
+}
+.scn-stat-label {
+  font-size: 10px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .06em; margin-bottom: 6px;
+}
+.scn-stat-value {
+  font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--text);
+  line-height: 1.1;
+}
+.scn-stat-value.warn { color: var(--warning); }
+.scn-stat-value.danger { color: var(--danger); }
+.scn-stat-value.ok { color: var(--success); }
+.scn-stat-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 3px; }
+
+/* ── Progress bar ── */
+.scn-progress-track {
+  height: 3px; background: var(--border); border-radius: 2px; overflow: hidden;
+}
+.scn-progress-fill {
+  height: 100%; background: linear-gradient(90deg, var(--primary), var(--success));
+  transition: width .4s cubic-bezier(.4,0,.2,1); border-radius: 2px;
+}
+
+/* ── Horizontal stepper ── */
+.scn-stepper {
+  display: flex; align-items: flex-start; padding: 22px 24px 18px;
+  overflow-x: auto;
+}
+.scn-step { flex: 1; min-width: 108px; position: relative; text-align: center; }
+.scn-step:not(:last-child)::after {
+  content: ''; position: absolute; top: 13px; left: calc(50% + 20px); right: calc(-50% + 20px);
+  height: 2px; background: var(--border);
+}
+.scn-step.done:not(:last-child)::after { background: var(--success); }
+.scn-step-dot {
+  width: 26px; height: 26px; border-radius: 50%; margin: 0 auto 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; font-family: var(--mono);
+  background: var(--card); border: 2px solid var(--border); color: var(--muted);
+  position: relative; z-index: 1; transition: all .25s;
+}
+.scn-step.done .scn-step-dot {
+  background: var(--success); border-color: var(--success); color: #06120e;
+}
+.scn-step.current .scn-step-dot {
+  background: var(--primary); border-color: var(--primary); color: #06171a;
+  box-shadow: 0 0 0 4px rgba(34,211,238,.18);
+  animation: scn-pulse 1.6s ease-in-out infinite;
+}
+@keyframes scn-pulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(34,211,238,.18); }
+  50% { box-shadow: 0 0 0 7px rgba(34,211,238,.08); }
+}
+.scn-step-title { font-size: 11px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
+.scn-step-desc { font-size: 10px; color: var(--muted); line-height: 1.4; padding: 0 4px; }
+.scn-step.current .scn-step-title { color: var(--primary); }
+
+/* ── Sandbox parameter controls ── */
+.scn-params {
+  display: flex; gap: 0; border-bottom: 1px solid var(--border); flex-wrap: wrap;
+}
+.scn-param {
+  flex: 1; min-width: 180px; padding: 12px 18px; border-right: 1px solid var(--border);
+}
+.scn-param-label {
+  font-size: 10px; color: var(--muted); text-transform: uppercase;
+  letter-spacing: .05em; margin-bottom: 8px; display: flex; justify-content: space-between;
+}
+.scn-param-label span:last-child { font-family: var(--mono); color: var(--primary); font-weight: 700; }
+.scn-param input[type="range"] {
+  width: 100%; height: 3px; -webkit-appearance: none; appearance: none;
+  background: var(--border); border-radius: 2px; outline: none;
+}
+.scn-param input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--primary); cursor: pointer; border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+/* ── Log feed ── */
+.scn-log-entry {
+  border-left: 2px solid var(--border); padding: 4px 0 4px 14px; position: relative;
+}
+.scn-log-entry::before {
+  content: ''; position: absolute; left: -5px; top: 8px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--card); border: 2px solid var(--primary);
+}
+.scn-log-time { font-family: var(--mono); font-size: 10.5px; color: var(--muted); }
+.scn-log-title { font-size: 12px; font-weight: 700; color: var(--text); margin-left: 6px; }
+.scn-log-body {
+  font-size: 11.5px; color: var(--text-dim); white-space: pre-line; line-height: 1.7;
+  margin-top: 3px; font-family: var(--mono);
+}
 </style>
 </head>
 <body>
@@ -844,10 +945,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 情境模擬（決賽展演用）                          -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-scenario">
-      <div class="card">
+      <div class="card" style="overflow:hidden">
         <div class="card-header">
           <div>
-            <div class="card-title">劇本進度</div>
+            <div class="card-title">颱風夜情境模擬</div>
             <div class="card-subtitle" id="scn-progress-label">尚未開始</div>
           </div>
           <div style="display:flex;gap:8px">
@@ -857,22 +958,34 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <button class="btn btn-danger btn-sm" onclick="scnReset()">🔄 重置</button>
           </div>
         </div>
-        <div style="display:flex;gap:20px;align-items:center;padding:10px 18px;border-bottom:1px solid var(--border);flex-wrap:wrap">
-          <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px">颱風強度倍率
-            <input id="scn-intensity" type="number" step="0.1" min="0.3" max="2.0" value="1.0" class="form-control" style="width:64px;padding:2px 6px">
-          </label>
-          <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px">志工出勤量倍率
-            <input id="scn-capacity" type="number" step="0.25" min="0.25" max="4.0" value="1.0" class="form-control" style="width:64px;padding:2px 6px">
-          </label>
-          <label style="font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px">模擬鄰居數
-            <input id="scn-population" type="number" step="1" min="1" max="30" value="7" class="form-control" style="width:64px;padding:2px 6px">
-          </label>
-          <span style="font-size:11px;color:var(--muted)">— 調整後按「開始情境」套用，同一套風場/派遣演算法重新計算</span>
+
+        <div class="scn-progress-track"><div class="scn-progress-fill" id="scn-progress-fill" style="width:0%"></div></div>
+
+        <div class="scn-stats" id="scn-stats"></div>
+
+        <div class="scn-params">
+          <div class="scn-param">
+            <div class="scn-param-label"><span>颱風強度倍率</span><span id="scn-intensity-val">1.0×</span></div>
+            <input id="scn-intensity" type="range" step="0.1" min="0.3" max="1.3" value="1.0"
+                   oninput="document.getElementById('scn-intensity-val').textContent=(+this.value).toFixed(1)+'×'">
+          </div>
+          <div class="scn-param">
+            <div class="scn-param-label"><span>志工出勤量倍率</span><span id="scn-capacity-val">1.0×</span></div>
+            <input id="scn-capacity" type="range" step="0.25" min="0.25" max="4.0" value="1.0"
+                   oninput="document.getElementById('scn-capacity-val').textContent=(+this.value).toFixed(2)+'×'">
+          </div>
+          <div class="scn-param">
+            <div class="scn-param-label"><span>模擬鄰居數</span><span id="scn-population-val">7</span></div>
+            <input id="scn-population" type="range" step="1" min="1" max="20" value="7"
+                   oninput="document.getElementById('scn-population-val').textContent=this.value">
+          </div>
         </div>
-        <div class="card-body">
-          <div id="scn-steps" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
-          <div class="card-title" style="font-size:12px;margin-bottom:8px">執行紀錄</div>
-          <div id="scn-log" style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-family:var(--mono);max-height:320px;overflow-y:auto"></div>
+
+        <div class="scn-stepper" id="scn-steps"></div>
+
+        <div class="card-body" style="border-top:1px solid var(--border)">
+          <div class="card-title" style="font-size:12px;margin-bottom:10px">執行紀錄</div>
+          <div id="scn-log" style="display:flex;flex-direction:column;gap:10px;max-height:320px;overflow-y:auto"></div>
         </div>
       </div>
     </div>
@@ -2230,27 +2343,62 @@ async function scnLoadStatus() {
 }
 
 function scnRender(st) {
+  const total = st.total;
+  const pct = st.step < 0 ? 0 : Math.round(((st.step + 1) / total) * 100);
+  document.getElementById('scn-progress-fill').style.width = pct + '%';
+
   document.getElementById('scn-progress-label').textContent =
     st.step < 0 ? '尚未開始'
-    : st.finished ? `已完成（第 ${st.step+1}/${st.total} 步）`
-    : `進行中（第 ${st.step+1}/${st.total} 步）`;
+    : st.finished ? `已完成（第 ${st.step+1}/${total} 步）`
+    : `進行中（第 ${st.step+1}/${total} 步）`;
 
-  document.getElementById('scn-steps').innerHTML = st.steps.map(s => `
-    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:3px;background:${s.done?'rgba(45,212,167,.08)':'rgba(255,255,255,.02)'};border:1px solid ${s.done?'rgba(45,212,167,.3)':'var(--border)'}">
-      <span style="font-size:16px">${s.done ? '✅' : '⬜'}</span>
-      <div>
-        <div style="font-weight:700;font-size:13px">${esc(s.title)}</div>
-        <div style="font-size:11px;color:var(--text-dim)">${esc(s.desc)}</div>
-      </div>
-    </div>`).join('');
+  const curStep = st.steps[Math.max(0, Math.min(st.step, total - 1))];
+  const windMatch = curStep ? curStep.desc.match(/([\d.]+)\s*m\/s/) : null;
+  const wind = windMatch ? parseFloat(windMatch[1]) : null;
+  const category = curStep ? (curStep.title.split('·')[1] || '').trim() : '—';
+  const windCls = wind == null ? '' : wind >= 32.7 ? 'danger' : wind >= 17.2 ? 'warn' : 'ok';
+  const params = st.params || { intensity_scale: 1, capacity_scale: 1, population_size: 7 };
+
+  document.getElementById('scn-stats').innerHTML = `
+    <div class="scn-stat">
+      <div class="scn-stat-label">情境進度</div>
+      <div class="scn-stat-value">${st.step < 0 ? 0 : st.step + 1}<span style="font-size:13px;color:var(--muted)"> / ${total}</span></div>
+      <div class="scn-stat-sub">${st.finished ? '已結束' : st.autoplay ? '⏵ 自動播放中' : '待推進'}</div>
+    </div>
+    <div class="scn-stat">
+      <div class="scn-stat-label">當前風速</div>
+      <div class="scn-stat-value ${windCls}">${wind != null ? wind.toFixed(1) : '—'}<span style="font-size:12px;color:var(--muted)"> m/s</span></div>
+      <div class="scn-stat-sub">${esc(category) || '尚未開始'}</div>
+    </div>
+    <div class="scn-stat">
+      <div class="scn-stat-label">情境參數</div>
+      <div class="scn-stat-value">${(+params.intensity_scale).toFixed(1)}×</div>
+      <div class="scn-stat-sub">志工出勤 ${(+params.capacity_scale).toFixed(2)}×</div>
+    </div>
+    <div class="scn-stat">
+      <div class="scn-stat-label">模擬人口</div>
+      <div class="scn-stat-value">${params.population_size}<span style="font-size:12px;color:var(--muted)"> 人</span></div>
+      <div class="scn-stat-sub">花東縱谷真實鄉鎮</div>
+    </div>
+  `;
+
+  document.getElementById('scn-steps').innerHTML = st.steps.map((s, i) => {
+    const cls = s.done ? 'done' : (!st.finished && i === st.step + 1 ? 'current' : '');
+    return `
+      <div class="scn-step ${cls}">
+        <div class="scn-step-dot">${s.done ? '✓' : i + 1}</div>
+        <div class="scn-step-title">${esc(s.title.split('·')[0].trim())}</div>
+        <div class="scn-step-desc">${esc(s.desc)}</div>
+      </div>`;
+  }).join('');
 
   document.getElementById('scn-log').innerHTML = st.log.length
     ? st.log.slice().reverse().map(l => `
-        <div style="padding:8px 10px;background:rgba(255,255,255,.02);border-radius:3px;border:1px solid var(--border)">
-          <span style="color:var(--muted)">[${esc(l.at)}]</span> <strong>${esc(l.title)}</strong><br>
-          <span style="white-space:pre-line;color:var(--text-dim)">${esc(l.message)}</span>
+        <div class="scn-log-entry">
+          <span class="scn-log-time">${esc(l.at)}</span><span class="scn-log-title">${esc(l.title)}</span>
+          <div class="scn-log-body">${esc(l.message)}</div>
         </div>`).join('')
-    : '<div style="color:var(--muted)">尚無紀錄</div>';
+    : '<div style="color:var(--muted);font-size:12px">尚無紀錄</div>';
 
   const autoBtn = document.getElementById('scn-autoplay-btn');
   autoBtn.textContent = st.autoplay ? '⏸ 停止自動播放' : '⏵ 自動播放';
@@ -2259,9 +2407,15 @@ function scnRender(st) {
   document.getElementById('scn-next-btn').disabled = st.finished;
 
   if (st.params) {
-    document.getElementById('scn-intensity').value = st.params.intensity_scale;
-    document.getElementById('scn-capacity').value = st.params.capacity_scale;
-    document.getElementById('scn-population').value = st.params.population_size;
+    const iEl = document.getElementById('scn-intensity');
+    const cEl = document.getElementById('scn-capacity');
+    const pEl = document.getElementById('scn-population');
+    iEl.value = st.params.intensity_scale;
+    cEl.value = st.params.capacity_scale;
+    pEl.value = st.params.population_size;
+    document.getElementById('scn-intensity-val').textContent = (+st.params.intensity_scale).toFixed(1) + '×';
+    document.getElementById('scn-capacity-val').textContent = (+st.params.capacity_scale).toFixed(2) + '×';
+    document.getElementById('scn-population-val').textContent = st.params.population_size;
   }
 }
 
