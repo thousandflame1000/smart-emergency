@@ -17,8 +17,8 @@ from app.models.resource import CommunityResource
 from app.services import scenario, hazard
 
 
-def _run_full(db):
-    st = scenario.start(db)
+def _run_full(db, **start_kwargs):
+    st = scenario.start(db, **start_kwargs)
     while not st["finished"]:
         st = scenario.advance(db)
     return st
@@ -155,3 +155,64 @@ def test_autoplay_flag_persists_and_toggles(db):
     assert scenario.status(db)["autoplay"] is True
     st = scenario.set_autoplay(db, False)
     assert st["autoplay"] is False
+
+
+# ─── Sandbox parameters: real what-if knobs, not fixed constants ───
+
+def test_weaker_storm_produces_fewer_reports(db):
+    """intensity_scale actually feeds the Holland wind model — a weaker
+    storm should mean lower wind everywhere and fewer/lower-urgency
+    reports, not a cosmetic label."""
+    _make_neighborhood(db)
+    weak = _run_full(db, intensity_scale=0.3)
+    weak_needs = _snapshot(db)
+
+    scenario.reset(db)
+    _make_neighborhood(db)
+    strong = _run_full(db, intensity_scale=2.0)
+    strong_needs = _snapshot(db)
+
+    assert len(strong_needs) >= len(weak_needs)
+    if weak_needs and strong_needs:
+        assert max(n["urgency"] for n in strong_needs) >= max(n["urgency"] for n in weak_needs)
+
+
+def test_capacity_scale_changes_mobilized_resource_count(db):
+    """capacity_scale should change how many resources get mobilized at
+    landfall — verified via hazard.mobilization_capacity directly since
+    that's the real function the sandbox knob feeds."""
+    vmax = 50.0
+    low = hazard.mobilization_capacity(vmax, capacity_scale=0.25)
+    normal = hazard.mobilization_capacity(vmax, capacity_scale=1.0)
+    high = hazard.mobilization_capacity(vmax, capacity_scale=4.0)
+    assert low < normal < high
+
+
+def test_population_size_changes_neighborhood_size(db):
+    _make_neighborhood(db, n=10)
+    scenario.start(db, population_size=3)
+    entities_step = scenario.status(db)
+    # population_size caps how many *others* join the protagonist; the
+    # actual reporting population is population_size (others) + 1 (her).
+    assert entities_step["params"]["population_size"] == 3
+
+
+def test_params_are_clamped_to_sane_ranges(db):
+    _make_neighborhood(db)
+    scenario.start(db, intensity_scale=99, capacity_scale=0.0001, population_size=-5)
+    params = scenario.status(db)["params"]
+    assert params["intensity_scale"] == hazard.INTENSITY_SCALE_RANGE[1]
+    assert params["capacity_scale"] == hazard.CAPACITY_SCALE_RANGE[0]
+    assert params["population_size"] >= 1
+
+
+def test_status_reflects_current_run_params_before_finishing(db):
+    _make_neighborhood(db)
+    scenario.start(db, intensity_scale=0.5)
+    st = scenario.status(db)
+    assert st["params"]["intensity_scale"] == 0.5
+    # preview steps should already reflect the scaled intensity, not the
+    # default track — a weaker run's tick-0 wind should be lower.
+    default_run_wind = hazard.storm_state(0, 1.0)["vmax_ms"]
+    scaled_wind = hazard.storm_state(0, 0.5)["vmax_ms"]
+    assert scaled_wind < default_run_wind

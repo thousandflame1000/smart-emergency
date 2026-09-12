@@ -14,8 +14,10 @@ def get_status(db=Depends(get_db)):
 
 
 @router.post("/start")
-def start(db=Depends(get_db)):
-    return scenario.start(db)
+def start(intensity_scale: float = 1.0, capacity_scale: float = 1.0,
+          population_size: int | None = None, db=Depends(get_db)):
+    return scenario.start(db, intensity_scale=intensity_scale,
+                           capacity_scale=capacity_scale, population_size=population_size)
 
 
 @router.post("/advance")

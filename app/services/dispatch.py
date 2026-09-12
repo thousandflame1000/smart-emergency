@@ -57,6 +57,7 @@ from typing import NamedTuple
 from sqlalchemy.orm import Session
 
 from app.services.hungarian import min_cost_assignment
+from app.services import road_network
 
 from app.database import SessionLocal
 from app.models.need import CommunityNeed
@@ -186,6 +187,23 @@ def _haversine(lat1, lng1, lat2, lng2) -> float:
     return R * 2 * math.asin(math.sqrt(a))
 
 
+def _distance_km(lat1, lng1, lat2, lng2) -> float:
+    """
+    Real road-network distance where available (app/services/road_network.py
+    — currently covers the Hua-Dong/east-coast corridor), falling back to
+    straight-line haversine everywhere else (e.g. Taichung, where no road
+    graph is built). Straight-line distance across mountainous terrain
+    systematically understates real travel distance/time; using the real
+    road graph where we have one is a materially more honest number to
+    score dispatch decisions on, not just to display.
+    """
+    if None not in (lat1, lng1, lat2, lng2):
+        road_d = road_network.road_distance_km(lat1, lng1, lat2, lng2)
+        if road_d is not None:
+            return road_d
+    return _haversine(lat1, lng1, lat2, lng2)
+
+
 # ──────────────────────────────────────────────────────────
 # 候選物資結構
 # ──────────────────────────────────────────────────────────
@@ -277,7 +295,7 @@ def _collect_from_resources(
     candidates = []
     for r in res_list:
         affinity = type_aff.get(r.resource_type, 0.0)
-        dist = _haversine(need.lat, need.lng, r.lat, r.lng)
+        dist = _distance_km(need.lat, need.lng, r.lat, r.lng)
         vol_load = volunteer_load.get(str(r.owner_id), 0)
         b = _score_breakdown(need.urgency, affinity, dist, vol_load, vulnerability, wait_pts)
         if b is None:
@@ -333,7 +351,7 @@ def _collect_from_points(
         if best_aff == 0.0:
             continue
 
-        dist = _haversine(need.lat, need.lng, pt.lat, pt.lng)
+        dist = _distance_km(need.lat, need.lng, pt.lat, pt.lng)
         # 資源點無志工負荷問題
         b = _score_breakdown(need.urgency, best_aff, dist, 0, vulnerability, wait_pts)
         if b is None:
@@ -554,7 +572,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
         except Exception:
             pass
 
-    dist = _haversine(need.lat, need.lng, resource.lat, resource.lng)
+    dist = _distance_km(need.lat, need.lng, resource.lat, resource.lng)
     return {
         "message":            "媒合成功",
         "need_id":            need_id,

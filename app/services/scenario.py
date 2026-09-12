@@ -21,18 +21,25 @@ from app.models.alert import Alert
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.config import SystemConfig
-from app.services import dispatch, hazard
+from app.services import dispatch, hazard, road_network
 
 SCENARIO_TAG = "[TYPHOON_SIM]"
 SCENARIO_NEED_TYPE = "demo_water"
 POPULATION_SIZE = 7
-BASE_LAT, BASE_LNG = 24.150, 120.670
+# Protagonist's home base: Yuli (玉里), a real Huatung Valley town on the
+# road network, inland of Chenggong (the storm's real landfall point) —
+# see app/services/road_network.py and hazard.py's track.
+BASE_LAT, BASE_LNG = road_network.NODES["yuli"]
+# Real towns along the corridor to scatter the simulated neighborhood
+# across — gives genuine geographic spread that the road network (not
+# straight-line distance) actually has to route between.
+_NEIGHBOR_TOWNS = ["ruisui", "fuli", "chishang", "guanshan", "changbin", "chenggong"]
 
 # 每次改動 entities dict 的欄位結構就要 bump 這個版本號。舊版本留在
 # SystemConfig 裡的殘留狀態（例如有人在改版前就點過「開始情境」）
 # 欄位完全不同，硬用新程式碼的假設去解讀會直接壞掉——版本不符就當
 # 作沒開始過，不要嘗試相容解析。
-SCENARIO_SCHEMA_VERSION = 2
+SCENARIO_SCHEMA_VERSION = 3
 
 
 def _cfg_get(db: Session, key: str, default: str) -> str:
@@ -91,45 +98,39 @@ def _stable_key(u: User) -> str:
     return u.address or u.name or str(u.id)
 
 
-NEIGHBORHOOD_RADIUS_KM = 3.0  # matches dispatch.URGENCY_MAX_KM's tightest
-                              # tier (urgency 5 -> 2km) with headroom; a
-                              # city-spanning population would violate the
-                              # platform's own "neighborhood watch" scope
-                              # and make its own dispatch radius unreachable.
-
-
-def _select_population(db: Session, protagonist):
-    all_elderly = (
-        db.query(User)
-        .filter(User.role_filter("elderly"), User.id != protagonist.id, User.is_active == True)
-        .all()
-    )
-    candidates = [
-        u for u in all_elderly
-        if u.lat is not None and u.lng is not None
-        and hazard.haversine_km(protagonist.lat, protagonist.lng, u.lat, u.lng) <= NEIGHBORHOOD_RADIUS_KM
-    ]
-    others = sorted(candidates, key=_stable_key)[:POPULATION_SIZE]
-
-    created_ids = []
-    if len(others) < 4:
-        base_lat = protagonist.lat if protagonist.lat is not None else BASE_LAT
-        base_lng = protagonist.lng if protagonist.lng is not None else BASE_LNG
-        for i in range(4 - len(others)):
-            u = User(name=f"社區長者{i+1}（情境模擬）", roles=["elderly"],
-                      address=f"情境模擬地址{i+1}（{SCENARIO_TAG}）",
-                      lat=base_lat + (i - 2) * 0.01, lng=base_lng + (i % 3) * 0.01,
-                      is_active=True)
-            db.add(u)
-            others.append(u)
-        db.commit()
-        created_ids = [str(u.id) for u in others[-(4 - len(candidates)):]]
+def _select_population(db: Session, protagonist, population_size: int):
+    """
+    Scatters a synthetic neighborhood across real Huatung Valley towns
+    (app/services/road_network.py) — decoupled from seed_rich_demo.py's
+    Taichung dataset on purpose: that data models a different, unrelated
+    community, and reusing it here would put the "population" hundreds
+    of km from where this storm actually is.
+    """
+    others = []
+    for i in range(population_size):
+        town = _NEIGHBOR_TOWNS[i % len(_NEIGHBOR_TOWNS)]
+        lat, lng = road_network.NODES[town]
+        jitter = (i // len(_NEIGHBOR_TOWNS)) * 0.004
+        # Address must be unique per person, not just per town — it's the
+        # RNG/sort stable key (_stable_key); a shared address across
+        # several residents of the same town makes their per-tick dice
+        # rolls identical and their sort order tie-broken by DB row order
+        # (not guaranteed stable across a reset+rerun), breaking
+        # reproducibility.
+        u = User(name=f"{town}居民{i+1}（情境模擬）", roles=["elderly"],
+                  address=f"{town}{i+1}號（{SCENARIO_TAG}）",
+                  lat=lat + jitter, lng=lng + jitter, is_active=True)
+        db.add(u)
+        others.append(u)
+    db.commit()
+    created_ids = [str(u.id) for u in others]
     return others, created_ids
 
 
 def _init_population(db: Session, entities: dict) -> dict:
     protagonist, p_created = _get_or_create_protagonist(db)
-    others, created_ids = _select_population(db, protagonist)
+    population_size = entities.get("population_size", POPULATION_SIZE)
+    others, created_ids = _select_population(db, protagonist, population_size)
     entities["protagonist"] = str(protagonist.id)
     if p_created:
         entities["protagonist_created"] = "1"
@@ -143,7 +144,9 @@ def _init_population(db: Session, entities: dict) -> dict:
 
 
 def _run_tick(db: Session, tick: int, entities: dict):
-    state = hazard.storm_state(tick)
+    intensity_scale = entities.get("intensity_scale", 1.0)
+    capacity_scale = entities.get("capacity_scale", 1.0)
+    state = hazard.storm_state(tick, intensity_scale)
     reported = set(entities.get("reported", []))
     ids = ([entities["protagonist"]] if entities.get("protagonist") else []) + entities.get("population", [])
     users = sorted(db.query(User).filter(User.id.in_(ids)).all(), key=_stable_key) if ids else []
@@ -155,7 +158,7 @@ def _run_tick(db: Session, tick: int, entities: dict):
         uid = str(u.id)
         if uid in reported:
             continue
-        v_ms = hazard.wind_at(tick, u.lat or state["lat"], u.lng or state["lng"])
+        v_ms = hazard.wind_at(tick, u.lat or state["lat"], u.lng or state["lng"], intensity_scale)
         vuln = dispatch._vulnerability_pts(u.id, db)
         p = hazard.report_probability(v_ms, vuln)
         # Independent per-person RNG keyed by (tick, stable identity) —
@@ -180,20 +183,42 @@ def _run_tick(db: Session, tick: int, entities: dict):
     entities["reported"] = list(reported)
 
     if tick == hazard.LANDFALL_TICK and not entities.get("resources"):
-        # Anchor mobilized resources to the population's centroid, not an
-        # arbitrary fixed point — otherwise the tight 2km radius on
-        # urgency-5 needs (dispatch.URGENCY_MAX_KM) rejects people purely
-        # for being far from wherever we happened to place volunteers,
-        # which has nothing to do with vulnerability.
-        located = [u for u in users if u.lat is not None and u.lng is not None]
-        center_lat = sum(u.lat for u in located) / len(located) if located else BASE_LAT
-        center_lng = sum(u.lng for u in located) / len(located) if located else BASE_LNG
+        # Anchor each mobilized resource to an actual reported need's
+        # location — real relief mobilization sends volunteers toward
+        # where help was actually requested, not to an abstract centroid
+        # of the whole population. With real towns tens of km apart along
+        # the corridor, a centroid lands nowhere near anyone and every
+        # need gets rejected by the urgency-5 2km dispatch radius
+        # (dispatch.URGENCY_MAX_KM) regardless of vulnerability — a real
+        # bug this design avoids structurally, not by loosening the cap.
+        reported_locs = [(u.lat, u.lng) for u in users
+                          if str(u.id) in reported and u.lat is not None and u.lng is not None]
+        if not reported_locs:
+            reported_locs = [(BASE_LAT, BASE_LNG)]
+        else:
+            # Real relief planners stage supplies where they reach the
+            # most people, not at an arbitrary reported location — sort
+            # candidate anchors by how many other reports are within a
+            # realistic catchment radius (real road distance), so scarce
+            # resources land somewhere multiple needs can actually
+            # compete for them, not wherever happened to sort first.
+            COVERAGE_RADIUS_KM = 8.0  # matches dispatch.URGENCY_MAX_KM's urgency-3 tier
 
-        n = hazard.mobilization_capacity(state["vmax_ms"])
+            def _dist(a, b):
+                d = road_network.road_distance_km(*a, *b)
+                return d if d is not None else hazard.haversine_km(*a, *b)
+
+            def _coverage(loc):
+                return sum(1 for other in reported_locs if _dist(loc, other) <= COVERAGE_RADIUS_KM)
+
+            reported_locs = sorted(reported_locs, key=_coverage, reverse=True)
+
+        n = hazard.mobilization_capacity(state["vmax_ms"], capacity_scale)
         for i in range(n):
+            anchor_lat, anchor_lng = reported_locs[i % len(reported_locs)]
             vol = User(name=f"颱風夜志工{i+1}（情境模擬）", roles=["volunteer"],
                         address=f"情境模擬地址（{SCENARIO_TAG}）",
-                        lat=center_lat + i * 0.001, lng=center_lng + i * 0.001, is_active=True)
+                        lat=anchor_lat + i * 0.0005, lng=anchor_lng + i * 0.0005, is_active=True)
             db.add(vol)
             db.commit()
             res = CommunityResource(
@@ -217,11 +242,14 @@ def _run_tick(db: Session, tick: int, entities: dict):
 
 
 def status(db: Session) -> dict:
-    step, log, _ = _load(db)
+    step, log, entities = _load(db)
+    intensity_scale = entities.get("intensity_scale", 1.0)
+    capacity_scale = entities.get("capacity_scale", 1.0)
+    population_size = entities.get("population_size", POPULATION_SIZE)
     autoplay = _cfg_get(db, "scenario_autoplay", "0") == "1"
     steps = []
     for i in range(hazard.TOTAL_TICKS):
-        st = hazard.storm_state(i)
+        st = hazard.storm_state(i, intensity_scale)
         steps.append({
             "title": f"Tick {i} · {st['category']}",
             "desc": f"風速 {st['vmax_ms']} m/s（{st['beaufort']} 級風）",
@@ -234,11 +262,25 @@ def status(db: Session) -> dict:
         "autoplay": autoplay,
         "log": log,
         "steps": steps,
+        "params": {
+            "intensity_scale": intensity_scale,
+            "capacity_scale": capacity_scale,
+            "population_size": population_size,
+            "intensity_scale_range": list(hazard.INTENSITY_SCALE_RANGE),
+            "capacity_scale_range": list(hazard.CAPACITY_SCALE_RANGE),
+        },
     }
 
 
-def start(db: Session) -> dict:
+def start(db: Session, intensity_scale: float = 1.0, capacity_scale: float = 1.0,
+          population_size: int | None = None) -> dict:
     reset(db)
+    entities = {
+        "intensity_scale": min(max(intensity_scale, hazard.INTENSITY_SCALE_RANGE[0]), hazard.INTENSITY_SCALE_RANGE[1]),
+        "capacity_scale": min(max(capacity_scale, hazard.CAPACITY_SCALE_RANGE[0]), hazard.CAPACITY_SCALE_RANGE[1]),
+        "population_size": min(max(population_size or POPULATION_SIZE, 1), 30),
+    }
+    _save(db, -1, [], entities)
     return advance(db)
 
 

@@ -33,7 +33,13 @@ def haversine_km(lat1, lng1, lat2, lng2) -> float:
 
 def holland_wind_speed(vmax_ms: float, rmax_km: float, r_km: float, b: float = 1.5) -> float:
     """Holland (1980) parametric wind profile. b is the peakedness
-    parameter (literature range ~1.0-2.5); r_km must be > 0."""
+    parameter (literature range ~1.0-2.5); r_km must be > 0.
+    Known limitation: this basic 2-parameter form is most accurate within
+    a few Rmax of the center; at r >> Rmax (several hundred km) it tends
+    to over-predict compared to real storms, which lack the idealized
+    circular symmetry assumed here. We use it anyway for its simplicity
+    and because it's the standard textbook reference model — not claiming
+    forecast-grade accuracy at long range."""
     r_km = max(r_km, 0.1)
     ratio = (rmax_km / r_km) ** b
     return math.sqrt(max(vmax_ms ** 2 * ratio * math.exp(1 - ratio), 0.0))
@@ -99,16 +105,21 @@ def urgency_from_risk(v_ms: float, vulnerability_pts: float, max_vuln: float = 2
     return 1
 
 
-def mobilization_capacity(vmax_ms: float) -> int:
+def mobilization_capacity(vmax_ms: float, capacity_scale: float = 1.0) -> int:
     """How many resource units can be mobilized while the storm is at
     this intensity. Modeled on the real operational logic behind
     Taiwan's wind-based work/school suspension thresholds: the more
-    dangerous conditions are, the fewer volunteers can safely respond."""
+    dangerous conditions are, the fewer volunteers can safely respond.
+    capacity_scale is a sandbox knob on top of that ("what if we had
+    more/fewer volunteers to begin with") — applied after the
+    wind-based baseline, not instead of it."""
+    capacity_scale = min(max(capacity_scale, CAPACITY_SCALE_RANGE[0]), CAPACITY_SCALE_RANGE[1])
     b = beaufort_scale(vmax_ms)
-    if b >= 12: return 1
-    if b >= 10: return 2
-    if b >= 8:  return 4
-    return 8
+    if b >= 12: base = 1
+    elif b >= 10: base = 2
+    elif b >= 8: base = 4
+    else: base = 8
+    return max(1, round(base * capacity_scale))
 
 
 TICK_HOURS = 3
@@ -121,23 +132,51 @@ TOTAL_TICKS = 6
 _PRE_LANDFALL = [
     (21.80, 123.00, 67.0, 50.0),
     (22.60, 122.10, 63.0, 52.0),
-    (23.10, 121.37, 51.1, 55.0),  # landfall
+    (23.10, 121.37, 51.1, 55.0),  # landfall at Chenggong (成功)
 ]
-# Post-landfall heading (NW, crossing the island toward the strait) — our
-# own interpolation, not part of the reported best track.
-_POST_LANDFALL_DELTA = (0.30, -0.50)
+# Post-landfall heading: north along the coast while drifting inland into
+# the Huatung Valley — our own interpolation, not part of the reported
+# best track, but it keeps the storm within the road network's real
+# coverage (app/services/road_network.py) instead of crossing the whole
+# island.
+_POST_LANDFALL_DELTA = (0.12, -0.06)
+
+# Real geography: the Coastal Range (海岸山脈) separates the narrow east
+# coast (where Chenggong sits) from the Huatung Valley (where Yuli/Ruisui
+# sit) — a second, smaller range than the main Central Mountain Range
+# further west. Mountains disrupting a cyclone's circulation and
+# accelerating its decay is a well-documented general effect; the exact
+# multiplier below is our own reasonable estimate, not fit to a specific
+# study.
+COASTAL_RANGE_CROSSING_LNG = 121.30
+TERRAIN_DECAY_MULTIPLIER = 1.6
 
 
-def storm_state(tick: int) -> dict:
-    """Deterministic storm position/intensity at a given tick."""
+INTENSITY_SCALE_RANGE = (0.3, 1.3)  # upper bound keeps peak Vmax within the
+# strongest tropical cyclone ever reliably recorded (~95 m/s, Patricia 2015)
+CAPACITY_SCALE_RANGE = (0.25, 4.0)
+
+
+def storm_state(tick: int, intensity_scale: float = 1.0) -> dict:
+    """
+    Deterministic storm position/intensity at a given tick.
+    intensity_scale multiplies Vmax at every waypoint and at landfall
+    (before decay) — a real sandbox knob ("what if this storm were X%
+    as strong"), not a fudge on the output: the Holland/Kaplan-DeMaria
+    formulas still run on whatever Vmax comes out of this scaling.
+    """
+    intensity_scale = min(max(intensity_scale, INTENSITY_SCALE_RANGE[0]), INTENSITY_SCALE_RANGE[1])
     if tick <= LANDFALL_TICK:
         lat, lng, vmax, rmax = _PRE_LANDFALL[tick]
+        vmax *= intensity_scale
     else:
         steps = tick - LANDFALL_TICK
         lat = _PRE_LANDFALL[LANDFALL_TICK][0] + _POST_LANDFALL_DELTA[0] * steps
         lng = _PRE_LANDFALL[LANDFALL_TICK][1] + _POST_LANDFALL_DELTA[1] * steps
         hours = steps * TICK_HOURS
-        vmax = kaplan_demaria_decay(_PRE_LANDFALL[LANDFALL_TICK][2], hours)
+        terrain_mult = TERRAIN_DECAY_MULTIPLIER if lng < COASTAL_RANGE_CROSSING_LNG else 1.0
+        vmax = kaplan_demaria_decay(_PRE_LANDFALL[LANDFALL_TICK][2] * intensity_scale, hours,
+                                     decay_per_hour=0.08 * terrain_mult)
         rmax = _PRE_LANDFALL[LANDFALL_TICK][3]
     return {
         "tick": tick, "lat": lat, "lng": lng, "vmax_ms": round(vmax, 1),
@@ -146,7 +185,7 @@ def storm_state(tick: int) -> dict:
     }
 
 
-def wind_at(tick: int, lat: float, lng: float) -> float:
-    state = storm_state(tick)
+def wind_at(tick: int, lat: float, lng: float, intensity_scale: float = 1.0) -> float:
+    state = storm_state(tick, intensity_scale)
     r = haversine_km(state["lat"], state["lng"], lat, lng)
     return holland_wind_speed(state["vmax_ms"], state["rmax_km"], r)
