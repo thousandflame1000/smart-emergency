@@ -52,7 +52,7 @@ Layer 2（資源點，固定設施、非稀缺）維持獨立逐筆比對，因�
 """
 import json
 import math
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 from sqlalchemy.orm import Session
 
@@ -102,6 +102,16 @@ WAIT_PTS_PER_HOUR = 1.0
 WAIT_PTS_CAP = 15.0
 
 
+def _utcnow_naive() -> datetime:
+    """Current UTC time as a naive datetime.
+
+    SQLAlchemy model timestamps in this project are naive UTC values from
+    database defaults. Keep arithmetic in that same shape while avoiding
+    the deprecated datetime.utcnow() API.
+    """
+    return datetime.now(UTC).replace(tzinfo=None)
+
+
 def _log_dispatch_event(
     db: Session,
     action: str,
@@ -134,7 +144,7 @@ def _log_dispatch_event(
 def _wait_pts(need: CommunityNeed) -> float:
     if not need.created_at:
         return 0.0
-    hours = (datetime.utcnow() - need.created_at).total_seconds() / 3600
+    hours = (_utcnow_naive() - need.created_at).total_seconds() / 3600
     return min(max(hours, 0.0) * WAIT_PTS_PER_HOUR, WAIT_PTS_CAP)
 
 
@@ -165,7 +175,7 @@ def _vulnerability_pts(requester_id, db: Session) -> float:
     優先權不是對方在 LINE 上臨時描述出來的，而是平時日常打卡
     累積下來的真實紀錄。
     """
-    cutoff = datetime.utcnow().date() - timedelta(days=VULNERABILITY_LOOKBACK_DAYS)
+    cutoff = _utcnow_naive().date() - timedelta(days=VULNERABILITY_LOOKBACK_DAYS)
 
     risk_checkins = (
         db.query(DailyCheckin)

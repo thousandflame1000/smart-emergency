@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import FastAPI
@@ -11,6 +11,10 @@ from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.user import User
 from app.routers import resources as resources_router
+
+
+def _utcnow_naive():
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 @pytest.fixture
@@ -52,7 +56,7 @@ def _seed_need_and_resource(db):
 
 def test_need_dispatch_events_endpoint_returns_latest_first(db, client):
     need_id, resource_id = _seed_need_and_resource(db)
-    now = datetime.utcnow()
+    now = _utcnow_naive()
     db.add_all([
         DispatchEvent(
             action="propose_dispatch",

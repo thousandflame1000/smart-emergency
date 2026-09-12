@@ -4,13 +4,17 @@
 兩者都是研究背景任務找到的低成本、有文獻依據的改動
 （見 RESEARCH_disaster_logistics.md 第 7 節）。
 """
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from app.database import SessionLocal
 from app.models.user import User
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.services import dispatch
+
+
+def _utcnow_naive():
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 def _make_pair(db, need_created_at):
@@ -30,7 +34,7 @@ def _make_pair(db, need_created_at):
 
 
 def test_longer_wait_increases_score(db):
-    now = datetime.utcnow()
+    now = _utcnow_naive()
     need_fresh = _make_pair(db, now)
     need_old = _make_pair(db, now - timedelta(hours=10))
 
@@ -44,14 +48,14 @@ def test_longer_wait_increases_score(db):
 
 
 def test_wait_pts_is_capped(db):
-    now = datetime.utcnow()
+    now = _utcnow_naive()
     need = _make_pair(db, now - timedelta(hours=1000))  # 遠超上限
     result = dispatch.preview_candidates(str(need.id), db)
     assert result["candidates"][0]["breakdown"]["wait_pts"] == dispatch.WAIT_PTS_CAP
 
 
 def test_preview_candidates_exposes_score_breakdown(db):
-    need = _make_pair(db, datetime.utcnow())
+    need = _make_pair(db, _utcnow_naive())
     result = dispatch.preview_candidates(str(need.id), db)
     breakdown = result["candidates"][0]["breakdown"]
     for key in ("urgency_pts", "vulnerability_pts", "affinity_pts", "wait_pts",

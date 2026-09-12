@@ -1,8 +1,10 @@
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
+from pydantic import ConfigDict, field_validator
 
 
 class Settings(BaseSettings):
+    model_config = ConfigDict(env_file=".env", env_file_encoding="utf-8")
+
     # Database
     DATABASE_URL: str
 
@@ -25,10 +27,6 @@ class Settings(BaseSettings):
     @classmethod
     def strip_whitespace(cls, v):
         return v.strip() if isinstance(v, str) else v
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
 
 
 settings = Settings()
