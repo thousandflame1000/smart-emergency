@@ -239,15 +239,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .notice-icon { flex-shrink: 0; font-size: 13px; }
 
 /* ── KB stats ── */
-.stat-chips { display: flex; gap: 1px; flex-wrap: wrap; margin-bottom: 16px;
-              background: var(--border); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.stat-chip {
-  background: var(--card);
-  padding: 12px 18px; min-width: 110px;
-  text-align: center;
-}
-.stat-chip-val { font-size: 26px; font-weight: 800; line-height: 1; font-family: var(--mono); }
-.stat-chip-lbl { font-size: 10px; color: var(--muted); margin-top: 4px; text-transform: uppercase; letter-spacing: .05em; }
 
 /* ── Category chips ── */
 .cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -353,26 +344,32 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .factor-name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
 .factor-desc { font-size: 11px; color: var(--muted); line-height: 1.5; }
 
-/* ── Scenario sandbox: stat strip ── */
+/* ── Stat strip (scenario: flush inside its card; stat-strip: standalone
+   boxed component used above other pages' tables) ── */
 .scn-stats {
   display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
   gap: 1px; background: var(--border);
 }
-.scn-stat {
+.stat-strip {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 1px; background: var(--border); margin-bottom: 14px; border-radius: var(--radius);
+  overflow: hidden; border: 1px solid var(--border);
+}
+.scn-stat, .stat-tile {
   background: var(--card); padding: 14px 16px;
 }
-.scn-stat-label {
+.scn-stat-label, .stat-tile-label {
   font-size: 10px; color: var(--muted); text-transform: uppercase;
   letter-spacing: .06em; margin-bottom: 6px;
 }
-.scn-stat-value {
+.scn-stat-value, .stat-tile-value {
   font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--text);
   line-height: 1.1;
 }
-.scn-stat-value.warn { color: var(--warning); }
-.scn-stat-value.danger { color: var(--danger); }
-.scn-stat-value.ok { color: var(--success); }
-.scn-stat-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 3px; }
+.scn-stat-value.warn, .stat-tile-value.warn { color: var(--warning); }
+.scn-stat-value.danger, .stat-tile-value.danger { color: var(--danger); }
+.scn-stat-value.ok, .stat-tile-value.ok { color: var(--success); }
+.scn-stat-sub, .stat-tile-sub { font-size: 10.5px; color: var(--text-dim); margin-top: 3px; }
 
 /* ── Progress bar ── */
 .scn-progress-track {
@@ -517,6 +514,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 長者管理                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page active" id="page-elderly">
+      <div class="stat-strip" id="elderly-stats"></div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -551,6 +549,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 志工 / 家屬                                     -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-volunteers">
+      <div class="stat-strip" id="volunteers-stats"></div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -586,6 +585,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 照護關係                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-relations">
+      <div class="stat-strip" id="relations-stats"></div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -617,6 +617,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 物資管理                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-resources">
+      <div class="stat-strip" id="resources-stats"></div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -670,9 +671,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         </div>
         <div class="card-body">
           <div id="kb-stats-wrap">
-            <div class="stat-chips">
-              <div class="stat-chip"><div class="stat-chip-val" id="stat-total">—</div><div class="stat-chip-lbl">總 Chunks</div></div>
-              <div class="stat-chip"><div class="stat-chip-val" id="stat-embed" style="color:var(--success)">—</div><div class="stat-chip-lbl">已向量化</div></div>
+            <div class="stat-strip">
+              <div class="stat-tile"><div class="stat-tile-label">總 Chunks</div><div class="stat-tile-value" id="stat-total">—</div></div>
+              <div class="stat-tile"><div class="stat-tile-label">已向量化</div><div class="stat-tile-value ok" id="stat-embed">—</div></div>
             </div>
             <div id="stat-cats" class="cat-chips"></div>
           </div>
@@ -746,6 +747,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 社區資源點                                      -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-points">
+      <div class="stat-strip" id="points-stats"></div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -795,6 +797,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 緊急需求                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-needs">
+      <div class="stat-strip" id="needs-stats"></div>
 
       <!-- 資料來源說明 -->
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
@@ -1447,6 +1450,14 @@ async function loadAll() {
 // Elderly table
 // ════════════════════════════════════════════════
 function renderElderly(data) {
+  const bound = data.filter(u => u.line_uid).length;
+  const active = data.filter(u => u.is_active).length;
+  document.getElementById('elderly-stats').innerHTML = `
+    <div class="stat-tile"><div class="stat-tile-label">總長者數</div><div class="stat-tile-value">${data.length}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">已綁定 LINE</div><div class="stat-tile-value ok">${bound}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">未綁定</div><div class="stat-tile-value ${data.length-bound>0?'warn':''}">${data.length - bound}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">帳號啟用中</div><div class="stat-tile-value">${active}</div></div>`;
+
   const tbody = document.getElementById('elderly-tbody');
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
@@ -1477,6 +1488,15 @@ function renderElderly(data) {
 // Volunteer table
 // ════════════════════════════════════════════════
 function renderVolunteers(data) {
+  const volCount = data.filter(u => u.roles.includes('volunteer')).length;
+  const famCount = data.filter(u => u.roles.includes('family')).length;
+  const bound = data.filter(u => u.line_uid).length;
+  document.getElementById('volunteers-stats').innerHTML = `
+    <div class="stat-tile"><div class="stat-tile-label">總人數</div><div class="stat-tile-value">${data.length}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">志工</div><div class="stat-tile-value">${volCount}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">家屬</div><div class="stat-tile-value">${famCount}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">已綁定 LINE</div><div class="stat-tile-value ok">${bound}</div></div>`;
+
   const tbody = document.getElementById('volunteers-tbody');
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
@@ -1507,6 +1527,12 @@ function renderVolunteers(data) {
 // Resources table
 // ════════════════════════════════════════════════
 function renderResources(data) {
+  const available = data.filter(r => r.is_available).length;
+  document.getElementById('resources-stats').innerHTML = `
+    <div class="stat-tile"><div class="stat-tile-label">總物資筆數</div><div class="stat-tile-value">${data.length}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">可調度</div><div class="stat-tile-value ok">${available}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">已派出/不可用</div><div class="stat-tile-value">${data.length - available}</div></div>`;
+
   const tbody = document.getElementById('resources-tbody');
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty">
@@ -1669,6 +1695,14 @@ async function loadRelations() {
 
     const elderly  = users.filter(u => u.roles.includes('elderly'));
     const contacts = users.filter(u => !u.roles.includes('elderly'));
+
+    const coveredIds = new Set(rels.map(r => r.elderly_id));
+    const isolated = elderly.filter(u => !coveredIds.has(u.id)).length;
+    document.getElementById('relations-stats').innerHTML = `
+      <div class="stat-tile"><div class="stat-tile-label">照護關係數</div><div class="stat-tile-value">${rels.length}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">有聯絡人的長者</div><div class="stat-tile-value ok">${coveredIds.size}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">零聯絡人（孤立風險）</div><div class="stat-tile-value ${isolated>0?'danger':''}">${isolated}</div></div>`;
+
     document.getElementById('rel-elderly-id').innerHTML =
       elderly.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
     document.getElementById('rel-contact-id').innerHTML =
@@ -2006,6 +2040,13 @@ function filterPoints(btn, type) {
 }
 
 function renderPoints(data) {
+  const totalCapacity = data.reduce((s, p) => s + (p.capacity || 0), 0);
+  const totalLoad = data.reduce((s, p) => s + (p.current_load || 0), 0);
+  document.getElementById('points-stats').innerHTML = `
+    <div class="stat-tile"><div class="stat-tile-label">資源點數</div><div class="stat-tile-value">${data.length}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">總容量</div><div class="stat-tile-value">${totalCapacity.toLocaleString()}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">目前佔用</div><div class="stat-tile-value ${totalCapacity && totalLoad/totalCapacity>0.8?'warn':''}">${totalLoad.toLocaleString()}</div></div>`;
+
   const filtered = pointFilter ? data.filter(p => p.point_type === pointFilter) : data;
   const tbody = document.getElementById('points-tbody');
   if (!filtered.length) {
@@ -2150,6 +2191,11 @@ async function loadNeeds() {
       fetch('/api/resources/needs?status=fulfilled').then(r => r.json()),
     ]);
     allNeeds = [...open, ...suggested, ...matched, ...fulfilled];
+    document.getElementById('needs-stats').innerHTML = `
+      <div class="stat-tile"><div class="stat-tile-label">待媒合</div><div class="stat-tile-value ${open.length>0?'warn':''}">${open.length}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">待確認</div><div class="stat-tile-value ${suggested.length>0?'danger':''}">${suggested.length}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">已媒合</div><div class="stat-tile-value">${matched.length}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">已完成</div><div class="stat-tile-value ok">${fulfilled.length}</div></div>`;
     const lbl = document.getElementById('needs-count-label');
     if (lbl) lbl.textContent =
       `待媒合 ${open.length} 筆 · 待確認 ${suggested.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆`;
