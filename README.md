@@ -39,6 +39,18 @@ LINE Bot ──▶ FastAPI (Railway)
 
 方法論依據見 [`RESEARCH_disaster_logistics.md`](RESEARCH_disaster_logistics.md)（13 篇指定文獻的可驗證程度逐一標註，2 篇取得全文、其餘標為摘要層級，不假裝讀過讀不到的內容）。
 
+## Operational Ontology
+
+`app/services/ontology.py` + `app/routers/ontology.py`：提供一層類 Palantir Ontology 的語意檢視，把既有 SQLAlchemy 資料表整理成 `Person`、`ResourceRequest`、`Resource`、`Facility`、`Alert`、`CheckIn` 等 object types，並明確列出 `REQUESTED_BY`、`OWNED_BY`、`MATCHED_TO`、`HAS_ALERT`、`CARE_CONTACT` 等 link types。
+
+API：
+
+- `/api/ontology/schema`：object types / link types / actions / functions
+- `/api/ontology/graph`：目前營運圖譜與即時指標
+- `/api/ontology/needs/{need_id}/decision-context`：單筆需求的候選資源、分數拆解、建議 action 與 human-in-the-loop 限制
+
+後台操作：`/admin` → 決賽展演 → Ontology。
+
 ## 情境模擬引擎
 
 `app/services/hazard.py` + `app/services/scenario.py`：用真實颱風物理模型（Holland 1980 風場模型、Kaplan-DeMaria 1995 登陸衰減模型）驅動需求生成，不是寫死的劇本。路徑錨點取材自 2024 年康芮颱風的公開報導數據；誰通報、何時通報、緊急度多少，由風速與該居民的實際脆弱度分數計算決定。

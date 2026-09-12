@@ -487,6 +487,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   </div>
 
   <div class="nav-section">決賽展演</div>
+  <div class="nav-item" onclick="showPage('page-ontology')" data-page="page-ontology">
+    <span class="icon">ON</span> Ontology
+  </div>
   <div class="nav-item" onclick="showPage('page-scenario')" data-page="page-scenario">
     <span class="icon">🌀</span> 情境模擬
   </div>
@@ -947,6 +950,65 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- ══════════════════════════════════════════════ -->
     <!-- 情境模擬（決賽展演用）                          -->
     <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-ontology">
+      <div class="stat-strip" id="ontology-stats"></div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Operational Ontology</div>
+            <div class="card-subtitle">Object types, link types, actions, and current operating graph</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">Refresh</button>
+        </div>
+        <div class="card-body">
+          <div class="form-row col-2">
+            <div>
+              <div class="card-title" style="margin-bottom:10px">Object Types</div>
+              <table class="tbl">
+                <thead><tr><th>Type</th><th>Table</th><th>Fields</th></tr></thead>
+                <tbody id="ontology-types"></tbody>
+              </table>
+            </div>
+            <div>
+              <div class="card-title" style="margin-bottom:10px">Actions</div>
+              <table class="tbl">
+                <thead><tr><th>Action</th><th>Endpoint</th><th>Human</th></tr></thead>
+                <tbody id="ontology-actions"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Ontology Graph Snapshot</div>
+            <div class="card-subtitle" id="ontology-graph-label">Loading...</div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-row col-2">
+            <div>
+              <div class="card-title" style="margin-bottom:10px">Recent Objects</div>
+              <table class="tbl">
+                <thead><tr><th>Type</th><th>Label</th><th>State</th></tr></thead>
+                <tbody id="ontology-nodes"></tbody>
+              </table>
+            </div>
+            <div>
+              <div class="card-title" style="margin-bottom:10px">Links</div>
+              <table class="tbl">
+                <thead><tr><th>Type</th><th>From</th><th>To</th></tr></thead>
+                <tbody id="ontology-edges"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-scenario">
       <div class="card" style="overflow:hidden">
         <div class="card-header">
@@ -1370,6 +1432,7 @@ const PAGE_TITLE = {
   'page-scenario':  '情境模擬',
 };
 let allUsers = [];
+PAGE_TITLE['page-ontology'] = 'Operational Ontology';
 
 // ════════════════════════════════════════════════
 // HTML escaping —— 使用者輸入（長者/志工姓名、地址、需求說明…）
@@ -1404,6 +1467,7 @@ function showPage(id) {
   if (id === 'page-points')    loadPoints();
   if (id === 'page-needs')     loadNeeds();
   if (id === 'page-kb')        loadKB();
+  if (id === 'page-ontology')  loadOntology();
   if (id === 'page-scenario')  scnLoadStatus();
 }
 
@@ -2379,6 +2443,66 @@ async function cancelNeed(needId) {
 // ════════════════════════════════════════════════
 // 情境模擬（決賽展演用）— app/services/scenario.py
 // ════════════════════════════════════════════════
+async function loadOntology() {
+  const statsEl = document.getElementById('ontology-stats');
+  const labelEl = document.getElementById('ontology-graph-label');
+  if (labelEl) labelEl.textContent = 'Loading...';
+  try {
+    const [schema, graph] = await Promise.all([
+      fetch('/api/ontology/schema').then(r => r.json()),
+      fetch('/api/ontology/graph?limit=80').then(r => r.json()),
+    ]);
+    const m = graph.metrics || {};
+    statsEl.innerHTML = `
+      <div class="stat-tile"><div class="stat-tile-label">People</div><div class="stat-tile-value">${m.people ?? 0}</div><div class="stat-tile-sub">${m.active_people ?? 0} active</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Open Requests</div><div class="stat-tile-value ${(m.open_requests ?? 0)>0?'warn':''}">${m.open_requests ?? 0}</div><div class="stat-tile-sub">${m.suggested_requests ?? 0} suggested</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Resources</div><div class="stat-tile-value ok">${m.available_resources ?? 0}</div><div class="stat-tile-sub">available now</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Alerts</div><div class="stat-tile-value ${(m.active_alerts ?? 0)>0?'danger':''}">${m.active_alerts ?? 0}</div><div class="stat-tile-sub">${m.risky_checkins_today ?? 0} risky check-ins today</div></div>`;
+
+    const objectTypes = Object.entries(schema.object_types || {});
+    document.getElementById('ontology-types').innerHTML = objectTypes.map(([name, meta]) => `
+      <tr>
+        <td><span class="badge badge-blue">${esc(name)}</span></td>
+        <td class="muted">${esc(meta.source_table)}</td>
+        <td class="muted">${esc((meta.display_fields || []).join(', '))}</td>
+      </tr>`).join('');
+
+    document.getElementById('ontology-actions').innerHTML = (schema.actions || []).map(action => `
+      <tr>
+        <td>${esc(action.label || action.id)}</td>
+        <td class="muted">${esc(action.method)} ${esc(action.endpoint)}</td>
+        <td>${action.human_in_the_loop ? '<span class="badge badge-amber">HITL</span>' : '<span class="badge badge-gray">AUTO</span>'}</td>
+      </tr>`).join('');
+
+    const nodes = graph.nodes || [];
+    const edges = graph.edges || [];
+    labelEl.textContent = `${nodes.length} objects / ${edges.length} links`;
+    document.getElementById('ontology-nodes').innerHTML = nodes.slice(0, 40).map(node => {
+      const p = node.properties || {};
+      const state = p.status ?? p.is_available ?? p.current_load ?? '';
+      return `<tr>
+        <td><span class="badge badge-purple">${esc(node.type)}</span></td>
+        <td>${esc(node.label)}</td>
+        <td class="muted">${esc(state)}</td>
+      </tr>`;
+    }).join('');
+    document.getElementById('ontology-edges').innerHTML = edges.slice(0, 50).map(edge => `
+      <tr>
+        <td><span class="src-badge src-gov">${esc(edge.type)}</span></td>
+        <td class="muted" title="${esc(edge.from)}">${esc(shortOntologyId(edge.from))}</td>
+        <td class="muted" title="${esc(edge.to)}">${esc(shortOntologyId(edge.to))}</td>
+      </tr>`).join('');
+  } catch(e) {
+    if (labelEl) labelEl.textContent = 'Load failed: ' + e.message;
+  }
+}
+
+function shortOntologyId(id) {
+  const parts = String(id || '').split(':');
+  if (parts.length < 2) return id || '';
+  return parts[0] + ':' + parts[1].slice(0, 8);
+}
+
 async function scnLoadStatus() {
   try {
     const res = await fetch('/api/scenario/status');
