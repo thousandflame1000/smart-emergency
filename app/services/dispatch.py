@@ -36,6 +36,10 @@
 
 類型親合度矩陣 (need_type → [(resource_type, affinity)])
   完全匹配 = 1.0，部分匹配 = 0.2–0.4，不匹配 = 不列入候選
+
+本質上是稀缺資源下的優先權貪婪排程（priority-based greedy scheduling），
+概念參照災害物流的緊急度優先分配研究，以及 Crisis Cleanup（美國災後
+志工任務媒合平台）的媒合模式。
 """
 import json
 import math
@@ -91,7 +95,9 @@ ISOLATION_PTS = {0: 6.0, 1: 3.0}   # 主動關懷聯絡人數 → 孤立加權
 
 def _vulnerability_pts(requester_id, db: Session) -> float:
     """
-    平時照顧、災時派遣的串接點。
+    平時照顧、災時派遣的串接點。基礎是 UNDRR 災害風險框架
+    Risk = Hazard × Exposure × Vulnerability / Capacity（見
+    app/services/hazard.py）——這裡算的是 Vulnerability 那一項。
 
     依三項已在系統中持續累積的關懷資料算出加權（0–28 分）：
       checkin_pts   = min(近 7 天「未回應/求助」打卡次數 × 4, 12)
