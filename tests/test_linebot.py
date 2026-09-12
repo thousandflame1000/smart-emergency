@@ -6,6 +6,7 @@
 3. 家屬代理登記長者（新增長者 指令）
 """
 from app.database import SessionLocal
+from app.models.dispatch_event import DispatchEvent
 from app.models.user import User
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
@@ -57,7 +58,7 @@ def test_task_decline_releases_resource(db, monkeypatch):
     need = CommunityNeed(requester_id=elder.id, need_type="food", status="matched",
                           matched_resource_id=res.id, urgency=3)
     db.add(need); db.commit(); db.refresh(need)
-    need_id, res_id = str(need.id), str(res.id)
+    need_id, res_id, vol_id = str(need.id), str(res.id), str(vol.id)
     db.close()
 
     lb.handle_postback(_FakePostbackEvent(f"action=task_decline&need_id={need_id}", "Uvol2"))
@@ -65,8 +66,64 @@ def test_task_decline_releases_resource(db, monkeypatch):
     db2 = SessionLocal()
     r = db2.query(CommunityResource).filter(CommunityResource.id == res_id).first()
     n = db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    event = (
+        db2.query(DispatchEvent)
+        .filter(DispatchEvent.need_id == need_id, DispatchEvent.action == "task_decline")
+        .first()
+    )
     assert r.is_available is True, "拒絕任務後物資應恢復可用"
     assert n.status == "open" and n.matched_resource_id is None
+    assert event is not None
+    assert str(event.actor_id) == vol_id
+    assert str(event.resource_id) == res_id
+    assert event.previous_status == "matched"
+    assert event.new_status == "open"
+    assert event.outcome == "declined"
+    db2.close()
+
+
+def test_task_delivered_marks_fulfilled_and_logs_event(db, monkeypatch):
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: None)
+
+    vol = User(name="Volunteer", roles=["volunteer"], line_uid="Uvol3")
+    db.add(vol); db.commit(); db.refresh(vol)
+
+    res = CommunityResource(owner_id=vol.id, resource_type="water", name="Water pack", is_available=False)
+    db.add(res); db.commit(); db.refresh(res)
+
+    elder = User(name="Elder", roles=["elderly"])
+    db.add(elder); db.commit(); db.refresh(elder)
+
+    need = CommunityNeed(
+        requester_id=elder.id,
+        need_type="water",
+        status="matched",
+        matched_resource_id=res.id,
+        urgency=3,
+    )
+    db.add(need); db.commit(); db.refresh(need)
+    need_id, res_id, vol_id = str(need.id), str(res.id), str(vol.id)
+    db.close()
+
+    lb.handle_postback(_FakePostbackEvent(f"action=task_delivered&need_id={need_id}", "Uvol3"))
+
+    db2 = SessionLocal()
+    n = db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    r = db2.query(CommunityResource).filter(CommunityResource.id == res_id).first()
+    event = (
+        db2.query(DispatchEvent)
+        .filter(DispatchEvent.need_id == need_id, DispatchEvent.action == "task_delivered")
+        .first()
+    )
+    assert n.status == "fulfilled"
+    assert str(n.matched_resource_id) == res_id
+    assert r.is_available is False
+    assert event is not None
+    assert str(event.actor_id) == vol_id
+    assert str(event.resource_id) == res_id
+    assert event.previous_status == "matched"
+    assert event.new_status == "fulfilled"
+    assert event.outcome == "fulfilled"
     db2.close()
 
 

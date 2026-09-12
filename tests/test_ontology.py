@@ -69,6 +69,8 @@ def test_schema_exposes_ontology_primitives():
     assert any(link["id"] == "MATCHED_TO" for link in schema["link_types"])
     assert any(link["id"] == "ACTION_ON" for link in schema["link_types"])
     assert any(action["id"] == "confirm_dispatch" for action in schema["actions"])
+    assert any(action["id"] == "task_delivered" for action in schema["actions"])
+    assert any(action["id"] == "task_decline" for action in schema["actions"])
     assert any(fn["id"] == "batch_assignment" for fn in schema["functions"])
 
 

@@ -839,6 +839,111 @@ def cancel_need(need_id: str, db: Session) -> dict:
 
 
 # ──────────────────────────────────────────────────────────
+# LINE volunteer task callbacks
+# ──────────────────────────────────────────────────────────
+def mark_task_delivered(
+    need_id: str,
+    db: Session,
+    *,
+    actor_id: str | None = None,
+    actor_label: str = "volunteer:line",
+) -> dict:
+    """Mark a matched task as fulfilled and keep an audit event."""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "need not found"}
+
+    previous_status = need.status
+    previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
+
+    if previous_status == "fulfilled":
+        return {
+            "message": "task already fulfilled",
+            "need_id": need_id,
+            "already_fulfilled": True,
+        }
+
+    need.status = "fulfilled"
+    _log_dispatch_event(
+        db,
+        "task_delivered",
+        need=need,
+        resource_id=previous_resource_id,
+        actor_id=actor_id,
+        actor_label=actor_label,
+        previous_status=previous_status,
+        new_status=need.status,
+        outcome="fulfilled",
+        details={"matched_resource_id": previous_resource_id},
+    )
+    db.commit()
+
+    return {
+        "message": "task marked fulfilled",
+        "need_id": need_id,
+        "resource_id": previous_resource_id,
+    }
+
+
+def decline_task_assignment(
+    need_id: str,
+    db: Session,
+    *,
+    actor_id: str | None = None,
+    actor_label: str = "volunteer:line",
+) -> dict:
+    """Let a volunteer decline a task, reopening the need and releasing the resource."""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "need not found"}
+
+    previous_status = need.status
+    previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
+
+    if previous_status == "open" and previous_resource_id is None:
+        return {
+            "message": "task already open",
+            "need_id": need_id,
+            "already_open": True,
+        }
+
+    resource_released = False
+    if need.matched_resource_id:
+        resource = db.query(CommunityResource).filter(
+            CommunityResource.id == need.matched_resource_id
+        ).first()
+        if resource:
+            resource.is_available = True
+            resource_released = True
+
+    need.status = "open"
+    need.matched_resource_id = None
+    _log_dispatch_event(
+        db,
+        "task_decline",
+        need=need,
+        resource_id=previous_resource_id,
+        actor_id=actor_id,
+        actor_label=actor_label,
+        previous_status=previous_status,
+        new_status=need.status,
+        outcome="declined",
+        details={
+            "released_resource_id": previous_resource_id,
+            "resource_released": resource_released,
+        },
+    )
+    db.commit()
+
+    return {
+        "message": "task declined",
+        "need_id": need_id,
+        "released_resource_id": previous_resource_id,
+        "resource_released": resource_released,
+    }
+
+
+# ──────────────────────────────────────────────────────────
 # 評分預覽（給管理員在 UI 查看候選排序）
 # ──────────────────────────────────────────────────────────
 def preview_candidates(need_id: str, db: Session) -> dict:

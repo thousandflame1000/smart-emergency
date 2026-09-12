@@ -465,32 +465,16 @@ def handle_postback(event: PostbackEvent):
     elif action == "task_delivered":
         need_id = data.get("need_id", "")
         if need_id:
-            from app.models.need import CommunityNeed
-            need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
-            if need:
-                need.status = "fulfilled"
-                db.commit()
+            from app.services.dispatch import mark_task_delivered
+            mark_task_delivered(need_id, db, actor_id=str(user.id))
         reply_text(event.reply_token,
                    "✅ 感謝您完成送達！已記錄在案，辛苦了 🙏")
 
     elif action == "task_decline":
         need_id = data.get("need_id", "")
         if need_id:
-            # 重新開放需求等待下一位志工
-            from app.models.need import CommunityNeed
-            need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
-            if need:
-                # 先用原本的 matched_resource_id 把物資重新開放，再清空欄位
-                if need.matched_resource_id:
-                    from app.models.resource import CommunityResource
-                    res = db.query(CommunityResource).filter(
-                        CommunityResource.id == need.matched_resource_id
-                    ).first()
-                    if res:
-                        res.is_available = True
-                need.status = "open"
-                need.matched_resource_id = None
-                db.commit()
+            from app.services.dispatch import decline_task_assignment
+            decline_task_assignment(need_id, db, actor_id=str(user.id))
         reply_text(event.reply_token,
                    "沒關係，我們會尋找其他志工。感謝您的回覆。")
 
