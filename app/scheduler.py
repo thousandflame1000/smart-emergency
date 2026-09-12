@@ -48,8 +48,35 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # 決賽展演用情境模擬引擎的「自動播放」開關——見 app/services/scenario.py。
+    # 這個 job 一直存在、每 8 秒檢查一次 SystemConfig 的 scenario_autoplay
+    # 旗標，關閉時什麼都不做，開銷可忽略；比動態新增/移除 job 簡單可靠。
+    _scheduler.add_job(
+        _scenario_autoplay_tick,
+        IntervalTrigger(seconds=8),
+        id="scenario_autoplay_tick",
+        replace_existing=True,
+    )
+
     _scheduler.start()
     logger.info(f"Scheduler started. Checkin at {checkin_hour:02d}:{checkin_minute:02d}")
+
+
+def _scenario_autoplay_tick() -> None:
+    from app.database import SessionLocal
+    from app.services import scenario
+
+    db = SessionLocal()
+    try:
+        if scenario._cfg_get(db, "scenario_autoplay", "0") != "1":
+            return
+        st = scenario.status(db)
+        if st["finished"]:
+            scenario.set_autoplay(db, False)
+        else:
+            scenario.advance(db)
+    finally:
+        db.close()
 
 
 def shutdown_scheduler() -> None:

@@ -11,7 +11,7 @@ import os
 from app.database import engine, Base
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.rate_limit import limiter
-from app.routers import linebot, dashboard, resources, rag
+from app.routers import linebot, dashboard, resources, rag, scenario
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 
@@ -65,6 +65,7 @@ app.include_router(linebot.router,   prefix="/webhook",       tags=["LINE Bot"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(resources.router, prefix="/api/resources", tags=["Resources"])
 app.include_router(rag.router,       prefix="/api/rag",       tags=["RAG"])
+app.include_router(scenario.router,  prefix="/api/scenario",  tags=["Scenario"])
 
 
 @app.get("/admin")

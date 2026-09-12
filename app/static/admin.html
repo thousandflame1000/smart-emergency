@@ -388,6 +388,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <span class="icon">🧠</span> 知識庫
   </div>
 
+  <div class="nav-section">決賽展演</div>
+  <div class="nav-item" onclick="showPage('page-scenario')" data-page="page-scenario">
+    <span class="icon">🌀</span> 情境模擬
+  </div>
+
   <div class="sidebar-bottom">
     <a href="/" class="back-link">
       <span>←</span> 返回儀表板
@@ -835,6 +840,40 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
     </div>
 
+    <!-- ══════════════════════════════════════════════ -->
+    <!-- 情境模擬（決賽展演用）                          -->
+    <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-scenario">
+      <div style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.3);border-radius:3px;padding:12px 14px;margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:4px">🌀 颱風夜情境模擬</div>
+        <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
+          按「開始情境」後系統會自己往前演進：廣播警報 → 陸續有人通報需求 → 物資稀缺 →
+          自動媒合。全程呼叫的是正式環境真正在用的同一套派遣演算法，不是另外做的假動畫；
+          最後一步刻意保留「需管理員手動確認派遣」——請到左側「緊急需求」頁面按確認。
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">劇本進度</div>
+            <div class="card-subtitle" id="scn-progress-label">尚未開始</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary btn-sm" onclick="scnStart()">▶ 開始情境</button>
+            <button class="btn btn-ghost btn-sm" onclick="scnAdvance()" id="scn-next-btn">⏭ 下一步</button>
+            <button class="btn btn-ghost btn-sm" id="scn-autoplay-btn" onclick="scnToggleAutoplay()">⏵ 自動播放</button>
+            <button class="btn btn-danger btn-sm" onclick="scnReset()">🔄 重置</button>
+          </div>
+        </div>
+        <div class="card-body">
+          <div id="scn-steps" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+          <div class="card-title" style="font-size:12px;margin-bottom:8px">執行紀錄</div>
+          <div id="scn-log" style="display:flex;flex-direction:column;gap:6px;font-size:12px;font-family:var(--mono);max-height:320px;overflow-y:auto"></div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -1209,6 +1248,7 @@ const PAGE_TITLE = {
   'page-points':    '社區資源點',
   'page-needs':     '緊急需求',
   'page-kb':        '知識庫',
+  'page-scenario':  '情境模擬',
 };
 let allUsers = [];
 
@@ -1245,6 +1285,7 @@ function showPage(id) {
   if (id === 'page-points')    loadPoints();
   if (id === 'page-needs')     loadNeeds();
   if (id === 'page-kb')        loadKB();
+  if (id === 'page-scenario')  scnLoadStatus();
 }
 
 // ════════════════════════════════════════════════
@@ -1971,7 +2012,8 @@ async function seedPoints() {
 // Community Needs
 // ════════════════════════════════════════════════
 const NEED_TYPE_ICON = { water:'💧', food:'🍱', first_aid:'🩹',
-                          shelter:'🛏️', vehicle:'🚗', tool:'🔧', other:'📦' };
+                          shelter:'🛏️', vehicle:'🚗', tool:'🔧', other:'📦',
+                          demo_water:'🌀' };
 const STATUS_BADGE = {
   open:      '<span class="badge badge-amber">待媒合</span>',
   suggested: '<span class="badge badge-red">⏳ 待確認</span>',
@@ -2168,6 +2210,70 @@ async function cancelNeed(needId) {
   await fetch(`/api/resources/needs/${needId}?status=cancelled`, { method: 'PUT' }).catch(() => {});
   loadNeeds();
 }
+
+// ════════════════════════════════════════════════
+// 情境模擬（決賽展演用）— app/services/scenario.py
+// ════════════════════════════════════════════════
+async function scnLoadStatus() {
+  try {
+    const res = await fetch('/api/scenario/status');
+    scnRender(await res.json());
+  } catch(e) {
+    document.getElementById('scn-progress-label').textContent = '載入失敗：' + e.message;
+  }
+}
+
+function scnRender(st) {
+  document.getElementById('scn-progress-label').textContent =
+    st.step < 0 ? '尚未開始'
+    : st.finished ? `已完成（第 ${st.step+1}/${st.total} 步）`
+    : `進行中（第 ${st.step+1}/${st.total} 步）`;
+
+  document.getElementById('scn-steps').innerHTML = st.steps.map(s => `
+    <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:3px;background:${s.done?'rgba(45,212,167,.08)':'rgba(255,255,255,.02)'};border:1px solid ${s.done?'rgba(45,212,167,.3)':'var(--border)'}">
+      <span style="font-size:16px">${s.done ? '✅' : '⬜'}</span>
+      <div>
+        <div style="font-weight:700;font-size:13px">${esc(s.title)}</div>
+        <div style="font-size:11px;color:var(--text-dim)">${esc(s.desc)}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('scn-log').innerHTML = st.log.length
+    ? st.log.slice().reverse().map(l => `
+        <div style="padding:8px 10px;background:rgba(255,255,255,.02);border-radius:3px;border:1px solid var(--border)">
+          <span style="color:var(--muted)">[${esc(l.at)}]</span> <strong>${esc(l.title)}</strong><br>
+          <span style="white-space:pre-line;color:var(--text-dim)">${esc(l.message)}</span>
+        </div>`).join('')
+    : '<div style="color:var(--muted)">尚無紀錄</div>';
+
+  const autoBtn = document.getElementById('scn-autoplay-btn');
+  autoBtn.textContent = st.autoplay ? '⏸ 停止自動播放' : '⏵ 自動播放';
+  autoBtn.classList.toggle('btn-danger', st.autoplay);
+  autoBtn.classList.toggle('btn-ghost', !st.autoplay);
+  document.getElementById('scn-next-btn').disabled = st.finished;
+}
+
+async function scnStart() {
+  scnRender(await (await fetch('/api/scenario/start', { method: 'POST' })).json());
+}
+async function scnAdvance() {
+  scnRender(await (await fetch('/api/scenario/advance', { method: 'POST' })).json());
+}
+async function scnReset() {
+  if (!confirm('確定重置情境模擬？（只會清掉情境自己建立的資料，不影響其他任何資料）')) return;
+  scnRender(await (await fetch('/api/scenario/reset', { method: 'POST' })).json());
+}
+async function scnToggleAutoplay() {
+  const cur = await (await fetch('/api/scenario/status')).json();
+  scnRender(await (await fetch(`/api/scenario/autoplay?enabled=${!cur.autoplay}`, { method: 'POST' })).json());
+}
+
+// 自動播放時後台每 8 秒自己推進一步，這裡每 3 秒輪詢一次狀態，
+// 只有真的在看這一頁時才打 API，避免不必要的背景請求。
+setInterval(() => {
+  const page = document.getElementById('page-scenario');
+  if (page && page.classList.contains('active')) scnLoadStatus();
+}, 3000);
 
 // ════════════════════════════════════════════════
 // Init
