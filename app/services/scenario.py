@@ -28,6 +28,12 @@ SCENARIO_NEED_TYPE = "demo_water"
 POPULATION_SIZE = 7
 BASE_LAT, BASE_LNG = 24.150, 120.670
 
+# 每次改動 entities dict 的欄位結構就要 bump 這個版本號。舊版本留在
+# SystemConfig 裡的殘留狀態（例如有人在改版前就點過「開始情境」）
+# 欄位完全不同，硬用新程式碼的假設去解讀會直接壞掉——版本不符就當
+# 作沒開始過，不要嘗試相容解析。
+SCENARIO_SCHEMA_VERSION = 2
+
 
 def _cfg_get(db: Session, key: str, default: str) -> str:
     row = db.query(SystemConfig).filter(SystemConfig.key == key).first()
@@ -46,10 +52,13 @@ def _load(db: Session):
     step = int(_cfg_get(db, "scenario_step", "-1"))
     log = json.loads(_cfg_get(db, "scenario_log", "[]"))
     entities = json.loads(_cfg_get(db, "scenario_entities", "{}"))
+    if entities.get("_schema") != SCENARIO_SCHEMA_VERSION:
+        return -1, [], {}
     return step, log, entities
 
 
 def _save(db: Session, step: int, log: list, entities: dict) -> None:
+    entities = {**entities, "_schema": SCENARIO_SCHEMA_VERSION}
     _cfg_set(db, "scenario_step", str(step))
     _cfg_set(db, "scenario_log", json.dumps(log, ensure_ascii=False))
     _cfg_set(db, "scenario_entities", json.dumps(entities, ensure_ascii=False))
@@ -283,6 +292,19 @@ def reset(db: Session) -> dict:
             p = db.query(User).filter(User.id == pid).first()
             if p:
                 db.delete(p)
+
+    # 保險清除：不管 entities 是不是能正常解析（例如改版前留下的舊
+    # 欄位結構、或 _load() 判定版本不符直接丟棄），只要是情境自己
+    # 打過標籤的資料，一律用標籤掃過去清掉——比只信任 entities 記錄
+    # 更可靠，且不會誤刪任何沒有這個標籤的既有/真實資料。
+    for n in db.query(CommunityNeed).filter(CommunityNeed.description.like(f"{SCENARIO_TAG}%")).all():
+        db.delete(n)
+    for r in db.query(CommunityResource).filter(CommunityResource.note == SCENARIO_TAG).all():
+        db.delete(r)
+    for u in db.query(User).filter(User.address.like(f"%{SCENARIO_TAG}%")).all():
+        db.query(Alert).filter(Alert.elderly_id == u.id).delete(synchronize_session=False)
+        db.query(DailyCheckin).filter(DailyCheckin.elderly_id == u.id).delete(synchronize_session=False)
+        db.delete(u)
 
     db.commit()
     _cfg_set(db, "scenario_autoplay", "0")

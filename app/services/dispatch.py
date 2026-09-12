@@ -40,7 +40,8 @@
 
 Layer 1（個人物資，真正稀缺、一份只能給一筆需求）採批次最佳指派：
 每次執行蒐集當下所有待處理需求 × 候選物資的分數，一次用匈牙利演算法
-（scipy.optimize.linear_sum_assignment）解出總分數最大化的全域指派，
+（app/services/hungarian.py，純 Python 實作，不依賴 scipy）解出
+總分數最大化的全域指派，
 取代舊版「依序處理、每筆搶當下最高分」的貪婪法——貪婪法不保證全域
 最優，先處理的需求可能搶走對另一筆需求而言更關鍵的資源。
 Layer 2（資源點，固定設施、非稀缺）維持獨立逐筆比對，因為同一個
@@ -53,9 +54,9 @@ import json
 import math
 from datetime import datetime, timedelta
 from typing import NamedTuple
-import numpy as np
-from scipy.optimize import linear_sum_assignment
 from sqlalchemy.orm import Session
+
+from app.services.hungarian import min_cost_assignment
 
 from app.database import SessionLocal
 from app.models.need import CommunityNeed
@@ -390,20 +391,20 @@ def _assign_resources_optimally(
     need_ids = [str(n.id) for n, _ in needs_with_vuln]
     r_index = {rid: j for j, rid in enumerate(resource_ids)}
     BIG = 1e6  # 代表「不相容/超出距離」，minimize 時演算法會盡量避開
-    cost = np.full((len(need_ids), len(resource_ids)), BIG)
+    cost = [[BIG] * len(resource_ids) for _ in need_ids]
     lookup: dict[tuple[int, int], Candidate] = {}
 
     for i, nid in enumerate(need_ids):
         for c in cands_by_need[nid]:
             j = r_index[c.resource_id]
-            cost[i, j] = -c.score  # linear_sum_assignment 是 minimize，取負號變成 maximize
+            cost[i][j] = -c.score  # 求解器是 minimize，取負號變成 maximize
             lookup[(i, j)] = c
 
-    row_ind, col_ind = linear_sum_assignment(cost)
+    row_to_col = min_cost_assignment(cost)
 
     assignment: dict[str, Candidate] = {}
-    for r, c in zip(row_ind, col_ind):
-        if cost[r, c] >= BIG:
+    for r, c in row_to_col.items():
+        if cost[r][c] >= BIG:
             continue  # 矩陣形狀逼出來的配對，實際上不相容，不採用
         assignment[need_ids[r]] = lookup[(r, c)]
     return assignment
