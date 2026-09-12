@@ -11,6 +11,7 @@ import os
 from app.database import engine, Base
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.rate_limit import limiter
+from app.demo_auth import DemoAuthMiddleware
 from app.routers import linebot, dashboard, resources, rag, scenario
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
@@ -42,6 +43,12 @@ app = FastAPI(
     description="平時照顧長者，災時守護社區",
     lifespan=lifespan,
 )
+
+
+# 決賽展演期間的臨時密碼閘（見 app/demo_auth.py）——刻意放在最前面加，
+# 讓它成為最外層 middleware，沒有密碼的請求在碰到 CORS/限流邏輯之前
+# 就先被擋掉。沒設定 DEMO_PASSWORD 環境變數時完全不啟用。
+app.add_middleware(DemoAuthMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
