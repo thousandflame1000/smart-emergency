@@ -8,6 +8,7 @@ from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.user import User
 from app.models.resource_point import ResourcePoint, POINT_TYPES, POINT_SUPPLY_TYPES
+from app.models.dispatch_event import DispatchEvent
 
 router = APIRouter()
 
@@ -213,6 +214,24 @@ def update_need_status(need_id: str, status: str, db: Session = Depends(get_db))
     return {"message": "更新成功"}
 
 
+@router.get("/needs/{need_id}/events")
+def list_need_dispatch_events(
+    need_id: str,
+    limit: int = 20,
+    db: Session = Depends(get_db),
+):
+    """列出單筆需求的派遣決策稽核紀錄。"""
+    limit = max(1, min(limit, 100))
+    events = (
+        db.query(DispatchEvent)
+        .filter(DispatchEvent.need_id == need_id)
+        .order_by(DispatchEvent.created_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [_fmt_dispatch_event(e) for e in events]
+
+
 @router.post("/needs/{need_id}/match")
 def match_need(need_id: str, resource_id: str, db: Session = Depends(get_db)):
     """手動媒合需求與物資，並立即 LINE 通知志工"""
@@ -251,6 +270,29 @@ def need_candidates(need_id: str, db: Session = Depends(get_db)):
     """預覽此需求的候選資源評分（不執行媒合）"""
     from app.services.dispatch import preview_candidates
     return preview_candidates(need_id, db)
+
+
+def _fmt_dispatch_event(e: DispatchEvent) -> dict:
+    details = {}
+    if e.details_json:
+        try:
+            details = json.loads(e.details_json)
+        except Exception:
+            details = {"raw": e.details_json}
+    return {
+        "id":              str(e.id),
+        "action":          e.action,
+        "outcome":         e.outcome,
+        "need_id":         str(e.need_id) if e.need_id else None,
+        "resource_id":     str(e.resource_id) if e.resource_id else None,
+        "resource_name":   e.resource.name if e.resource else None,
+        "actor_id":        str(e.actor_id) if e.actor_id else None,
+        "actor_label":     e.actor_label,
+        "previous_status": e.previous_status,
+        "new_status":      e.new_status,
+        "details":         details,
+        "created_at":      str(e.created_at),
+    }
 
 
 # ──────────────────────────────────────────────

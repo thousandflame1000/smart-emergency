@@ -2345,11 +2345,12 @@ function renderNeeds(data) {
       <td class="muted" style="white-space:nowrap">${n.created_at.slice(0,16).replace('T',' ')}</td>
       <td id="match-${n.id}">
         ${n.status === 'open'
-          ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">查看候選</button>`
+          ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">查看詳情</button>`
           : n.status === 'suggested'
-          ? `<button class="btn btn-success btn-sm" onclick="confirmDispatch('${n.id}')">✅ 確認派遣</button>
+          ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">詳情</button>
+             <button class="btn btn-success btn-sm" onclick="confirmDispatch('${n.id}')">✅ 確認派遣</button>
              <button class="btn btn-ghost-danger btn-sm" onclick="declineSuggestion('${n.id}')">否決</button>`
-          : '—'}
+          : `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">紀錄</button>`}
       </td>
       <td>
         ${n.status === 'open'
@@ -2388,14 +2389,13 @@ async function showCandidates(needId) {
   row.style.display = 'table-row';
   list.textContent = '評分中…';
   try {
-    const data  = await fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json());
+    const [data, events] = await Promise.all([
+      fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json()),
+      fetch(`/api/resources/needs/${needId}/events`).then(r => r.json()),
+    ]);
     const cands = data.candidates || [];
     const vuln  = data.vulnerability ?? 0;
-    if (!cands.length) { list.textContent = '無候選資源'; return; }
-    list.innerHTML = `
-      <div class="muted" style="margin:4px 0 8px">
-        脆弱度 <strong style="color:${vuln >= 14 ? 'var(--danger)' : 'inherit'}">${vuln}</strong> / 28
-      </div>
+    const candidateHtml = cands.length ? `
       <table class="tbl" style="margin:8px 0">
         <thead><tr>
           <th>評分</th><th>來源</th><th>名稱</th><th>志工/資源點</th><th>距離</th><th>操作</th>
@@ -2418,10 +2418,43 @@ async function showCandidates(needId) {
               </td>
             </tr>`; }).join('')}
         </tbody>
-      </table>`;
+      </table>` : '<div class="muted" style="padding:10px 0">無候選資源</div>';
+    list.innerHTML = `
+      <div class="muted" style="margin:4px 0 8px">
+        脆弱度 <strong style="color:${vuln >= 14 ? 'var(--danger)' : 'inherit'}">${vuln}</strong> / 28
+      </div>
+      ${candidateHtml}
+      ${renderNeedEvents(events || [])}`;
   } catch(e) {
     list.textContent = '載入失敗：' + e.message;
   }
+}
+
+function renderNeedEvents(events) {
+  const rows = events.map(e => {
+    const d = e.details || {};
+    const detailBits = [];
+    if (d.score !== undefined) detailBits.push(`score ${d.score}`);
+    if (d.dist_km !== undefined && d.dist_km !== null) detailBits.push(`${d.dist_km} km`);
+    if (d.resource_name || e.resource_name) detailBits.push(d.resource_name || e.resource_name);
+    if (d.volunteer_notified !== undefined) detailBits.push(d.volunteer_notified ? '已通知' : '未通知');
+    return `
+      <tr>
+        <td class="muted" style="white-space:nowrap">${esc((e.created_at || '').slice(0,16).replace('T',' '))}</td>
+        <td><span class="badge badge-purple">${esc(e.action)}</span></td>
+        <td class="muted">${esc(e.previous_status || '—')} → ${esc(e.new_status || '—')}</td>
+        <td class="muted">${esc(e.actor_label || 'system')}</td>
+        <td class="muted">${esc(detailBits.join(' · ') || e.outcome || '—')}</td>
+      </tr>`;
+  }).join('');
+  return `
+    <div class="card-title" style="font-size:12px;margin:14px 0 8px">決策紀錄</div>
+    ${events.length ? `
+      <table class="tbl" style="margin:8px 0">
+        <thead><tr><th>時間</th><th>Action</th><th>狀態</th><th>操作者</th><th>細節</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>` : '<div class="muted" style="padding:8px 0">尚無派遣決策紀錄</div>'}
+  `;
 }
 
 async function matchNeed(needId, resourceId) {

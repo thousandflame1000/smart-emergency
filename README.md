@@ -50,6 +50,7 @@ API：
 - `/api/ontology/schema`：object types / link types / actions / functions
 - `/api/ontology/graph`：目前營運圖譜與即時指標
 - `/api/ontology/needs/{need_id}/decision-context`：單筆需求的候選資源、分數拆解、決策事件、建議 action 與 human-in-the-loop 限制
+- `/api/resources/needs/{need_id}/events`：後台需求詳情使用的派遣決策稽核紀錄
 
 後台操作：`/admin` → 決賽展演 → Ontology。
 
