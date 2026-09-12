@@ -1,177 +1,95 @@
-# 🏘️ 鄰里守望平台
+# 鄰里守望平台
 
-> **平時照顧長者，災時守護社區**  
-> 2026 第十屆全國慈悲科技創新競賽 參賽作品
+平時長者關懷資料，是災時物資調度演算法的輸入——不是兩套系統拼接，是同一份資料在不同情境發揮作用。
 
 [![Railway](https://img.shields.io/badge/deployed-Railway-blueviolet)](https://smart-emergency-production-d744.up.railway.app)
 [![Python](https://img.shields.io/badge/python-3.11+-blue)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.110-green)](https://fastapi.tiangolo.com)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)](https://fastapi.tiangolo.com)
 
----
+## 系統做什麼
 
-## 🎯 解決的核心問題
+| 功能 | 實作 |
+|---|---|
+| 長者每日打卡 | LINE Flex Message，1 小時未回應通知家屬、3 小時通知志工 |
+| 一鍵求助 | LINE 按鈕觸發警報，依關係層級通知家屬/志工 |
+| AI 急救/長照問答 | Gemini embedding + cosine similarity 的本地 RAG，LINE 內直接問答 |
+| 物資媒合 | 脆弱度加權評分 + 匈牙利演算法批次最佳指派（非貪婪逐筆） |
+| 決賽情境模擬 | 颱風風場模型驅動的災害情境引擎，用於現場展演 |
 
-| 族群 | 痛點 | 我們的解法 |
-|------|------|-----------|
-| 獨居長者 | 身體不適時無法即時求救 | LINE 每日打卡 + 兩小時內無回應自動通知家屬 |
-| 志工 | 災時找不到附近物資 | 即時地圖顯示社區物資 / 庇護所 |
-| 志工 | 不確定急救 / 長照 SOP | AI 助手（RAG）直接在 LINE 回答 |
-| 管理員 | 缺乏統一指揮介面 | 即時儀表板 + 一鍵切換緊急模式 |
-
----
-
-## 🚀 系統架構
+## 架構
 
 ```
-LINE Bot ──> FastAPI (Railway)
-               ├── 打卡 Scheduler (APScheduler, 每天 08:00)
-               ├── 未回應偵測 (每 15 分鐘)
-               ├── 物資 API
-               ├── RAG 查詢 API (Gemini Embedding + Cosine Search + Gemini Flash)
-               ├── 管理員儀表板 (Bootstrap 5 + Leaflet)
-               └── PostgreSQL (Railway)
+LINE Bot ──▶ FastAPI (Railway)
+              ├─ 排程：每日打卡 08:00 / 未回應偵測 15min / 自動媒合 30min
+              ├─ /api/resources   物資與需求
+              ├─ /api/dashboard   管理端點
+              ├─ /api/rag         知識庫問答
+              ├─ /api/scenario    情境模擬引擎
+              └─ PostgreSQL (Railway) / SQLite（本地開發）
 ```
 
----
+## 派遣演算法
 
-## ✨ 核心功能
+`app/services/dispatch.py`：
 
-### 1. 長者日常打卡
-- 每天早上 08:00 自動推送 Flex Message 給所有已綁定長者
-- 長者按「✅ 我很好」→ 打卡成功，記錄到 DB
-- 1 小時未回應 → 自動通知家屬
-- 3 小時未回應 → 自動通知志工上門探視
+- 評分 = 緊急度 + 脆弱度 + 類型親合度 + 等待時間懲罰 − 距離懲罰 − 志工負荷懲罰
+- 脆弱度（0–28）由打卡異常次數、未解警報數、照顧網絡孤立度即時計算，不是使用者自報的數字
+- 個人物資（稀缺資源）用批次匈牙利演算法（`app/services/hungarian.py`，純 Python 實作，見下方「已知限制」）求全域最佳指派，取代貪婪逐筆處理——貪婪法會讓先處理的需求搶走對另一筆需求而言唯一可行的資源，即使有更好的整體解
+- 資源點（固定設施，非稀缺）維持逐筆獨立比對
 
-### 2. 一鍵求助
-- 長者按「🆘 需要幫忙」→ 立即觸發警報，通知所有關聯家屬 + 志工
+方法論依據見 [`RESEARCH_disaster_logistics.md`](RESEARCH_disaster_logistics.md)（13 篇指定文獻的可驗證程度逐一標註，2 篇取得全文、其餘標為摘要層級，不假裝讀過讀不到的內容）。
 
-### 3. AI 急救 / 長照助手
-- 知識庫涵蓋：**CPR、哈姆立克法、中風辨識、低血糖急救、失溫處理、地震應變、颱風準備**
-- 志工只需在 LINE 輸入問題，幾秒內得到精準 SOP 回答
-- 使用 `gemini-embedding-001`（3072 維向量）+ numpy cosine similarity
+## 情境模擬引擎
 
-### 4. 社區物資地圖
-- 管理員後台管理庇護所、飲用水、急救箱、食物等物資點
-- Leaflet 地圖即時顯示，可用 / 不可用一目了然
+`app/services/hazard.py` + `app/services/scenario.py`：用真實颱風物理模型（Holland 1980 風場模型、Kaplan-DeMaria 1995 登陸衰減模型）驅動需求生成，不是寫死的劇本。路徑錨點取材自 2024 年康芮颱風的公開報導數據；誰通報、何時通報、緊急度多少，由風速與該居民的實際脆弱度分數計算決定。
 
-### 5. 緊急模式
-- 管理員一鍵切換 → 儀表板閃紅色警示 → 廣播通知
-- 物資地圖顯示所有緊急站點
-- 恢復後自動回到日常模式
-- **管理員儀表板獨立於 LINE 運作**：即使 LINE 服務中斷，管理員仍可直接登入後台執行派遣、查看長者狀態、手動媒合物資
+決賽現場操作：`/admin` → 決賽展演 → 情境模擬 → 開始情境 / 逐步推進 / 自動播放。
 
----
+## 已知限制
 
-## 📱 LINE Bot 使用方式
+誠實列出，不在提問環節被動承認：
 
-| 指令 | 說明 |
-|------|------|
-| `我很好` / `好` | 回覆今日打卡 |
-| `需要幫忙` / `救命` | 觸發緊急求助通知 |
-| `狀態` | 查看目前系統模式 |
-| `幫助` | 顯示所有指令 |
-| 任何 8 字以上的問題（志工/家屬） | AI 急救知識查詢 |
+- 單一 Railway 容器，無備援；Railway 停機系統就停機
+- `/admin`、`/`（同為操作主控台，兩者都能改資料）僅靠共用密碼保護（`DEMO_PASSWORD` 環境變數），無使用者分級權限
+- 志工身份無驗證機制，需社區組織在真實導入時另行把關
+- 派遣評分係數是初始 heuristic，尚無真實試辦資料校正
+- 情境模擬的颱風路徑逐時座標為內插，非官方最佳路徑資料
+- 詳細落差分析見 [`PRODUCT_GAP_ANALYSIS.md`](PRODUCT_GAP_ANALYSIS.md)
 
----
-
-## 🖥️ Demo 連結
+## Demo
 
 | 頁面 | URL |
-|------|-----|
-| 主儀表板 | https://smart-emergency-production-d744.up.railway.app |
+|---|---|
+| 主控台 | https://smart-emergency-production-d744.up.railway.app |
 | 管理後台 | https://smart-emergency-production-d744.up.railway.app/admin |
 | API 文件 | https://smart-emergency-production-d744.up.railway.app/docs |
 
----
-
-## 🛠️ 技術選型
-
-| 層次 | 技術 | 理由 |
-|------|------|------|
-| 後端框架 | FastAPI | 高效能、自動生成 API 文件 |
-| ORM | SQLAlchemy 2.0 | 支援 SQLite/PostgreSQL 雙環境 |
-| 資料庫 | PostgreSQL (Railway) | 穩定、免費額度夠用 |
-| 向量搜尋 | numpy cosine | SQLite 相容，無需 pgvector |
-| Embedding | gemini-embedding-001 | 免費、3072 維高品質向量 |
-| 生成模型 | gemini-2.5-flash | 免費 tier、繁中支援好 |
-| LINE SDK | line-bot-sdk v3 | 官方最新版 |
-| 排程 | APScheduler | 輕量、內嵌於 FastAPI |
-| 部署 | Railway | 一鍵部署、免費 PostgreSQL |
-| 前端 | Bootstrap 5 + Leaflet | 無需打包、快速開發 |
-
----
-
-## 📦 本地開發
+## 本地開發
 
 ```bash
-# 1. 安裝依賴
 pip install -r requirements.txt
-
-# 2. 建立 .env（參考 .env.example）
-cp .env.example .env
-# 填入 LINE_CHANNEL_SECRET, LINE_CHANNEL_ACCESS_TOKEN, GEMINI_API_KEY
-
-# 3. 啟動
+cp .env.example .env   # 填入 LINE/GEMINI 金鑰
 uvicorn app.main:app --reload --port 8080
-
-# 4. 開另一個終端，載入測試資料
-python seed.py
-python ingest_kb.py
-
-# 5. 開啟 http://localhost:8080
+python seed.py              # 基本測試資料
+python seed_rich_demo.py    # 決賽用豐富示範資料（附加式，不清空既有資料）
+python ingest_kb.py         # 建置知識庫向量
 ```
 
----
-
-## ✅ 測試
-
-核心業務邏輯（派遣確認關卡、分級通報、知識庫管理、SOS 自動建需求等）有 pytest 測試，全部跑在獨立的 sqlite 檔案上，不會碰到正式資料庫，也不會打真的 LINE / Gemini API。
+## 測試
 
 ```bash
-pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
----
+無須真的 LINE/Gemini API 金鑰，全部跑在獨立 SQLite 檔案上，不碰正式資料庫。
 
-## 📁 專案結構
+## 專案結構
 
 ```
-smart-emergency/
-├── app/
-│   ├── main.py              # FastAPI 入口
-│   ├── config.py            # 環境變數設定
-│   ├── database.py          # SQLAlchemy 引擎
-│   ├── scheduler.py         # APScheduler 定時任務
-│   ├── models/              # SQLAlchemy Models
-│   ├── routers/             # API 路由
-│   │   ├── linebot.py       # LINE Webhook
-│   │   ├── dashboard.py     # 儀表板 API
-│   │   ├── resources.py     # 物資 API
-│   │   └── rag.py           # RAG 查詢 API
-│   ├── services/            # 業務邏輯
-│   │   ├── checkin.py       # 打卡服務
-│   │   ├── alert.py         # 警報服務
-│   │   ├── rag.py           # RAG 服務
-│   │   └── line_notify.py   # LINE 推播
-│   └── static/              # 前端頁面
-│       ├── index.html       # 主儀表板
-│       └── admin.html       # 管理後台
-├── seed.py                  # Demo 資料
-├── ingest_kb.py             # 知識庫載入
-├── startup.py               # Railway 啟動腳本
-├── railway.toml             # Railway 部署設定
-└── requirements.txt
+app/
+├── main.py, config.py, database.py, scheduler.py, demo_auth.py
+├── models/       SQLAlchemy models
+├── routers/      linebot / dashboard / resources / rag / scenario
+├── services/     dispatch, hungarian, hazard, scenario, checkin, alert, rag, line_notify
+└── static/       index.html（主控台）, admin.html（後台）
 ```
-
----
-
-## 👥 作品說明
-
-本系統結合三大功能：
-
-1. **日常關懷**：取代人工電話問候，讓志工能同時照顧更多長者
-2. **AI 知識庫**：降低志工進入門檻，新手也能快速找到正確 SOP
-3. **災時協調**：統一指揮介面 + 物資地圖，避免資源錯配
-
-技術創新點：使用 **Local RAG**（無需付費 pgvector）實現高品質語義搜尋，同時保持零成本部署。
