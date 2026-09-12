@@ -9,6 +9,7 @@ from app.models.user import User
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.config import SystemConfig
+from app.models.dispatch_event import DispatchEvent
 from app.services import dispatch
 
 
@@ -46,8 +47,13 @@ def test_auto_dispatch_only_suggests_does_not_notify(db, monkeypatch):
     db2 = SessionLocal()
     need = db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     res = db2.query(CommunityResource).filter(CommunityResource.id == res_id).first()
+    event = db2.query(DispatchEvent).filter(DispatchEvent.need_id == need_id).first()
     assert need.status == "suggested"
     assert res.is_available is False, "建議階段應先保留物資，避免被同時建議給別人"
+    assert event.action == "propose_dispatch"
+    assert event.outcome == "suggested"
+    assert event.previous_status == "open"
+    assert event.new_status == "suggested"
     db2.close()
 
 
@@ -62,8 +68,16 @@ def test_decline_suggestion_releases_resource(db, monkeypatch):
     assert out["message"].startswith("已否決")
     need = db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     res = db2.query(CommunityResource).filter(CommunityResource.id == res_id).first()
+    decline_event = (
+        db2.query(DispatchEvent)
+        .filter(DispatchEvent.need_id == need_id, DispatchEvent.action == "decline_suggestion")
+        .first()
+    )
     assert need.status == "open" and need.matched_resource_id is None
     assert res.is_available is True
+    assert decline_event is not None
+    assert decline_event.previous_status == "suggested"
+    assert decline_event.new_status == "open"
     db2.close()
 
 
@@ -81,7 +95,16 @@ def test_confirm_dispatch_sends_line_notification(db, monkeypatch):
     assert called["sent"] is True, "confirm_dispatch 才應該真的發送 LINE 通知"
     assert out["volunteer_notified"] is True
     need = db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    confirm_event = (
+        db2.query(DispatchEvent)
+        .filter(DispatchEvent.need_id == need_id, DispatchEvent.action == "confirm_dispatch")
+        .first()
+    )
     assert need.status == "matched"
+    assert confirm_event is not None
+    assert confirm_event.outcome == "matched"
+    assert confirm_event.previous_status == "suggested"
+    assert confirm_event.new_status == "matched"
     db2.close()
 
 

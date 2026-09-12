@@ -41,13 +41,15 @@ LINE Bot ──▶ FastAPI (Railway)
 
 ## Operational Ontology
 
-`app/services/ontology.py` + `app/routers/ontology.py`：提供一層類 Palantir Ontology 的語意檢視，把既有 SQLAlchemy 資料表整理成 `Person`、`ResourceRequest`、`Resource`、`Facility`、`Alert`、`CheckIn` 等 object types，並明確列出 `REQUESTED_BY`、`OWNED_BY`、`MATCHED_TO`、`HAS_ALERT`、`CARE_CONTACT` 等 link types。
+`app/services/ontology.py` + `app/routers/ontology.py`：提供一層類 Palantir Ontology 的語意檢視，把既有 SQLAlchemy 資料表整理成 `Person`、`ResourceRequest`、`Resource`、`Facility`、`Alert`、`CheckIn`、`DecisionEvent` 等 object types，並明確列出 `REQUESTED_BY`、`OWNED_BY`、`MATCHED_TO`、`HAS_ALERT`、`CARE_CONTACT`、`ACTION_ON` 等 link types。
+
+派遣動作會寫入 append-only `dispatch_events` 稽核表：自動建議、手動派遣、確認派遣、拒絕建議都會留下 action、前後狀態、候選資源與分數細節。這補上了「誰/什麼演算法在何時改變了哪筆派遣」的可追溯性，雖然目前尚未做到完整使用者分級簽核。
 
 API：
 
 - `/api/ontology/schema`：object types / link types / actions / functions
 - `/api/ontology/graph`：目前營運圖譜與即時指標
-- `/api/ontology/needs/{need_id}/decision-context`：單筆需求的候選資源、分數拆解、建議 action 與 human-in-the-loop 限制
+- `/api/ontology/needs/{need_id}/decision-context`：單筆需求的候選資源、分數拆解、決策事件、建議 action 與 human-in-the-loop 限制
 
 後台操作：`/admin` → 決賽展演 → Ontology。
 

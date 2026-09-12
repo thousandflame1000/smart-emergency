@@ -67,6 +67,7 @@ from app.models.checkin import DailyCheckin
 from app.models.alert import Alert
 from app.models.care_relation import CareRelation
 from app.models.config import SystemConfig
+from app.models.dispatch_event import DispatchEvent
 from app.services.line_notify import send_task_message
 
 
@@ -99,6 +100,35 @@ DEFAULT_MAX_KM = 10.0
 # 時比 created_at。
 WAIT_PTS_PER_HOUR = 1.0
 WAIT_PTS_CAP = 15.0
+
+
+def _log_dispatch_event(
+    db: Session,
+    action: str,
+    *,
+    need: CommunityNeed | None = None,
+    resource: CommunityResource | None = None,
+    resource_id: str | None = None,
+    actor_id: str | None = None,
+    actor_label: str | None = None,
+    previous_status: str | None = None,
+    new_status: str | None = None,
+    outcome: str = "success",
+    details: dict | None = None,
+) -> DispatchEvent:
+    event = DispatchEvent(
+        action=action,
+        outcome=outcome,
+        need_id=need.id if need else None,
+        resource_id=(resource.id if resource else resource_id),
+        actor_id=actor_id,
+        actor_label=actor_label,
+        previous_status=previous_status,
+        new_status=new_status,
+        details_json=json.dumps(details or {}, ensure_ascii=False),
+    )
+    db.add(event)
+    return event
 
 
 def _wait_pts(need: CommunityNeed) -> float:
@@ -493,6 +523,7 @@ def auto_dispatch() -> dict:
                 # 個人物資：這裡只「建議」，不自動通知志工——
                 # 計畫書明文承諾「所有建議仍須管理員確認後才會執行」，
                 # 真正發 LINE 通知要等管理員按下確認（見 confirm_dispatch）。
+                previous_status = need.status
                 need.status = "suggested"
                 need.matched_resource_id = best.resource_id
                 res_obj = db.query(CommunityResource).filter(
@@ -500,6 +531,24 @@ def auto_dispatch() -> dict:
                 ).first()
                 if res_obj:
                     res_obj.is_available = False
+                _log_dispatch_event(
+                    db,
+                    "propose_dispatch",
+                    need=need,
+                    resource=res_obj,
+                    actor_label="system:auto_dispatch",
+                    previous_status=previous_status,
+                    new_status=need.status,
+                    outcome="suggested",
+                    details={
+                        "source": best.source,
+                        "resource_name": best.res_name,
+                        "score": round(best.score, 3),
+                        "dist_km": round(best.dist_km, 3) if not math.isinf(best.dist_km) else None,
+                        "vulnerability": round(vulnerability, 3),
+                        "breakdown": best.breakdown,
+                    },
+                )
 
                 suggested += 1
                 details.append({
@@ -515,7 +564,26 @@ def auto_dispatch() -> dict:
                 # 資源點（固定設施）：本來就不會發 LINE 通知志工，
                 # 只是把「有哪個資源點可用」標記出來給管理員手動協調，
                 # 不牽涉「自動指派志工」，維持直接標記完成。
+                previous_status = need.status
                 need.status = "matched"
+                _log_dispatch_event(
+                    db,
+                    "auto_match_facility",
+                    need=need,
+                    actor_label="system:auto_dispatch",
+                    previous_status=previous_status,
+                    new_status=need.status,
+                    outcome="matched",
+                    details={
+                        "source": best.source,
+                        "point_id": best.point_id,
+                        "facility_name": best.res_name,
+                        "score": round(best.score, 3),
+                        "dist_km": round(best.dist_km, 3) if not math.isinf(best.dist_km) else None,
+                        "vulnerability": round(vulnerability, 3),
+                        "breakdown": best.breakdown,
+                    },
+                )
                 matched += 1
                 details.append({
                     "need_id":       str(need.id),
@@ -552,6 +620,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
     if not need or not resource:
         return {"error": "need or resource not found"}
 
+    previous_status = need.status
     need.matched_resource_id = resource.id
     need.status  = "matched"
     resource.is_available = False
@@ -573,6 +642,22 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
             pass
 
     dist = _distance_km(need.lat, need.lng, resource.lat, resource.lng)
+    _log_dispatch_event(
+        db,
+        "manual_dispatch",
+        need=need,
+        resource=resource,
+        actor_label="manager",
+        previous_status=previous_status,
+        new_status=need.status,
+        outcome="matched",
+        details={
+            "resource_name": resource.name,
+            "volunteer_notified": notified,
+            "dist_km": round(dist, 3) if not math.isinf(dist) else None,
+        },
+    )
+    db.commit()
     return {
         "message":            "媒合成功",
         "need_id":            need_id,
@@ -598,8 +683,19 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
         CommunityResource.id == need.matched_resource_id
     ).first()
     if not resource:
+        previous_status = need.status
         need.status = "open"
         need.matched_resource_id = None
+        _log_dispatch_event(
+            db,
+            "confirm_dispatch",
+            need=need,
+            actor_label="manager",
+            previous_status=previous_status,
+            new_status=need.status,
+            outcome="resource_missing",
+            details={"reason": "matched resource no longer exists"},
+        )
         db.commit()
         return {"error": "候選物資已不存在，需求已退回待媒合"}
 
@@ -618,7 +714,23 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
         except Exception:
             pass
 
+    previous_status = need.status
     need.status = "matched"
+    db.commit()
+    _log_dispatch_event(
+        db,
+        "confirm_dispatch",
+        need=need,
+        resource=resource,
+        actor_label="manager",
+        previous_status=previous_status,
+        new_status=need.status,
+        outcome="matched",
+        details={
+            "resource_name": resource.name,
+            "volunteer_notified": notified,
+        },
+    )
     db.commit()
 
     return {
@@ -635,6 +747,8 @@ def decline_suggestion(need_id: str, db: Session) -> dict:
     if not need or need.status != "suggested":
         return {"error": "此需求目前沒有待確認的媒合建議"}
 
+    previous_status = need.status
+    previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
     if need.matched_resource_id:
         resource = db.query(CommunityResource).filter(
             CommunityResource.id == need.matched_resource_id
@@ -644,6 +758,17 @@ def decline_suggestion(need_id: str, db: Session) -> dict:
 
     need.status = "open"
     need.matched_resource_id = None
+    _log_dispatch_event(
+        db,
+        "decline_suggestion",
+        need=need,
+        resource_id=previous_resource_id,
+        actor_label="manager",
+        previous_status=previous_status,
+        new_status=need.status,
+        outcome="declined",
+        details={"released_resource_id": previous_resource_id},
+    )
     db.commit()
 
     return {"message": "已否決此建議，需求退回待媒合", "need_id": need_id}

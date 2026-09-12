@@ -6,3 +6,4 @@ from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.knowledge import KnowledgeChunk
 from app.models.config import SystemConfig
+from app.models.dispatch_event import DispatchEvent

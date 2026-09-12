@@ -8,6 +8,7 @@ actions, functions, and an operational graph that the UI/API can inspect.
 """
 from __future__ import annotations
 
+import json
 from datetime import date, datetime
 from typing import Any
 
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.models.alert import Alert
 from app.models.care_relation import CareRelation
 from app.models.checkin import DailyCheckin
+from app.models.dispatch_event import DispatchEvent
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.resource_point import ResourcePoint, POINT_SUPPLY_TYPES
@@ -65,6 +67,12 @@ OBJECT_TYPES: dict[str, dict[str, Any]] = {
         "description": "Daily safety response from an elderly resident.",
         "key_fields": ["id"],
         "display_fields": ["date", "status", "note", "responded_at", "confirmed_at"],
+    },
+    "DecisionEvent": {
+        "source_table": "dispatch_events",
+        "description": "Append-only audit trail for dispatch actions and algorithmic suggestions.",
+        "key_fields": ["id"],
+        "display_fields": ["action", "outcome", "actor_label", "previous_status", "new_status", "created_at"],
     },
 }
 
@@ -119,6 +127,27 @@ LINK_TYPES: list[dict[str, Any]] = [
         "source": "resource_points.point_type -> POINT_SUPPLY_TYPES -> community_needs.need_type",
         "meaning": "A fixed facility can potentially satisfy this request type.",
         "computed": True,
+    },
+    {
+        "id": "ACTION_ON",
+        "from": "DecisionEvent",
+        "to": "ResourceRequest",
+        "source": "dispatch_events.need_id -> community_needs.id",
+        "meaning": "Which request a dispatch action changed or evaluated.",
+    },
+    {
+        "id": "ACTION_RESOURCE",
+        "from": "DecisionEvent",
+        "to": "Resource",
+        "source": "dispatch_events.resource_id -> community_resources.id",
+        "meaning": "Which resource a dispatch action reserved, released, or confirmed.",
+    },
+    {
+        "id": "ACTION_ACTOR",
+        "from": "DecisionEvent",
+        "to": "Person",
+        "source": "dispatch_events.actor_id -> users.id",
+        "meaning": "Which user performed the action when known.",
     },
 ]
 
@@ -215,6 +244,10 @@ TYPE_ALIASES = {
     "resourcepoint": "Facility",
     "alert": "Alert",
     "checkin": "CheckIn",
+    "decisionevent": "DecisionEvent",
+    "dispatch_event": "DecisionEvent",
+    "dispatchevent": "DecisionEvent",
+    "event": "DecisionEvent",
 }
 
 
@@ -238,6 +271,7 @@ def graph(db: Session, limit: int = 80) -> dict[str, Any]:
     alerts = db.query(Alert).order_by(Alert.created_at.desc()).limit(limit).all()
     checkins = db.query(DailyCheckin).order_by(DailyCheckin.date.desc()).limit(limit).all()
     relations = db.query(CareRelation).filter(CareRelation.is_active == True).limit(limit).all()
+    events = db.query(DispatchEvent).order_by(DispatchEvent.created_at.desc()).limit(limit).all()
 
     nodes = []
     edges = []
@@ -268,6 +302,14 @@ def graph(db: Session, limit: int = 80) -> dict[str, Any]:
                 "notify_order": relation.notify_order,
             },
         })
+    for event in events:
+        nodes.append(_event_node(event))
+        if event.need_id:
+            edges.append(_edge("ACTION_ON", "DecisionEvent", event.id, "ResourceRequest", event.need_id))
+        if event.resource_id:
+            edges.append(_edge("ACTION_RESOURCE", "DecisionEvent", event.id, "Resource", event.resource_id))
+        if event.actor_id:
+            edges.append(_edge("ACTION_ACTOR", "DecisionEvent", event.id, "Person", event.actor_id))
 
     return {
         "schema_version": 1,
@@ -330,6 +372,16 @@ def object_context(db: Session, object_type: str, object_id: str) -> dict[str, A
             "object": _checkin_node(checkin),
             "related": {"person": _person_node(checkin.elderly) if checkin.elderly else None},
         }
+    if canonical == "DecisionEvent":
+        event = _get_or_404(db, DispatchEvent, object_id, "DecisionEvent")
+        return {
+            "object": _event_node(event),
+            "related": {
+                "request": _need_node(event.need) if event.need else None,
+                "resource": _resource_node(event.resource) if event.resource else None,
+                "actor": _person_node(event.actor) if event.actor else None,
+            },
+        }
     raise HTTPException(status_code=400, detail=f"Unsupported object_type: {object_type}")
 
 
@@ -365,6 +417,7 @@ def decision_context(db: Session, need_id: str) -> dict[str, Any]:
             ],
         },
         "candidate_resources": candidates.get("candidates", []),
+        "decision_events": [_event_node(e) for e in _decision_events(db, str(need.id), limit=20)],
         "vulnerability": candidates.get("vulnerability", 0.0),
         "recommended_action": recommended_action,
         "constraints": {
@@ -387,6 +440,7 @@ def _metrics(db: Session) -> dict[str, int]:
         "available_resources": db.query(CommunityResource).filter(CommunityResource.is_available == True).count(),
         "facilities": db.query(ResourcePoint).filter(ResourcePoint.is_active == True).count(),
         "active_alerts": db.query(Alert).filter(Alert.status == "sent").count(),
+        "decision_events": db.query(DispatchEvent).count(),
         "risky_checkins_today": db.query(DailyCheckin).filter(
             DailyCheckin.date == today,
             DailyCheckin.status.in_(["no_response", "help_needed"]),
@@ -499,6 +553,24 @@ def _checkin_node(checkin: DailyCheckin) -> dict[str, Any]:
     })
 
 
+def _event_node(event: DispatchEvent) -> dict[str, Any]:
+    details = {}
+    if event.details_json:
+        try:
+            details = json.loads(event.details_json)
+        except Exception:
+            details = {"raw": event.details_json}
+    return _node("DecisionEvent", event.id, event.action, {
+        "action": event.action,
+        "outcome": event.outcome,
+        "actor_label": event.actor_label,
+        "previous_status": event.previous_status,
+        "new_status": event.new_status,
+        "details": details,
+        "created_at": event.created_at,
+    })
+
+
 def _edge(
     link_type: str,
     from_type: str,
@@ -548,6 +620,16 @@ def _compatible_open_needs(db: Session, facility: ResourcePoint) -> list[Communi
         )
         .order_by(CommunityNeed.urgency.desc(), CommunityNeed.created_at)
         .limit(20)
+        .all()
+    )
+
+
+def _decision_events(db: Session, need_id: str, limit: int = 20) -> list[DispatchEvent]:
+    return (
+        db.query(DispatchEvent)
+        .filter(DispatchEvent.need_id == need_id)
+        .order_by(DispatchEvent.created_at.desc())
+        .limit(limit)
         .all()
     )
 

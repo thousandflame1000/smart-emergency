@@ -2457,7 +2457,8 @@ async function loadOntology() {
       <div class="stat-tile"><div class="stat-tile-label">People</div><div class="stat-tile-value">${m.people ?? 0}</div><div class="stat-tile-sub">${m.active_people ?? 0} active</div></div>
       <div class="stat-tile"><div class="stat-tile-label">Open Requests</div><div class="stat-tile-value ${(m.open_requests ?? 0)>0?'warn':''}">${m.open_requests ?? 0}</div><div class="stat-tile-sub">${m.suggested_requests ?? 0} suggested</div></div>
       <div class="stat-tile"><div class="stat-tile-label">Resources</div><div class="stat-tile-value ok">${m.available_resources ?? 0}</div><div class="stat-tile-sub">available now</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Alerts</div><div class="stat-tile-value ${(m.active_alerts ?? 0)>0?'danger':''}">${m.active_alerts ?? 0}</div><div class="stat-tile-sub">${m.risky_checkins_today ?? 0} risky check-ins today</div></div>`;
+      <div class="stat-tile"><div class="stat-tile-label">Alerts</div><div class="stat-tile-value ${(m.active_alerts ?? 0)>0?'danger':''}">${m.active_alerts ?? 0}</div><div class="stat-tile-sub">${m.risky_checkins_today ?? 0} risky check-ins today</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">Decision Events</div><div class="stat-tile-value">${m.decision_events ?? 0}</div><div class="stat-tile-sub">action audit trail</div></div>`;
 
     const objectTypes = Object.entries(schema.object_types || {});
     document.getElementById('ontology-types').innerHTML = objectTypes.map(([name, meta]) => `
