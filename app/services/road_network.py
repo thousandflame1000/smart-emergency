@@ -19,7 +19,10 @@ import heapq
 
 from app.services.hazard import haversine_km
 
-# name -> (lat, lng), real approximate town-center coordinates
+# name -> (lat, lng), real town-center coordinates entered from general
+# geographic knowledge (not a surveyed dataset or GPS fix) — accurate to
+# roughly ~1km, which is fine for corridor-level routing but not a claim
+# of precise, official coordinates if checked against a map pin.
 NODES: dict[str, tuple[float, float]] = {
     "hualien":   (23.9739, 121.6015),
     "fenglin":   (23.7467, 121.4467),
