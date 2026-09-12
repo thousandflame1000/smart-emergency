@@ -209,6 +209,9 @@ def update_need_status(need_id: str, status: str, db: Session = Depends(get_db))
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
         raise HTTPException(status_code=404, detail="Not found")
+    if status == "cancelled":
+        from app.services.dispatch import cancel_need
+        return cancel_need(need_id, db)
     need.status = status
     db.commit()
     return {"message": "更新成功"}

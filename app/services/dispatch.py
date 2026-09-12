@@ -785,6 +785,60 @@ def decline_suggestion(need_id: str, db: Session) -> dict:
 
 
 # ──────────────────────────────────────────────────────────
+# 取消需求 / 資源釋放
+# ──────────────────────────────────────────────────────────
+def cancel_need(need_id: str, db: Session) -> dict:
+    """Cancel a request and release any active resource reservation."""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "need not found"}
+
+    previous_status = need.status
+    previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
+
+    if previous_status == "cancelled":
+        return {
+            "message": "need already cancelled",
+            "need_id": need_id,
+            "already_cancelled": True,
+        }
+
+    resource_released = False
+    if need.matched_resource_id and previous_status in {"suggested", "matched"}:
+        resource = db.query(CommunityResource).filter(
+            CommunityResource.id == need.matched_resource_id
+        ).first()
+        if resource:
+            resource.is_available = True
+            resource_released = True
+
+    need.status = "cancelled"
+    need.matched_resource_id = None
+    _log_dispatch_event(
+        db,
+        "cancel_need",
+        need=need,
+        resource_id=previous_resource_id,
+        actor_label="manager",
+        previous_status=previous_status,
+        new_status=need.status,
+        outcome="cancelled",
+        details={
+            "released_resource_id": previous_resource_id,
+            "resource_released": resource_released,
+        },
+    )
+    db.commit()
+
+    return {
+        "message": "need cancelled",
+        "need_id": need_id,
+        "released_resource_id": previous_resource_id,
+        "resource_released": resource_released,
+    }
+
+
+# ──────────────────────────────────────────────────────────
 # 評分預覽（給管理員在 UI 查看候選排序）
 # ──────────────────────────────────────────────────────────
 def preview_candidates(need_id: str, db: Session) -> dict:

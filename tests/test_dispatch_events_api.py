@@ -6,6 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.database import SessionLocal
 from app.models.dispatch_event import DispatchEvent
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
@@ -38,6 +39,8 @@ def _seed_need_and_resource(db):
         lng=120.680,
         is_available=False,
     )
+    db.add(resource)
+    db.commit()
     need = CommunityNeed(
         requester_id=elder.id,
         need_type="water",
@@ -47,8 +50,6 @@ def _seed_need_and_resource(db):
         lat=24.151,
         lng=120.681,
     )
-    db.add(resource)
-    db.commit()
     db.add(need)
     db.commit()
     return str(need.id), str(resource.id)
@@ -104,3 +105,30 @@ def test_need_dispatch_events_endpoint_returns_empty_list(db, client):
 
     assert res.status_code == 200
     assert res.json() == []
+
+
+def test_cancel_need_endpoint_releases_resource_and_lists_event(db, client):
+    need_id, resource_id = _seed_need_and_resource(db)
+    db.close()
+
+    res = client.put(f"/api/resources/needs/{need_id}?status=cancelled")
+    assert res.status_code == 200
+    assert res.json()["resource_released"] is True
+
+    db2 = SessionLocal()
+    need = db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    resource = db2.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
+    assert need.status == "cancelled"
+    assert need.matched_resource_id is None
+    assert resource.is_available is True
+    db2.close()
+
+    events_res = client.get(f"/api/resources/needs/{need_id}/events")
+    events = events_res.json()
+
+    assert events_res.status_code == 200
+    assert events[0]["action"] == "cancel_need"
+    assert events[0]["resource_id"] == resource_id
+    assert events[0]["previous_status"] == "matched"
+    assert events[0]["new_status"] == "cancelled"
+    assert events[0]["details"]["resource_released"] is True

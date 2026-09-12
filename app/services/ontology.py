@@ -181,6 +181,15 @@ ACTIONS: list[dict[str, Any]] = [
         "human_in_the_loop": True,
     },
     {
+        "id": "cancel_need",
+        "label": "Cancel resource request",
+        "method": "PUT",
+        "endpoint": "/api/resources/needs/{need_id}?status=cancelled",
+        "preconditions": ["ResourceRequest exists"],
+        "effects": ["Sets request to cancelled", "Releases active matched resource when present"],
+        "human_in_the_loop": True,
+    },
+    {
         "id": "manual_dispatch",
         "label": "Manual dispatch",
         "method": "POST",

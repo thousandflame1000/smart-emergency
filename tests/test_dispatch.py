@@ -81,6 +81,34 @@ def test_decline_suggestion_releases_resource(db, monkeypatch):
     db2.close()
 
 
+def test_cancel_need_releases_active_resource_and_logs_event(db, monkeypatch):
+    need_id, res_id = _make_scenario(db)
+    db.close()
+    monkeypatch.setattr(dispatch, "send_task_message", lambda *a, **kw: None)
+    dispatch.auto_dispatch()
+
+    db2 = SessionLocal()
+    out = dispatch.cancel_need(need_id, db2)
+    assert out["resource_released"] is True
+
+    need = db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    res = db2.query(CommunityResource).filter(CommunityResource.id == res_id).first()
+    cancel_event = (
+        db2.query(DispatchEvent)
+        .filter(DispatchEvent.need_id == need_id, DispatchEvent.action == "cancel_need")
+        .first()
+    )
+    assert need.status == "cancelled"
+    assert need.matched_resource_id is None
+    assert res.is_available is True
+    assert cancel_event is not None
+    assert str(cancel_event.resource_id) == res_id
+    assert cancel_event.previous_status == "suggested"
+    assert cancel_event.new_status == "cancelled"
+    assert cancel_event.outcome == "cancelled"
+    db2.close()
+
+
 def test_confirm_dispatch_sends_line_notification(db, monkeypatch):
     need_id, res_id = _make_scenario(db)
     db.close()
