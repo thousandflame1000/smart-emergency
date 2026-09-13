@@ -12,7 +12,7 @@ from app.database import engine, Base
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.rate_limit import limiter
 from app.demo_auth import DemoAuthMiddleware
-from app.routers import linebot, dashboard, resources, rag, scenario, ontology, road_network
+from app.routers import linebot, dashboard, resources, rag, scenario, ontology, road_network, workspace
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
@@ -76,6 +76,12 @@ app.include_router(rag.router,       prefix="/api/rag",       tags=["RAG"])
 app.include_router(scenario.router,  prefix="/api/scenario",  tags=["Scenario"])
 app.include_router(ontology.router,  prefix="/api/ontology",  tags=["Ontology"])
 app.include_router(road_network.router, prefix="/api/road-network", tags=["Road Network"])
+app.include_router(workspace.router, prefix="/api/workspaces", tags=["開放資料工作區"])
+
+
+@app.get("/workspace")
+def workspace_page():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "workspace.html"))
 
 
 @app.get("/admin")

@@ -175,7 +175,7 @@ LINK_TYPES: list[dict[str, Any]] = [
 ACTIONS: list[dict[str, Any]] = [
     {
         "id": "propose_dispatch",
-        "label": "Propose dispatch",
+        "label": "產生派遣建議",
         "method": "POST",
         "endpoint": "/api/resources/dispatch",
         "preconditions": ["System mode is emergency", "At least one open ResourceRequest exists"],
@@ -184,7 +184,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "confirm_dispatch",
-        "label": "Confirm dispatch suggestion",
+        "label": "確認派遣建議",
         "method": "POST",
         "endpoint": "/api/resources/needs/{need_id}/confirm_dispatch",
         "preconditions": ["ResourceRequest.status == suggested"],
@@ -193,7 +193,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "decline_suggestion",
-        "label": "Decline dispatch suggestion",
+        "label": "拒絕派遣建議",
         "method": "POST",
         "endpoint": "/api/resources/needs/{need_id}/decline_suggestion",
         "preconditions": ["ResourceRequest.status == suggested"],
@@ -202,7 +202,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "cancel_need",
-        "label": "Cancel resource request",
+        "label": "取消資源需求",
         "method": "PUT",
         "endpoint": "/api/resources/needs/{need_id}?status=cancelled",
         "preconditions": ["ResourceRequest exists"],
@@ -211,7 +211,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "manual_dispatch",
-        "label": "Manual dispatch",
+        "label": "人工派遣",
         "method": "POST",
         "endpoint": "/api/resources/needs/{need_id}/match?resource_id={resource_id}",
         "preconditions": ["Resource exists", "ResourceRequest exists"],
@@ -220,7 +220,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "task_delivered",
-        "label": "Volunteer marks task delivered",
+        "label": "志工確認送達",
         "method": "LINE_POSTBACK",
         "endpoint": "action=task_delivered&need_id={need_id}",
         "preconditions": ["Volunteer received a task message"],
@@ -229,7 +229,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "task_decline",
-        "label": "Volunteer declines task",
+        "label": "志工拒絕任務",
         "method": "LINE_POSTBACK",
         "endpoint": "action=task_decline&need_id={need_id}",
         "preconditions": ["Volunteer received a task message"],
@@ -238,7 +238,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "resolve_alerts",
-        "label": "Resolve person alerts",
+        "label": "解除人員警報",
         "method": "POST",
         "endpoint": "/api/dashboard/users/{user_id}/resolve_alerts",
         "preconditions": ["Person has active alerts"],
@@ -247,7 +247,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "mutate_road_topology",
-        "label": "Mutate road topology sandbox",
+        "label": "編輯路網沙盒",
         "method": "PUT/POST/DELETE",
         "endpoint": "/api/road-network/sandbox",
         "preconditions": ["Operator is running a what-if or disaster-routing scenario"],
@@ -256,7 +256,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "inspect_operational_risks",
-        "label": "Inspect operational risk findings",
+        "label": "檢視營運風險",
         "method": "GET",
         "endpoint": "/api/ontology/reasoning/operational-risks",
         "preconditions": ["Operational data exists"],
@@ -265,7 +265,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "generate_operational_playbook",
-        "label": "Generate operational playbook",
+        "label": "產生應變行動清單",
         "method": "GET",
         "endpoint": "/api/ontology/reasoning/playbook",
         "preconditions": ["Operational risk findings can be generated"],
@@ -274,7 +274,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "compare_courses_of_action",
-        "label": "Compare courses of action",
+        "label": "比較應變方案",
         "method": "GET",
         "endpoint": "/api/scenario/courses-of-action",
         "preconditions": ["Operational data, dispatch previews, and scenario state are available"],
@@ -283,7 +283,7 @@ ACTIONS: list[dict[str, Any]] = [
     },
     {
         "id": "dry_run_course_of_action",
-        "label": "Dry-run a course of action",
+        "label": "試算應變方案",
         "method": "GET",
         "endpoint": "/api/scenario/courses-of-action/{course_id}/dry-run",
         "preconditions": ["A candidate course of action is active"],
@@ -296,63 +296,63 @@ ACTIONS: list[dict[str, Any]] = [
 FUNCTIONS: list[dict[str, Any]] = [
     {
         "id": "dispatch_score",
-        "label": "Dispatch scoring function",
+        "label": "派遣評分",
         "implementation": "app.services.dispatch._score_breakdown",
         "inputs": ["urgency", "resource affinity", "distance", "volunteer load", "vulnerability", "waiting time"],
         "outputs": ["total score", "explainable score breakdown"],
     },
     {
         "id": "batch_assignment",
-        "label": "Batch resource assignment",
+        "label": "批次資源指派",
         "implementation": "app.services.dispatch._assign_resources_optimally",
         "algorithm": "Hungarian minimum-cost assignment over negative dispatch scores",
         "outputs": ["one-to-one request/resource suggestions"],
     },
     {
         "id": "vulnerability_score",
-        "label": "Person vulnerability score",
+        "label": "人員脆弱度評分",
         "implementation": "app.services.dispatch._vulnerability_pts",
         "inputs": ["recent risky check-ins", "active alerts", "care relation count"],
         "outputs": ["equity-weighted priority points"],
     },
     {
         "id": "road_distance",
-        "label": "Road-network distance",
+        "label": "路網距離",
         "implementation": "app.services.road_network.road_distance_km",
         "inputs": ["origin lat/lng", "destination lat/lng", "optional road sandbox overlay"],
         "outputs": ["Hua-Dong corridor road distance, sandbox-aware blocked route, or haversine fallback"],
     },
     {
         "id": "road_topology_sandbox",
-        "label": "Road topology what-if sandbox",
+        "label": "路網假設沙盒",
         "implementation": "app.services.road_network.sandbox_snapshot",
         "inputs": ["node edits", "edge closures", "edge slowdown multipliers"],
         "outputs": ["mutable road graph used by dispatch scoring"],
     },
     {
         "id": "operational_reasoning",
-        "label": "Operational risk reasoning engine",
+        "label": "營運風險推理引擎",
         "implementation": "app.services.reasoning.operational_risks",
         "inputs": ["requests", "resources", "alerts", "facilities", "road topology sandbox", "dispatch events"],
         "outputs": ["ranked findings", "evidence", "affected ontology objects", "recommended actions"],
     },
     {
         "id": "operational_playbook",
-        "label": "Operational playbook generator",
+        "label": "應變行動清單產生器",
         "implementation": "app.services.reasoning.operational_playbook",
         "inputs": ["operational risk findings", "action ontology", "affected objects", "evidence"],
         "outputs": ["prioritized operator steps", "expected impact", "blockers", "checklists"],
     },
     {
         "id": "courses_of_action",
-        "label": "Courses-of-action comparator",
+        "label": "應變方案比較器",
         "implementation": "app.services.courses_of_action.compare_courses",
         "inputs": ["open requests", "dispatch previews", "road sandbox", "facility capacity", "visible supply"],
         "outputs": ["ranked alternatives", "baseline metrics", "expected deltas", "tradeoffs"],
     },
     {
         "id": "course_of_action_dry_run",
-        "label": "Course-of-action dry-run simulator",
+        "label": "應變方案試算器",
         "implementation": "app.services.courses_of_action.dry_run_course",
         "inputs": ["course id", "open requests", "dispatch previews", "road sandbox", "visible supply"],
         "outputs": ["simulated after-state", "request-level changes", "virtual objects", "impact summary"],
@@ -646,7 +646,7 @@ def _person_node(user: User) -> dict[str, Any]:
 
 
 def _need_node(need: CommunityNeed) -> dict[str, Any]:
-    return _node("ResourceRequest", need.id, f"{need.need_type} / urgency {need.urgency}", {
+    return _node("ResourceRequest", need.id, f"{need.need_type} / 緊急程度 {need.urgency}", {
         "need_type": need.need_type,
         "description": need.description,
         "quantity": need.quantity,
@@ -825,7 +825,7 @@ def _decision_explanation(need: CommunityNeed, top_candidate: dict[str, Any] | N
     breakdown = top_candidate.get("breakdown") or {}
     return (
         f"Top candidate {top_candidate.get('name')} scores {top_candidate.get('score')} "
-        f"for urgency {need.urgency}, vulnerability {breakdown.get('vulnerability_pts')}, "
+        f"for 緊急程度 {need.urgency}, vulnerability {breakdown.get('vulnerability_pts')}, "
         f"affinity {breakdown.get('affinity_pts')}, wait {breakdown.get('wait_pts')}, "
         f"distance penalty {breakdown.get('dist_penalty')}, and load penalty {breakdown.get('load_penalty')}."
     )

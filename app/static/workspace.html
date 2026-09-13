@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>開放資料工作區 | 鄰里守望</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/static/workspace.css">
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+  <script defer src="/static/workspace.js"></script>
+</head>
+<body>
+  <header>
+    <a class="back icon-button" href="/admin" title="返回管理中心" aria-label="返回管理中心"><i data-lucide="arrow-left"></i></a>
+    <h1>開放資料工作區</h1>
+    <select id="workspace-list" aria-label="已儲存的工作區"><option value="">未儲存工作區</option></select>
+    <input id="workspace-name" aria-label="工作區名稱" value="未命名工作區" maxlength="120">
+    <div class="header-actions">
+      <button id="new" title="新增空白工作區" aria-label="新增空白工作區"><i data-lucide="file-plus-2"></i></button>
+      <button id="save" class="primary"><i data-lucide="save"></i>儲存</button>
+      <button id="duplicate" title="另存副本" aria-label="另存副本"><i data-lucide="copy"></i></button>
+      <button id="export" title="匯出完整工作區" aria-label="匯出完整工作區"><i data-lucide="download"></i></button>
+    </div>
+  </header>
+  <div class="toolbar">
+    <div class="segmented" aria-label="視圖">
+      <button id="view-map" class="active" aria-pressed="true"><i data-lucide="map"></i>地圖</button>
+      <button id="view-graph" aria-pressed="false"><i data-lucide="network"></i>關係圖</button>
+    </div>
+    <select id="mode" aria-label="編輯工具">
+      <option value="select">選取／拖曳</option><option value="road_node">新增道路節點</option>
+      <option value="person">新增人員</option><option value="supply">新增物資</option>
+      <option value="facility">新增設施</option><option value="custom">新增自訂物件</option><option value="connect">連接物件</option>
+    </select>
+    <button id="undo" title="復原" aria-label="復原"><i data-lucide="undo-2"></i></button>
+    <button id="redo" title="重做" aria-label="重做"><i data-lucide="redo-2"></i></button>
+    <button id="fit" title="顯示全部物件" aria-label="顯示全部物件"><i data-lucide="scan"></i></button>
+    <button id="layout" title="重新排列關係圖" aria-label="重新排列關係圖"><i data-lucide="workflow"></i></button>
+    <span class="spacer"></span>
+    <button id="import"><i data-lucide="upload"></i>匯入資料</button>
+    <button id="osm"><i data-lucide="route"></i>載入範圍道路</button>
+    <button id="analyze" class="primary"><i data-lucide="git-branch"></i>分析拓樸</button>
+  </div>
+  <div id="metrics" class="metrics"></div>
+  <main>
+    <aside class="catalog">
+      <h2>資料圖層</h2><div id="layers"></div>
+      <div class="catalog-heading"><h2>物件</h2><span id="object-count"></span></div>
+      <input id="search" type="search" placeholder="搜尋名稱、識別碼" aria-label="搜尋物件">
+      <div id="objects" class="object-list"></div>
+    </aside>
+    <section class="canvas-region" aria-label="拓樸畫布">
+      <div id="map"></div><div id="graph" hidden></div>
+      <form id="locate" class="locate">
+        <input id="center-lat" type="number" min="-85" max="85" step="any" placeholder="緯度" aria-label="定位緯度" required>
+        <input id="center-lng" type="number" min="-180" max="180" step="any" placeholder="經度" aria-label="定位經度" required>
+        <button title="定位" aria-label="定位"><i data-lucide="locate-fixed"></i></button>
+      </form>
+      <div id="empty" class="empty-state"><strong>尚未加入資料</strong><button id="empty-import">匯入資料</button></div>
+      <div id="connect-state" class="connect-state" hidden></div>
+    </section>
+    <aside class="inspector">
+      <h2>物件與連線</h2><div id="selection" class="muted">尚未選取</div>
+      <section class="analysis-section">
+        <h2>路徑與可達性</h2>
+        <label>起點<select id="route-start"><option value="">選擇起點</option></select></label>
+        <label>終點<select id="route-end"><option value="">選擇終點</option></select></label>
+        <button id="route" class="wide"><i data-lucide="route"></i>計算最快路徑</button>
+        <div id="route-result" role="status"></div>
+        <div class="access-control"><label>接駁上限（公尺）<input id="access-radius" type="number" min="1" max="5000" value="300"></label>
+          <button id="access" class="wide"><i data-lucide="link"></i>連接鄰近道路</button></div>
+        <div id="analysis-result" class="analysis-result"></div>
+      </section>
+    </aside>
+  </main>
+  <footer><span id="status" role="status">空白工作區</span><span id="save-state">尚未儲存</span></footer>
+  <dialog id="import-dialog">
+    <form id="import-form">
+      <div class="dialog-heading"><h2>匯入開放資料</h2><button type="button" id="close-import" aria-label="關閉"><i data-lucide="x"></i></button></div>
+      <label>檔案<input id="import-file" type="file" accept=".csv,.json,.geojson"></label>
+      <div class="form-grid">
+        <label>資料格式<select id="import-format"><option value="geojson">GeoJSON</option><option value="csv">CSV</option><option value="json">工作區 JSON</option><option value="osm">OpenStreetMap JSON</option></select></label>
+        <label>點資料類型<select id="import-kind"><option value="person">人員</option><option value="supply">物資</option><option value="facility">設施</option><option value="road_node">道路節點</option><option value="custom">自訂物件</option><option value="relations">關係（CSV）</option></select></label>
+      </div>
+      <label>資料來源／授權<input id="import-source" placeholder="資料集名稱、發布單位或網址" maxlength="500"></label>
+      <details><summary>貼上資料</summary><textarea id="import-content" rows="5" aria-label="資料內容"></textarea></details>
+      <div id="field-mapping" class="form-grid"></div>
+      <label class="checkbox-label"><input id="import-replace" type="checkbox">取代目前工作區內容</label>
+      <div id="import-result" role="status"></div>
+      <div class="dialog-actions"><button id="preview-import" type="submit">預覽匯入</button><button id="apply-import" type="button" class="primary" disabled>加入工作區</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

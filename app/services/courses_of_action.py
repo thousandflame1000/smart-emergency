@@ -156,9 +156,9 @@ def _surge_resources_course(
     urgent_covered = len(urgent)
     return {
         "id": "surge_local_resources",
-        "title": "Stage compatible surge resources near uncovered requests",
+        "title": "在缺乏支援的需求附近增援物資",
         "rank_score": 80 + urgent_covered * 16 + covered * 4,
-        "summary": f"Create or mobilize {covered} temporary resource(s) so every currently uncovered open request has a feasible candidate.",
+        "summary": f"新增或調度 {covered} 個臨時資源，為目前無支援的需求提供候選資源。",
         "expected_delta": {
             "requests_with_candidate": covered,
             "uncovered_open": -covered,
@@ -172,17 +172,17 @@ def _surge_resources_course(
             urgent_uncovered=-urgent_covered,
         ),
         "evidence": {
-            "affected_requests": [_obj("ResourceRequest", a["id"], f"{a['type']} urgency {a['urgency']}") for a in uncovered[:12]],
+            "affected_requests": [_obj("ResourceRequest", a["id"], f"{a['type']} 緊急程度 {a['urgency']}") for a in uncovered[:12]],
             "need_types": dict(Counter(a["type"] for a in uncovered)),
             "max_urgency": max(a["urgency"] for a in uncovered),
         },
         "tradeoffs": [
-            "Requires outside volunteers, inventory, or field staging.",
-            "May create duplicate supply if operators do not reconcile with in-flight manual dispatch.",
+            "需要外部志工、庫存或現場集結支援。",
+            "須核對正在執行的人工派遣，避免重複調度。",
         ],
         "operator_actions": [
-            {"action_id": "create_resource_or_facility", "endpoint": "/api/resources", "label": "Add compatible surge resources"},
-            {"action_id": "manual_dispatch", "endpoint": "/api/resources/dispatch", "label": "Rerun dispatch after capacity is visible"},
+            {"action_id": "create_resource_or_facility", "endpoint": "/api/resources", "label": "新增相容的增援資源"},
+            {"action_id": "manual_dispatch", "endpoint": "/api/resources/dispatch", "label": "資源到位後重新試算派遣"},
         ],
     }
 
@@ -200,9 +200,9 @@ def _confirm_pending_course(db: Session, baseline: dict[str, Any]) -> dict[str, 
     urgent = [n for n in pending if n.urgency >= 4]
     return {
         "id": "confirm_pending_dispatch",
-        "title": "Confirm or release pending dispatch suggestions",
+        "title": "確認或釋放待處理派遣建議",
         "rank_score": 68 + len(urgent) * 14 + len(pending) * 3,
-        "summary": f"{len(pending)} suggested assignment(s) are waiting for a human decision.",
+        "summary": f"有 {len(pending)} 筆派遣建議等待人工決定。",
         "expected_delta": {
             "suggested_requests": -len(pending),
             "matched_requests": len(pending),
@@ -214,16 +214,16 @@ def _confirm_pending_course(db: Session, baseline: dict[str, Any]) -> dict[str, 
             matched_requests=len(pending),
         ),
         "evidence": {
-            "affected_requests": [_obj("ResourceRequest", n.id, f"{n.need_type} urgency {n.urgency}") for n in pending[:12]],
+            "affected_requests": [_obj("ResourceRequest", n.id, f"{n.need_type} 緊急程度 {n.urgency}") for n in pending[:12]],
             "max_urgency": max(n.urgency for n in pending),
         },
         "tradeoffs": [
-            "Confirming stale assignments can send responders into changed road or supply conditions.",
-            "Declining releases capacity but can reopen urgent unmet demand.",
+            "確認失效建議可能使救援人員面對已變更的道路或供應條件。",
+            "拒絕建議會釋放資源，但緊急需求可能重新等待支援。",
         ],
         "operator_actions": [
-            {"action_id": "confirm_dispatch", "endpoint": "/api/resources/needs/{need_id}/confirm_dispatch", "label": "Confirm valid suggestions"},
-            {"action_id": "decline_suggestion", "endpoint": "/api/resources/needs/{need_id}/decline_suggestion", "label": "Decline stale suggestions"},
+            {"action_id": "confirm_dispatch", "endpoint": "/api/resources/needs/{need_id}/confirm_dispatch", "label": "確認有效建議"},
+            {"action_id": "decline_suggestion", "endpoint": "/api/resources/needs/{need_id}/decline_suggestion", "label": "拒絕失效建議"},
         ],
     }
 
@@ -236,9 +236,9 @@ def _restore_roads_course(baseline: dict[str, Any]) -> dict[str, Any] | None:
     severe = roads["unreachable_corridors"] + roads["degraded_corridors"]
     return {
         "id": "restore_road_capacity",
-        "title": "Restore or validate disrupted road capacity",
+        "title": "恢復或查核受阻道路",
         "rank_score": 62 + roads["closed_edges"] * 12 + roads["slow_edges"] * 6 + severe * 15,
-        "summary": f"{disrupted} edited road segment(s) and {severe} critical corridor issue(s) are affecting travel assumptions.",
+        "summary": f"有 {disrupted} 段變更道路與 {severe} 項重要走廊問題影響通行假設。",
         "expected_delta": {
             "closed_edges": -roads["closed_edges"],
             "slow_edges": -roads["slow_edges"],
@@ -260,12 +260,12 @@ def _restore_roads_course(baseline: dict[str, Any]) -> dict[str, Any] | None:
             "critical_corridors": roads["critical_corridors"],
         },
         "tradeoffs": [
-            "Road edits must be confirmed against field reports before being trusted.",
-            "Removing a closure too early can make dispatch scores optimistic.",
+            "道路變更須依現場回報查核。",
+            "過早解除封路可能高估派遣可行性。",
         ],
         "operator_actions": [
-            {"action_id": "mutate_road_topology", "endpoint": "/admin#Road%20Sandbox", "label": "Inspect road sandbox"},
-            {"action_id": "propose_dispatch", "endpoint": "/api/resources/dispatch", "label": "Rerun dispatch previews after road validation"},
+            {"action_id": "mutate_road_topology", "endpoint": "/admin#Road%20Sandbox", "label": "檢查路網沙盒"},
+            {"action_id": "propose_dispatch", "endpoint": "/api/resources/dispatch", "label": "查核道路後重新試算派遣"},
         ],
     }
 
@@ -279,9 +279,9 @@ def _open_overflow_course(baseline: dict[str, Any]) -> dict[str, Any] | None:
     unmet = sum(g["unmet"] for g in gaps)
     return {
         "id": "open_overflow_facility",
-        "title": "Open overflow facility capacity for pressure points",
+        "title": "為高負載地區增開備援設施",
         "rank_score": 58 + unmet * 5 + pressure["over_capacity"] * 15 + pressure["near_capacity"] * 8,
-        "summary": f"{len(gaps)} supply type gap(s) and {overloaded} pressured facility/facilities need added fixed capacity.",
+        "summary": f"有 {len(gaps)} 類物資缺口與 {overloaded} 處高負載設施需要增加容量。",
         "expected_delta": {
             "supply_gap_types_reduced": len(gaps),
             "unmet_supply_sources": -unmet,
@@ -296,12 +296,12 @@ def _open_overflow_course(baseline: dict[str, Any]) -> dict[str, Any] | None:
             "facility_pressure": pressure,
         },
         "tradeoffs": [
-            "Fixed facilities improve throughput but may increase travel distance for urgent door-to-door requests.",
-            "Opening overflow capacity requires staffing, phone handling, and load tracking.",
+            "固定設施能增加服務量，但可能增加緊急到府需求的通行距離。",
+            "備援設施需要人員、通訊與負載追蹤配合。",
         ],
         "operator_actions": [
-            {"action_id": "create_resource_or_facility", "endpoint": "/api/resources/points", "label": "Open or activate a resource point"},
-            {"action_id": "redirect_to_alternate_facility", "endpoint": "/api/resources/points", "label": "Redirect new demand away from saturated sites"},
+            {"action_id": "create_resource_or_facility", "endpoint": "/api/resources/points", "label": "新增或啟用資源點"},
+            {"action_id": "redirect_to_alternate_facility", "endpoint": "/api/resources/points", "label": "將新需求轉往未滿載設施"},
         ],
     }
 
@@ -309,15 +309,15 @@ def _open_overflow_course(baseline: dict[str, Any]) -> dict[str, Any] | None:
 def _monitor_course(baseline: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": "monitor_current_plan",
-        "title": "Maintain current operating plan",
+        "title": "維持目前應變方案",
         "rank_score": 10,
-        "summary": "No immediate alternative course of action is indicated by current requests, road topology, or facility pressure.",
+        "summary": "依目前需求、路網與設施負載，尚無需立即改採其他方案。",
         "expected_delta": {},
         "metrics_after": baseline,
         "evidence": {"baseline": baseline},
-        "tradeoffs": ["Continue monitoring because new alerts and road edits can invalidate the current plan."],
+        "tradeoffs": ["持續監測新增警報與道路變更，必要時調整目前方案。"],
         "operator_actions": [
-            {"action_id": "inspect_operational_risks", "endpoint": "/api/ontology/reasoning/operational-risks", "label": "Refresh risk findings"}
+            {"action_id": "inspect_operational_risks", "endpoint": "/api/ontology/reasoning/operational-risks", "label": "更新風險分析"}
         ],
     }
 
@@ -352,7 +352,7 @@ def _dry_run_surge_resources(
         virtual_objects=[
             {
                 "type": "Resource",
-                "label": f"Virtual {a['type']} surge resource",
+                "label": f"模擬 {a['type']} 增援資源",
                 "near_request_id": a["id"],
                 "projected_score": round(_local_resource_score(a), 1),
             }
@@ -452,7 +452,7 @@ def _dry_run_open_overflow(course: dict[str, Any], baseline: dict[str, Any]) -> 
     virtual_objects = [
         {
             "type": "Facility",
-            "label": f"Overflow {gap['need_type']} capacity",
+            "label": f"備援 {gap['need_type']} 容量",
             "need_type": gap["need_type"],
             "projected_supply_sources": gap["unmet"],
         }

@@ -504,12 +504,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <span class="icon">🧠</span> 知識庫
   </div>
 
-  <div class="nav-section">決賽展演</div>
+  <div class="nav-section">資料建模與推演</div>
+  <a class="nav-item" href="/workspace" style="text-decoration:none">
+    <span class="icon">圖</span> 開放資料工作區
+  </a>
   <div class="nav-item" onclick="showPage('page-ontology')" data-page="page-ontology">
-    <span class="icon">ON</span> Ontology
+    <span class="icon">圖</span> 物件關係模型
   </div>
   <div class="nav-item" onclick="showPage('page-road-sandbox')" data-page="page-road-sandbox">
-    <span class="icon">RD</span> Road Sandbox
+    <span class="icon">路</span> 花東路網示範
   </div>
   <div class="nav-item" onclick="showPage('page-scenario')" data-page="page-scenario">
     <span class="icon">🌀</span> 情境模擬
@@ -977,14 +980,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Operational Risk Reasoning</div>
-            <div class="card-subtitle" id="ontology-risk-label">Evidence-backed findings and recommended actions</div>
+            <div class="card-title">營運風險推理</div>
+            <div class="card-subtitle" id="ontology-risk-label">風險證據與建議行動</div>
           </div>
-          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">重新整理</button>
         </div>
         <div class="table-wrap">
           <table class="tbl">
-            <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommended Action</th></tr></thead>
+            <thead><tr><th>嚴重程度</th><th>風險項目</th><th>判斷依據</th><th>建議行動</th></tr></thead>
             <tbody id="ontology-risks"></tbody>
           </table>
         </div>
@@ -993,14 +996,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Operational Playbook</div>
-            <div class="card-subtitle" id="ontology-playbook-label">Prioritized operator actions generated from current risks</div>
+            <div class="card-title">應變行動清單</div>
+            <div class="card-subtitle" id="ontology-playbook-label">依目前風險排序的應變行動</div>
           </div>
-          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">重新整理</button>
         </div>
         <div class="table-wrap">
           <table class="tbl">
-            <thead><tr><th>Priority</th><th>Action Step</th><th>Impact</th><th>Operator Checklist</th></tr></thead>
+            <thead><tr><th>優先順序</th><th>行動項目</th><th>影響</th><th>執行檢核</th></tr></thead>
             <tbody id="ontology-playbook"></tbody>
           </table>
         </div>
@@ -1009,24 +1012,24 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Operational Ontology</div>
-            <div class="card-subtitle">Object types, link types, actions, and current operating graph</div>
+            <div class="card-title">物件關係模型</div>
+            <div class="card-subtitle">物件、關係與作業狀態</div>
           </div>
-          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">重新整理</button>
         </div>
         <div class="card-body">
           <div class="form-row col-2">
             <div>
-              <div class="card-title" style="margin-bottom:10px">Object Types</div>
+              <div class="card-title" style="margin-bottom:10px">物件類型</div>
               <table class="tbl">
-                <thead><tr><th>Type</th><th>Table</th><th>Fields</th></tr></thead>
+                <thead><tr><th>類型</th><th>資料表</th><th>欄位</th></tr></thead>
                 <tbody id="ontology-types"></tbody>
               </table>
             </div>
             <div>
-              <div class="card-title" style="margin-bottom:10px">Actions</div>
+              <div class="card-title" style="margin-bottom:10px">行動</div>
               <table class="tbl">
-                <thead><tr><th>Action</th><th>Endpoint</th><th>Human</th></tr></thead>
+                <thead><tr><th>操作</th><th>服務路徑</th><th>人工確認</th></tr></thead>
                 <tbody id="ontology-actions"></tbody>
               </table>
             </div>
@@ -1037,23 +1040,23 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Ontology Graph Snapshot</div>
-            <div class="card-subtitle" id="ontology-graph-label">Loading...</div>
+            <div class="card-title">物件關係快照</div>
+            <div class="card-subtitle" id="ontology-graph-label">載入中…</div>
           </div>
         </div>
         <div class="card-body">
           <div class="form-row col-2">
             <div>
-              <div class="card-title" style="margin-bottom:10px">Recent Objects</div>
+              <div class="card-title" style="margin-bottom:10px">近期物件</div>
               <table class="tbl">
-                <thead><tr><th>Type</th><th>Label</th><th>State</th></tr></thead>
+                <thead><tr><th>類型</th><th>名稱</th><th>狀態</th></tr></thead>
                 <tbody id="ontology-nodes"></tbody>
               </table>
             </div>
             <div>
-              <div class="card-title" style="margin-bottom:10px">Links</div>
+              <div class="card-title" style="margin-bottom:10px">關係</div>
               <table class="tbl">
-                <thead><tr><th>Type</th><th>From</th><th>To</th></tr></thead>
+                <thead><tr><th>類型</th><th>起點</th><th>終點</th></tr></thead>
                 <tbody id="ontology-edges"></tbody>
               </table>
             </div>
@@ -1067,61 +1070,61 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Road Topology Sandbox</div>
-            <div class="card-subtitle">Click roads to cycle normal / slow / closed. Drag nodes to reshape topology.</div>
+            <div class="card-title">花東路網示範沙盒</div>
+            <div class="card-subtitle">花東走廊示範資料</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="roadLoadSandbox()">Refresh</button>
-            <button class="btn btn-danger btn-sm" onclick="roadResetSandbox()">Reset</button>
+            <button class="btn btn-ghost btn-sm" onclick="roadLoadSandbox()">重新整理</button>
+            <button class="btn btn-danger btn-sm" onclick="roadResetSandbox()">重置</button>
           </div>
         </div>
         <div class="road-layout">
           <div class="road-map-shell">
-            <svg class="road-map" id="road-map" viewBox="0 0 760 520" aria-label="Road topology sandbox"></svg>
+            <svg class="road-map" id="road-map" viewBox="0 0 760 520" aria-label="花東路網示範沙盒"></svg>
           </div>
           <div class="road-panel">
             <div class="road-panel-block">
-              <div class="card-title" style="font-size:12px;margin-bottom:8px">Selected Road</div>
-              <div class="road-route-line" id="road-selected">No road selected</div>
+              <div class="card-title" style="font-size:12px;margin-bottom:8px">選取的道路</div>
+              <div class="road-route-line" id="road-selected">尚未選取道路</div>
               <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-                <button class="btn btn-ghost btn-sm" onclick="roadSetSelected('normal')">Normal</button>
-                <button class="btn btn-warning btn-sm" onclick="roadSetSelected('slow')">Slow</button>
-                <button class="btn btn-danger btn-sm" onclick="roadSetSelected('closed')">Closed</button>
-                <button class="btn btn-ghost-danger btn-sm" onclick="roadDeleteSelected()">Delete</button>
+                <button class="btn btn-ghost btn-sm" onclick="roadSetSelected('normal')">正常</button>
+                <button class="btn btn-warning btn-sm" onclick="roadSetSelected('slow')">緩行</button>
+                <button class="btn btn-danger btn-sm" onclick="roadSetSelected('closed')">封閉</button>
+                <button class="btn btn-ghost-danger btn-sm" onclick="roadDeleteSelected()">刪除</button>
               </div>
             </div>
             <div class="road-panel-block">
-              <div class="card-title" style="font-size:12px;margin-bottom:8px">Route Probe</div>
+              <div class="card-title" style="font-size:12px;margin-bottom:8px">路徑分析</div>
               <div class="road-mini-grid">
                 <select class="form-select" id="road-route-start"></select>
                 <select class="form-select" id="road-route-end"></select>
               </div>
-              <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="roadProbeRoute()">Probe Route</button>
-              <div class="road-route-line" id="road-route-result" style="margin-top:8px">Pick two nodes to inspect current reachable path.</div>
+              <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="roadProbeRoute()">計算路徑</button>
+              <div class="road-route-line" id="road-route-result" style="margin-top:8px">尚未選擇起點與終點</div>
             </div>
             <div class="road-panel-block">
-              <div class="card-title" style="font-size:12px;margin-bottom:8px">Add Node</div>
+              <div class="card-title" style="font-size:12px;margin-bottom:8px">新增節點</div>
               <div class="road-mini-grid">
-                <input class="form-control" id="road-node-id" placeholder="node_id">
-                <input class="form-control" id="road-node-label" placeholder="label">
-                <input class="form-control" id="road-node-lat" type="number" step="0.0001" placeholder="lat">
-                <input class="form-control" id="road-node-lng" type="number" step="0.0001" placeholder="lng">
+                <input class="form-control" id="road-node-id" placeholder="節點識別碼">
+                <input class="form-control" id="road-node-label" placeholder="名稱">
+                <input class="form-control" id="road-node-lat" type="number" step="0.0001" placeholder="緯度">
+                <input class="form-control" id="road-node-lng" type="number" step="0.0001" placeholder="經度">
               </div>
-              <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="roadAddNode()">Add Node</button>
+              <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="roadAddNode()">新增節點</button>
             </div>
             <div class="road-panel-block">
-              <div class="card-title" style="font-size:12px;margin-bottom:8px">Add Road Edge</div>
+              <div class="card-title" style="font-size:12px;margin-bottom:8px">新增道路連線</div>
               <div class="road-mini-grid">
                 <select class="form-select" id="road-edge-a"></select>
                 <select class="form-select" id="road-edge-b"></select>
               </div>
-              <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="roadAddEdge()">Connect Nodes</button>
+              <button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="roadAddEdge()">連接節點</button>
             </div>
           </div>
         </div>
         <div class="table-wrap">
           <table class="tbl">
-            <thead><tr><th>Edge</th><th>Status</th><th>Base km</th><th>Effective km</th><th>Action</th></tr></thead>
+            <thead><tr><th>道路</th><th>狀態</th><th>原始距離（公里）</th><th>等效距離（公里）</th><th>操作</th></tr></thead>
             <tbody id="road-edge-rows"></tbody>
           </table>
         </div>
@@ -1176,14 +1179,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">Courses Of Action</div>
-            <div class="card-subtitle" id="scn-coa-label">Ranked non-mutating response alternatives</div>
+            <div class="card-title">應變方案比較</div>
+            <div class="card-subtitle" id="scn-coa-label">應變方案與預估效益</div>
           </div>
-          <button class="btn btn-ghost btn-sm" onclick="scnLoadCourses()">Refresh</button>
+          <button class="btn btn-ghost btn-sm" onclick="scnLoadCourses()">重新整理</button>
         </div>
         <div class="table-wrap">
           <table class="tbl">
-            <thead><tr><th>Rank</th><th>Course</th><th>Expected Delta</th><th>Evidence & Actions</th></tr></thead>
+            <thead><tr><th>排序</th><th>方案</th><th>預估變化</th><th>依據與行動</th></tr></thead>
             <tbody id="scn-coa"></tbody>
           </table>
         </div>
@@ -1192,13 +1195,13 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">COA Dry Run Preview</div>
-            <div class="card-subtitle" id="scn-dryrun-label">Select a course to simulate its after-state without changing live data</div>
+            <div class="card-title">方案試算結果</div>
+            <div class="card-subtitle" id="scn-dryrun-label">尚未選擇試算方案</div>
           </div>
         </div>
         <div class="table-wrap">
           <table class="tbl">
-            <thead><tr><th>Impact</th><th>After-State</th><th>Changed Requests</th><th>Virtual Objects</th></tr></thead>
+            <thead><tr><th>影響</th><th>預估狀態</th><th>受影響需求</th><th>模擬物件</th></tr></thead>
             <tbody id="scn-dryrun"></tbody>
           </table>
         </div>
@@ -1582,8 +1585,8 @@ const PAGE_TITLE = {
   'page-scenario':  '情境模擬',
 };
 let allUsers = [];
-PAGE_TITLE['page-ontology'] = 'Operational Ontology';
-PAGE_TITLE['page-road-sandbox'] = 'Road Sandbox';
+PAGE_TITLE['page-ontology'] = '物件關係模型';
+PAGE_TITLE['page-road-sandbox'] = '花東路網示範';
 
 // ════════════════════════════════════════════════
 // HTML escaping —— 使用者輸入（長者/志工姓名、地址、需求說明…）
@@ -2603,7 +2606,7 @@ function renderNeedEvents(events) {
     <div class="card-title" style="font-size:12px;margin:14px 0 8px">決策紀錄</div>
     ${events.length ? `
       <table class="tbl" style="margin:8px 0">
-        <thead><tr><th>時間</th><th>Action</th><th>狀態</th><th>操作者</th><th>細節</th></tr></thead>
+        <thead><tr><th>時間</th><th>操作</th><th>狀態</th><th>操作者</th><th>細節</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>` : '<div class="muted" style="padding:8px 0">尚無派遣決策紀錄</div>'}
   `;
@@ -2628,10 +2631,42 @@ async function cancelNeed(needId) {
 // ════════════════════════════════════════════════
 // 情境模擬（決賽展演用）— app/services/scenario.py
 // ════════════════════════════════════════════════
+function ontologyLabel(value) {
+  const labels = {
+    Person:'人員', Resource:'物資', ResourceRequest:'資源需求', Facility:'設施',
+    Alert:'警報', CheckIn:'關懷回報', CareRelation:'照護關係', DecisionEvent:'決策紀錄',
+    RoadNode:'道路節點', RoadEdge:'道路連線', critical:'危急', high:'高', medium:'中', low:'低',
+    normal:'正常', slow:'緩行', closed:'封閉', open:'待處理', suggested:'待確認', matched:'已媒合',
+    delivered:'已送達', cancelled:'已取消', true:'是', false:'否',
+    owns:'持有', requests:'提出需求', matched_to:'媒合至', cares_for:'照護',
+    has_alert:'警報', has_checkin:'回報', connects:'連接', located_at:'位於',
+    manual_dispatch:'人工派遣', confirm_dispatch:'確認派遣', decline_suggestion:'拒絕建議',
+    task_delivered:'確認送達', mutate_resource_state:'更新物資狀態',
+    create_resource_or_facility:'增援物資或設施', redirect_to_alternate_facility:'轉介其他設施',
+    mutate_road_topology:'調整路網', inspect:'檢視', act:'操作', propose_dispatch:'產生派遣建議',
+    inspect_operational_risks:'檢視風險', surge_local_resources:'增援在地物資',
+    restore_road_capacity:'恢復道路通行', confirm_pending_dispatch:'確認待處理派遣',
+    open_overflow_facility:'增開備援設施', monitor_current_plan:'維持目前方案',
+    open_requests:'待處理需求', uncovered_open:'無支援需求', urgent_uncovered:'緊急且無支援需求',
+    requests_with_candidate:'有候選資源的需求', suggested_requests:'待確認派遣', matched_requests:'已媒合需求',
+    road_disruptions:'道路受阻', supply_gaps:'物資缺口', facility_pressure:'設施壓力',
+    avg_projected_local_score:'預估在地評分', changed_requests:'受影響需求',
+    virtual_resources:'模擬資源', virtual_facilities:'模擬設施', virtual_objects:'模擬物件',
+    urgent_uncovered_delta:'緊急無支援需求變化', uncovered_open_delta:'無支援需求變化',
+    requests_with_candidate_delta:'有候選資源需求變化', suggested_requests_delta:'待確認派遣變化',
+    matched_requests_delta:'已媒合需求變化', avg_top_distance_km_delta:'平均距離變化（公里）',
+    age_minutes:'已等待分鐘', urgency:'緊急程度', need_type:'需求類型', candidate_count:'候選數量',
+    source_count:'來源數量', open_count:'待處理數量', load_ratio:'負載比例', capacity:'容量',
+    current_load:'目前負載', active_task_count:'進行中任務', resource_available:'物資可用',
+    water:'飲用水', food:'食物', medical:'醫療', transport:'交通', shelter:'庇護', tools:'工具',
+  };
+  return labels[String(value)] || value;
+}
+
 async function loadOntology() {
   const statsEl = document.getElementById('ontology-stats');
   const labelEl = document.getElementById('ontology-graph-label');
-  if (labelEl) labelEl.textContent = 'Loading...';
+  if (labelEl) labelEl.textContent = '載入中…';
   try {
     const [schema, graph, risks, playbook] = await Promise.all([
       fetch('/api/ontology/schema').then(r => r.json()),
@@ -2641,11 +2676,11 @@ async function loadOntology() {
     ]);
     const m = graph.metrics || {};
     statsEl.innerHTML = `
-      <div class="stat-tile"><div class="stat-tile-label">People</div><div class="stat-tile-value">${m.people ?? 0}</div><div class="stat-tile-sub">${m.active_people ?? 0} active</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Open Requests</div><div class="stat-tile-value ${(m.open_requests ?? 0)>0?'warn':''}">${m.open_requests ?? 0}</div><div class="stat-tile-sub">${m.suggested_requests ?? 0} suggested</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Resources</div><div class="stat-tile-value ok">${m.available_resources ?? 0}</div><div class="stat-tile-sub">available now</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Alerts</div><div class="stat-tile-value ${(m.active_alerts ?? 0)>0?'danger':''}">${m.active_alerts ?? 0}</div><div class="stat-tile-sub">${m.risky_checkins_today ?? 0} risky check-ins today</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">Decision Events</div><div class="stat-tile-value">${m.decision_events ?? 0}</div><div class="stat-tile-sub">action audit trail</div></div>`;
+      <div class="stat-tile"><div class="stat-tile-label">人員</div><div class="stat-tile-value">${m.people ?? 0}</div><div class="stat-tile-sub">${m.active_people ?? 0} 位啟用中</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">待處理需求</div><div class="stat-tile-value ${(m.open_requests ?? 0)>0?'warn':''}">${m.open_requests ?? 0}</div><div class="stat-tile-sub">${m.suggested_requests ?? 0} 筆待確認</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">物資</div><div class="stat-tile-value ok">${m.available_resources ?? 0}</div><div class="stat-tile-sub">目前可用</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">警報</div><div class="stat-tile-value ${(m.active_alerts ?? 0)>0?'danger':''}">${m.active_alerts ?? 0}</div><div class="stat-tile-sub">${m.risky_checkins_today ?? 0} 筆今日異常回報</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">決策紀錄</div><div class="stat-tile-value">${m.decision_events ?? 0}</div><div class="stat-tile-sub">行動歷程</div></div>`;
 
     renderOntologyRisks(risks);
     renderOntologyPlaybook(playbook);
@@ -2653,7 +2688,7 @@ async function loadOntology() {
     const objectTypes = Object.entries(schema.object_types || {});
     document.getElementById('ontology-types').innerHTML = objectTypes.map(([name, meta]) => `
       <tr>
-        <td><span class="badge badge-blue">${esc(name)}</span></td>
+        <td><span class="badge badge-blue">${esc(ontologyLabel(name))}</span></td>
         <td class="muted">${esc(meta.source_table)}</td>
         <td class="muted">${esc((meta.display_fields || []).join(', '))}</td>
       </tr>`).join('');
@@ -2662,29 +2697,29 @@ async function loadOntology() {
       <tr>
         <td>${esc(action.label || action.id)}</td>
         <td class="muted">${esc(action.method)} ${esc(action.endpoint)}</td>
-        <td>${action.human_in_the_loop ? '<span class="badge badge-amber">HITL</span>' : '<span class="badge badge-gray">AUTO</span>'}</td>
+        <td>${action.human_in_the_loop ? '<span class="badge badge-amber">人工確認</span>' : '<span class="badge badge-gray">自動</span>'}</td>
       </tr>`).join('');
 
     const nodes = graph.nodes || [];
     const edges = graph.edges || [];
-    labelEl.textContent = `${nodes.length} objects / ${edges.length} links`;
+    labelEl.textContent = `${nodes.length} 個物件 / ${edges.length} 條關係`;
     document.getElementById('ontology-nodes').innerHTML = nodes.slice(0, 40).map(node => {
       const p = node.properties || {};
       const state = p.status ?? p.is_available ?? p.current_load ?? '';
       return `<tr>
-        <td><span class="badge badge-purple">${esc(node.type)}</span></td>
+        <td><span class="badge badge-purple">${esc(ontologyLabel(node.type))}</span></td>
         <td>${esc(node.label)}</td>
-        <td class="muted">${esc(state)}</td>
+        <td class="muted">${esc(ontologyLabel(state))}</td>
       </tr>`;
     }).join('');
     document.getElementById('ontology-edges').innerHTML = edges.slice(0, 50).map(edge => `
       <tr>
-        <td><span class="src-badge src-gov">${esc(edge.type)}</span></td>
+        <td><span class="src-badge src-gov">${esc(ontologyLabel(edge.type))}</span></td>
         <td class="muted" title="${esc(edge.from)}">${esc(shortOntologyId(edge.from))}</td>
         <td class="muted" title="${esc(edge.to)}">${esc(shortOntologyId(edge.to))}</td>
       </tr>`).join('');
   } catch(e) {
-    if (labelEl) labelEl.textContent = 'Load failed: ' + e.message;
+    if (labelEl) labelEl.textContent = '載入失敗：' + e.message;
   }
 }
 
@@ -2693,7 +2728,7 @@ function ontologySeverityBadge(sev) {
     : sev === 'high' ? 'badge-amber'
     : sev === 'medium' ? 'badge-blue'
     : 'badge-gray';
-  return `<span class="badge ${cls}">${esc(sev || 'low')}</span>`;
+  return `<span class="badge ${cls}">${esc(ontologyLabel(sev || 'low'))}</span>`;
 }
 
 function renderOntologyRisks(report) {
@@ -2701,18 +2736,18 @@ function renderOntologyRisks(report) {
   const body = document.getElementById('ontology-risks');
   const summary = report?.summary || {};
   if (label) {
-    label.textContent = `${summary.total || 0} findings · ${summary.critical || 0} critical · ${summary.high || 0} high`;
+    label.textContent = `${summary.total || 0} 項風險 · ${summary.critical || 0} 項危急 · ${summary.high || 0} 項高風險`;
   }
   const findings = report?.findings || [];
   if (!findings.length) {
-    body.innerHTML = '<tr><td colspan="4"><div class="empty">No operational risks detected.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="4"><div class="empty">目前未偵測到營運風險。</div></td></tr>';
     return;
   }
   body.innerHTML = findings.map(f => {
     const ev = f.evidence || {};
     const evidenceBits = Object.entries(ev)
       .slice(0, 4)
-      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? JSON.stringify(v) : v)}`);
+      .map(([k, v]) => `${ontologyLabel(k)}: ${Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? JSON.stringify(v) : v)}`);
     const objects = (f.affected_objects || []).slice(0, 3)
       .map(o => `${o.type}:${String(o.id).slice(0, 8)}`)
       .join(', ');
@@ -2727,7 +2762,7 @@ function renderOntologyRisks(report) {
         </td>
         <td class="muted">${esc(evidenceBits.join(' · '))}</td>
         <td>
-          <span class="src-badge src-gov">${esc(action.action_id || 'inspect')}</span>
+          <span class="src-badge src-gov">${esc(ontologyLabel(action.action_id || 'inspect'))}</span>
           <div class="muted" style="margin-top:4px">${esc(action.label || '')}</div>
         </td>
       </tr>`;
@@ -2739,11 +2774,11 @@ function renderOntologyPlaybook(report) {
   const body = document.getElementById('ontology-playbook');
   const counts = report?.counts || {};
   if (label) {
-    label.textContent = `${counts.steps || 0} action steps / ${counts.critical_steps || 0} critical / ${counts.source_findings || 0} source findings`;
+    label.textContent = `${counts.steps || 0} 個行動 / ${counts.critical_steps || 0} 個危急 / ${counts.source_findings || 0} 項風險來源`;
   }
   const steps = report?.steps || [];
   if (!steps.length) {
-    body.innerHTML = '<tr><td colspan="4"><div class="empty">No playbook actions needed.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="4"><div class="empty">目前沒有待執行行動。</div></td></tr>';
     return;
   }
   body.innerHTML = steps.map(step => {
@@ -2759,17 +2794,17 @@ function renderOntologyPlaybook(report) {
         <td>
           <div style="font-weight:800">${esc(step.priority)}</div>
           ${ontologySeverityBadge(step.severity)}
-          <div class="muted" style="margin-top:4px">${esc(step.confidence || 'medium')} confidence</div>
+          <div class="muted" style="margin-top:4px">${esc(ontologyLabel(step.confidence || 'medium'))} 信心程度</div>
         </td>
         <td>
           <div style="font-weight:700">${esc(step.title)}</div>
           <div class="muted">${esc(step.summary)}</div>
-          <div style="margin-top:6px"><span class="src-badge src-gov">${esc(step.action_id)}</span></div>
+          <div style="margin-top:6px"><span class="src-badge src-gov">${esc(ontologyLabel(step.action_id))}</span></div>
           <div class="muted" style="margin-top:4px">${esc(objects)}</div>
         </td>
         <td>
           <div>${esc(step.expected_impact || '')}</div>
-          <div class="muted" style="margin-top:6px">${esc(step.finding_count || 0)} findings</div>
+          <div class="muted" style="margin-top:6px">${esc(step.finding_count || 0)} 項風險</div>
           ${blocked ? `<div class="muted" style="margin-top:6px">${esc(blocked)}</div>` : ''}
         </td>
         <td>${checklist}</td>
@@ -2840,7 +2875,7 @@ function roadSvgPoint(evt) {
 
 function roadStatusBadge(status) {
   const cls = status === 'closed' ? 'badge-red' : status === 'slow' ? 'badge-amber' : 'badge-green';
-  return `<span class="badge ${cls}">${esc(status)}</span>`;
+  return `<span class="badge ${cls}">${esc(ontologyLabel(status))}</span>`;
 }
 
 function roadRender() {
@@ -2854,10 +2889,10 @@ function roadRender() {
 function roadRenderStats() {
   const m = roadData.metrics || {};
   document.getElementById('road-stats').innerHTML = `
-    <div class="stat-tile"><div class="stat-tile-label">Nodes</div><div class="stat-tile-value">${m.nodes || 0}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">Edges</div><div class="stat-tile-value">${m.edges || 0}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">Closed</div><div class="stat-tile-value danger">${m.closed_edges || 0}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">Slow</div><div class="stat-tile-value warn">${m.slow_edges || 0}</div></div>`;
+    <div class="stat-tile"><div class="stat-tile-label">節點</div><div class="stat-tile-value">${m.nodes || 0}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">連線</div><div class="stat-tile-value">${m.edges || 0}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">封閉</div><div class="stat-tile-value danger">${m.closed_edges || 0}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">緩行</div><div class="stat-tile-value warn">${m.slow_edges || 0}</div></div>`;
 }
 
 function roadRenderControls() {
@@ -2898,8 +2933,8 @@ function roadRenderMap() {
 
   const selected = (roadData.edges || []).find(e => e.id === roadSelectedEdgeId);
   document.getElementById('road-selected').innerHTML = selected
-    ? `${esc(selected.a)} -> ${esc(selected.b)}<br>${roadStatusBadge(selected.status)}<br>effective: ${selected.effective_distance_km ?? 'blocked'} km`
-    : 'No road selected';
+    ? `${esc(selected.a)} -> ${esc(selected.b)}<br>${roadStatusBadge(selected.status)}<br>等效距離：${selected.effective_distance_km ?? '無法通行'} km`
+    : '尚未選取道路';
 }
 
 function roadRenderTable() {
@@ -2908,11 +2943,11 @@ function roadRenderTable() {
       <td><span class="src-badge src-gov">${esc(e.a)} - ${esc(e.b)}</span>${e.custom ? ' <span class="badge badge-green">custom</span>' : ''}</td>
       <td>${roadStatusBadge(e.status)}</td>
       <td class="muted">${e.distance_km}</td>
-      <td class="muted">${e.effective_distance_km ?? 'blocked'}</td>
+      <td class="muted">${e.effective_distance_km ?? '無法通行'}</td>
       <td style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();roadSetEdge('${esc(e.id)}','normal')">Normal</button>
-        <button class="btn btn-warning btn-sm" onclick="event.stopPropagation();roadSetEdge('${esc(e.id)}','slow')">Slow</button>
-        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();roadSetEdge('${esc(e.id)}','closed')">Closed</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();roadSetEdge('${esc(e.id)}','normal')">正常</button>
+        <button class="btn btn-warning btn-sm" onclick="event.stopPropagation();roadSetEdge('${esc(e.id)}','slow')">緩行</button>
+        <button class="btn btn-danger btn-sm" onclick="event.stopPropagation();roadSetEdge('${esc(e.id)}','closed')">封閉</button>
       </td>
     </tr>`).join('');
   document.getElementById('road-edge-rows').innerHTML = rows;
@@ -2952,7 +2987,7 @@ async function roadSetSelected(status) {
 }
 
 async function roadDeleteSelected() {
-  if (!roadSelectedEdgeId || !confirm('Delete selected road edge?')) return;
+  if (!roadSelectedEdgeId || !confirm('確定刪除選取的道路？')) return;
   const res = await fetch(`/api/road-network/sandbox/edges/${encodeURIComponent(roadSelectedEdgeId)}`, { method: 'DELETE' });
   roadData = await res.json();
   roadSelectedEdgeId = null;
@@ -3032,12 +3067,12 @@ async function roadProbeRoute() {
   const res = await fetch(`/api/road-network/route?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
   const data = await res.json();
   document.getElementById('road-route-result').innerHTML = data.reachable
-    ? `distance: ${data.distance_km} km<br>path: ${esc((data.path || []).join(' -> '))}`
-    : `blocked: no reachable path from ${esc(start)} to ${esc(end)}`;
+    ? `距離：${data.distance_km} 公里<br>路徑：${esc((data.path || []).join(' → '))}`
+    : `無法通行：${esc(start)} 至 ${esc(end)} 沒有可達路徑`;
 }
 
 async function roadResetSandbox() {
-  if (!confirm('Reset all road sandbox edits?')) return;
+  if (!confirm('確定重置花東示範沙盒的全部道路變更？')) return;
   const res = await fetch('/api/road-network/sandbox/reset', { method: 'POST' });
   roadData = await res.json();
   roadSelectedEdgeId = null;
@@ -3166,7 +3201,7 @@ async function scnLoadCourses() {
     scnRenderCourses(report);
   } catch(e) {
     const label = document.getElementById('scn-coa-label');
-    if (label) label.textContent = 'Load failed: ' + e.message;
+    if (label) label.textContent = '載入失敗：' + e.message;
   }
 }
 
@@ -3177,21 +3212,21 @@ function scnRenderCourses(report) {
   const counts = report?.counts || {};
   const baseline = report?.baseline || {};
   if (label) {
-    label.textContent = `${counts.courses || 0} courses / ${counts.urgent_uncovered || 0} urgent uncovered / ${counts.road_disruptions || 0} road disruptions`;
+    label.textContent = `${counts.courses || 0} 個方案 / ${counts.urgent_uncovered || 0} 筆緊急需求缺乏支援 / ${counts.road_disruptions || 0} 處道路受阻`;
   }
   const courses = report?.courses || [];
   if (!courses.length) {
-    body.innerHTML = '<tr><td colspan="4"><div class="empty">No courses of action available.</div></td></tr>';
+    body.innerHTML = '<tr><td colspan="4"><div class="empty">目前沒有可比較的應變方案。</div></td></tr>';
     return;
   }
   body.innerHTML = courses.map((course, i) => {
     const delta = course.expected_delta || {};
     const deltaBits = Object.entries(delta)
       .slice(0, 5)
-      .map(([k, v]) => `${k}: ${v}`)
+      .map(([k, v]) => `${ontologyLabel(k)}: ${v}`)
       .join(' / ');
     const actions = (course.operator_actions || []).slice(0, 3)
-      .map(a => `<div class="muted"><span class="src-badge src-gov">${esc(a.action_id || 'act')}</span> ${esc(a.label || '')}</div>`)
+      .map(a => `<div class="muted"><span class="src-badge src-gov">${esc(ontologyLabel(a.action_id || 'act'))}</span> ${esc(a.label || '')}</div>`)
       .join('');
     const trades = (course.tradeoffs || []).slice(0, 2)
       .map(t => `<div class="muted">- ${esc(t)}</div>`)
@@ -3213,12 +3248,12 @@ function scnRenderCourses(report) {
           <div class="muted" style="margin-top:4px">${esc(affected)}</div>
         </td>
         <td>
-          <div>${esc(deltaBits || 'No direct metric change')}</div>
-          <div class="muted" style="margin-top:6px">baseline: ${baseline.open_requests || 0} open / ${baseline.uncovered_open || 0} uncovered</div>
+          <div>${esc(deltaBits || '無直接指標變化')}</div>
+          <div class="muted" style="margin-top:6px">基準：${baseline.open_requests || 0} 筆待處理 / ${baseline.uncovered_open || 0} 筆無支援</div>
         </td>
         <td>
           ${actions}
-          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="scnDryRunCourse('${esc(course.id)}')">Dry Run</button>
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="scnDryRunCourse('${esc(course.id)}')">試算方案</button>
           <div style="margin-top:6px">${trades}</div>
         </td>
       </tr>`;
@@ -3227,12 +3262,12 @@ function scnRenderCourses(report) {
 
 async function scnDryRunCourse(courseId) {
   const label = document.getElementById('scn-dryrun-label');
-  if (label) label.textContent = `Simulating ${courseId}...`;
+  if (label) label.textContent = `正在試算 ${ontologyLabel(courseId)}…`;
   try {
     const report = await fetch(`/api/scenario/courses-of-action/${encodeURIComponent(courseId)}/dry-run`).then(r => r.json());
     scnRenderDryRun(report);
   } catch(e) {
-    if (label) label.textContent = 'Dry-run failed: ' + e.message;
+    if (label) label.textContent = '試算失敗：' + e.message;
   }
 }
 
@@ -3242,7 +3277,7 @@ function scnRenderDryRun(report) {
   if (!body) return;
   if (report?.error) {
     body.innerHTML = `<tr><td colspan="4"><div class="empty">${esc(report.error)}: ${esc(report.course_id || '')}</div></td></tr>`;
-    if (label) label.textContent = 'Dry-run unavailable';
+    if (label) label.textContent = '目前無法試算';
     return;
   }
   const impact = report?.impact || {};
@@ -3250,31 +3285,31 @@ function scnRenderDryRun(report) {
   const requests = report?.request_changes || [];
   const virtualObjects = report?.virtual_objects || [];
   if (label) {
-    label.textContent = `${report.course_id || 'course'} / ${impact.changed_requests || 0} changed requests / ${impact.confidence || 'medium'} confidence`;
+    label.textContent = `${ontologyLabel(report.course_id || '方案')} / ${impact.changed_requests || 0} 筆需求變更 / ${ontologyLabel(impact.confidence || 'medium')} 信心程度`;
   }
   const impactBits = Object.entries(impact)
     .filter(([k]) => k !== 'confidence')
     .slice(0, 8)
-    .map(([k, v]) => `<div class="muted">${esc(k)}: ${esc(v)}</div>`)
+    .map(([k, v]) => `<div class="muted">${esc(ontologyLabel(k))}: ${esc(v)}</div>`)
     .join('');
   const afterBits = [
-    `open: ${after.open_requests ?? 0}`,
-    `with candidate: ${after.requests_with_candidate ?? 0}`,
-    `uncovered: ${after.uncovered_open ?? 0}`,
-    `urgent uncovered: ${after.urgent_uncovered ?? 0}`,
-    `suggested: ${after.suggested_requests ?? 0}`,
-    `matched: ${after.matched_requests ?? 0}`,
+    `待處理：${after.open_requests ?? 0}`,
+    `已有候選資源：${after.requests_with_candidate ?? 0}`,
+    `無候選資源：${after.uncovered_open ?? 0}`,
+    `緊急且無支援：${after.urgent_uncovered ?? 0}`,
+    `待確認：${after.suggested_requests ?? 0}`,
+    `已媒合：${after.matched_requests ?? 0}`,
   ].map(x => `<div class="muted">${esc(x)}</div>`).join('');
   const requestBits = requests.length
     ? requests.slice(0, 8).map(r => {
         const score = r.after?.top_score ?? r.after?.score ?? '';
         const dist = r.after?.top_distance_km ?? r.after?.dist_km ?? '';
-        return `<div class="muted">${esc(r.need_type)} u${esc(r.urgency)} ${String(r.request_id || '').slice(0,8)} -> score ${esc(score)} / ${esc(dist)}km</div>`;
+        return `<div class="muted">${esc(r.need_type)} u${esc(r.urgency)} ${String(r.request_id || '').slice(0,8)} → 評分 ${esc(score)} / ${esc(dist)}km</div>`;
       }).join('')
-    : '<div class="muted">No request-level change estimated.</div>';
+    : '<div class="muted">預估需求不變。</div>';
   const objectBits = virtualObjects.length
     ? virtualObjects.slice(0, 8).map(o => `<div class="muted">${esc(o.type)}: ${esc(o.label || o.need_type || '')}</div>`).join('')
-    : '<div class="muted">No virtual objects required.</div>';
+    : '<div class="muted">不需新增模擬物件。</div>';
   body.innerHTML = `
     <tr>
       <td>${impactBits}</td>

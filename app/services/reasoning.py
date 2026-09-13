@@ -30,66 +30,66 @@ ACTIVE_NEED_STATUSES = {"open", "suggested", "matched"}
 
 PLAYBOOK_ACTIONS: dict[str, dict[str, Any]] = {
     "manual_dispatch": {
-        "title": "Clear urgent dispatch blockers",
-        "summary": "Turn stranded requests and unresolved alerts into confirmed field action.",
+        "title": "處理緊急派遣阻礙",
+        "summary": "將待援需求與未解決警報轉成現場行動。",
         "checklist": [
-            "Open the top affected request or alert.",
-            "Review feasible candidates and road-aware travel cost.",
-            "Dispatch a volunteer, create a new request, or escalate for external support.",
+            "開啟優先處理的需求或警報。",
+            "檢查可用候選資源及路網通行成本。",
+            "派遣志工、建立需求或請求外部支援。",
         ],
     },
     "confirm_dispatch": {
-        "title": "Resolve pending dispatch suggestions",
-        "summary": "Convert stale algorithmic suggestions into a confirmed assignment or release the resource.",
+        "title": "處理待確認派遣",
+        "summary": "確認待處理的派遣建議，或釋放預留資源。",
         "checklist": [
-            "Open each stale suggestion.",
-            "Confirm the assignment when the candidate is still valid.",
-            "Decline stale suggestions so the resource returns to the pool.",
+            "開啟每筆逾期待確認建議。",
+            "候選資源仍可用時確認派遣。",
+            "拒絕失效建議，讓資源重新可用。",
         ],
     },
     "task_delivered": {
-        "title": "Verify overdue matched tasks",
-        "summary": "Find matched tasks that may have stalled before delivery confirmation.",
+        "title": "查核逾期派遣任務",
+        "summary": "找出尚未確認送達、可能停滯的任務。",
         "checklist": [
-            "Contact the assigned volunteer or facility.",
-            "Mark delivered when the task is complete.",
-            "Reassign if the responder cannot complete the task.",
+            "聯絡承接任務的志工或設施。",
+            "完成任務後標記已送達。",
+            "承接人無法完成時重新派遣。",
         ],
     },
     "mutate_resource_state": {
-        "title": "Release orphaned resource locks",
-        "summary": "Recover resources that are unavailable without an active task trail.",
+        "title": "釋放無任務對應的資源",
+        "summary": "檢查沒有進行中任務卻無法使用的資源。",
         "checklist": [
-            "Inspect the resource owner and recent dispatch events.",
-            "Release the resource when no field task explains the lock.",
-            "Leave a decision event for auditability.",
+            "檢查資源持有人與近期派遣紀錄。",
+            "確認沒有現場任務占用後釋放資源。",
+            "留下決策紀錄供查核。",
         ],
     },
     "create_resource_or_facility": {
-        "title": "Close visible supply gaps",
-        "summary": "Add supply, activate a facility, or request outside support where demand exceeds capacity.",
+        "title": "補足物資缺口",
+        "summary": "需求超過供應時增援物資、啟用設施或請求外部支援。",
         "checklist": [
-            "Review demand by request type and urgency.",
-            "Activate compatible community facilities or volunteer resources.",
-            "Escalate unmet critical demand to external agencies.",
+            "依需求類型與緊急程度檢查需求。",
+            "啟用相容的社區設施或志工資源。",
+            "向外部單位通報未滿足的緊急需求。",
         ],
     },
     "redirect_to_alternate_facility": {
-        "title": "Reduce facility overload",
-        "summary": "Protect near-capacity shelters and facilities from becoming secondary incidents.",
+        "title": "降低設施超載",
+        "summary": "減輕接近滿載的收容與服務設施壓力。",
         "checklist": [
-            "Check current load and the next compatible facilities.",
-            "Redirect new requests to lower-load alternatives.",
-            "Open overflow capacity if all alternatives are saturated.",
+            "檢查目前負載及其他相容設施。",
+            "將新增需求轉往負載較低的設施。",
+            "所有替代設施滿載時啟用備援容量。",
         ],
     },
     "mutate_road_topology": {
-        "title": "Stabilize road topology assumptions",
-        "summary": "Validate road closures and detours before they distort dispatch scoring.",
+        "title": "查核路網通行假設",
+        "summary": "確認道路封閉與繞行情況，以更新派遣評分。",
         "checklist": [
-            "Open the road sandbox and inspect changed segments.",
-            "Restore incorrect closures or add verified alternate edges.",
-            "Rerun dispatch previews for affected corridors.",
+            "開啟路網沙盒，檢查變更路段。",
+            "修正錯誤封路，或加入已查證的替代道路。",
+            "重新試算受影響走廊的派遣。",
         ],
     },
 }
@@ -231,7 +231,7 @@ def _playbook_step(action_id: str, findings: list[dict[str, Any]]) -> dict[str, 
         "endpoint": endpoints[0] if endpoints else None,
         "related_endpoints": endpoints[:6],
         "blocked_by": _blocked_by(action_id, ordered),
-        "operator_checklist": meta.get("checklist") or ["Inspect the finding evidence.", "Choose and record a human-in-the-loop action."],
+        "operator_checklist": meta.get("checklist") or ["檢查風險證據。", "選擇並記錄人工確認的行動。"],
     }
 
 
@@ -239,14 +239,14 @@ def _expected_impact(findings: list[dict[str, Any]], categories: list[str]) -> s
     breakdown = Counter(f["severity"] for f in findings)
     severe = breakdown.get("critical", 0) + breakdown.get("high", 0)
     if "road_topology" in categories:
-        return f"Restores trusted routing assumptions for {len(findings)} topology finding(s), including {severe} high-severity blocker(s)."
+        return f"修正 {len(findings)} 項路網風險的通行假設，其中 {severe} 項為高風險。"
     if "dispatch" in categories:
-        return f"Moves {len(findings)} stalled request finding(s) toward assignment, confirmation, delivery, or reassignment."
+        return f"推進 {len(findings)} 項停滯需求的派遣、確認、送達或重新指派。"
     if "capacity" in categories:
-        return f"Reduces demand/capacity pressure across {len(findings)} supply or facility finding(s)."
+        return f"降低 {len(findings)} 項物資或設施的供需壓力。"
     if "care" in categories:
-        return f"Converts {len(findings)} unresolved care alert finding(s) into dispatch or explicit resolution."
-    return f"Addresses {len(findings)} operational finding(s), including {severe} high-severity item(s)."
+        return f"將 {len(findings)} 項未解決照護警報轉為派遣或結案。"
+    return f"處理 {len(findings)} 項營運風險，其中 {severe} 項為高風險。"
 
 
 def _confidence(findings: list[dict[str, Any]]) -> str:
@@ -261,13 +261,13 @@ def _blocked_by(action_id: str, findings: list[dict[str, Any]]) -> list[str]:
     blockers: list[str] = []
     ids = [f["id"] for f in findings]
     if action_id == "manual_dispatch" and any(fid.startswith("open_need_no_candidate:") for fid in ids):
-        blockers.append("No feasible candidate exists for at least one urgent request; add supply or request outside support first.")
+        blockers.append("至少一筆緊急需求沒有可用候選資源；須先增援物資或請求外部支援。")
     if action_id == "mutate_road_topology":
-        blockers.append("Road edits should be confirmed against field reports before operators trust rerouted dispatch scores.")
+        blockers.append("道路變更須依現場回報查核後，才可採用重新計算的派遣評分。")
     if action_id == "create_resource_or_facility":
-        blockers.append("Visible supply is below open demand; dispatch may remain impossible until capacity is added.")
+        blockers.append("目前供應低於待處理需求，增援前可能仍無法派遣。")
     if action_id == "confirm_dispatch":
-        blockers.append("Reserved resources stay unavailable until the suggestion is confirmed or declined.")
+        blockers.append("確認或拒絕建議前，預留資源會持續占用。")
     return blockers
 
 
@@ -313,8 +313,8 @@ def _road_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             fid="road_topology_has_disruptions",
             severity=severity,
             category="road_topology",
-            title="Road topology sandbox contains active disruptions",
-            summary=f"{len(closed)} closed and {len(slow)} slowed road segments are affecting routing.",
+            title="路網沙盒有通行阻礙",
+            summary=f"有 {len(closed)} 段封閉、{len(slow)} 段緩行道路影響路徑。",
             affected_objects=[_obj("RoadEdge", e["id"], f"{e['a']} -> {e['b']}") for e in changed_edges[:10]],
             evidence={
                 "closed_edges": len(closed),
@@ -323,7 +323,7 @@ def _road_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             },
             recommended_action={
                 "action_id": "mutate_road_topology",
-                "label": "Inspect road sandbox and rerun dispatch",
+                "label": "檢查路網沙盒並重新試算派遣",
                 "endpoint": "/admin#Road%20Sandbox",
                 "reason": "Road edits change candidate distances and can invalidate previous assignments.",
             },
@@ -340,13 +340,13 @@ def _road_risks(db: Session, findings: list[dict[str, Any]]) -> None:
                 fid=f"road_route_unreachable:{start}:{end}",
                 severity="critical",
                 category="road_topology",
-                title="Critical corridor route is unreachable",
-                summary=f"{start} to {end} has no reachable road path under the current sandbox.",
+                title="重要走廊無法通行",
+                summary=f"目前沙盒中 {start} 至 {end} 沒有可達路徑。",
                 affected_objects=[_obj("RoadNode", start), _obj("RoadNode", end)],
                 evidence={"baseline_km": round(base, 3), "current_km": None},
                 recommended_action={
                     "action_id": "mutate_road_topology",
-                    "label": "Restore or add an alternate road edge",
+                    "label": "恢復道路或新增替代連線",
                     "endpoint": "/api/road-network/sandbox",
                     "reason": "The dispatch engine cannot score road distance across a disconnected corridor.",
                 },
@@ -357,13 +357,13 @@ def _road_risks(db: Session, findings: list[dict[str, Any]]) -> None:
                 fid=f"road_route_degraded:{start}:{end}",
                 severity="high",
                 category="road_topology",
-                title="Critical corridor route is materially degraded",
-                summary=f"{start} to {end} is {current / base:.1f}x longer than baseline.",
+                title="重要走廊通行成本明顯增加",
+                summary=f"{start} 至 {end} 的等效距離是基準的 {current / base:.1f} 倍。",
                 affected_objects=[_obj("RoadNode", start), _obj("RoadNode", end)],
                 evidence={"baseline_km": round(base, 3), "current_km": round(current, 3)},
                 recommended_action={
                     "action_id": "mutate_road_topology",
-                    "label": "Review road closure assumptions",
+                    "label": "查核道路封閉假設",
                     "endpoint": "/api/road-network/route",
                     "reason": "Long detours can change the best resource assignment.",
                 },
@@ -380,7 +380,7 @@ def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -
     )
     for need in needs:
         age = _age_minutes(need.created_at, now)
-        label = f"{need.need_type} urgency {need.urgency}"
+        label = f"{need.need_type} 緊急程度 {need.urgency}"
         if need.status == "open":
             candidates = dispatch.preview_candidates(str(need.id), db).get("candidates", [])
             top = candidates[0] if candidates else None
@@ -390,13 +390,13 @@ def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -
                     fid=f"open_need_no_candidate:{need.id}",
                     severity="critical" if need.urgency >= 5 else "high",
                     category="dispatch",
-                    title="Urgent open request has no feasible candidate",
-                    summary=f"{label} cannot currently be matched to an available resource or facility.",
+                    title="緊急需求沒有可用候選資源",
+                    summary=f"{label} 目前無法媒合至可用物資或設施。",
                     affected_objects=[_obj("ResourceRequest", need.id, label)],
                     evidence={"urgency": need.urgency, "age_minutes": age, "candidate_count": 0},
                     recommended_action={
                         "action_id": "manual_dispatch",
-                        "label": "Create or connect an emergency resource",
+                        "label": "建立或連接緊急資源",
                         "endpoint": f"/api/resources/needs/{need.id}/candidates",
                         "reason": "The automatic assignment engine has no feasible candidate.",
                     },
@@ -407,8 +407,8 @@ def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -
                     fid=f"open_need_waiting:{need.id}",
                     severity="high" if need.urgency >= 5 else "medium",
                     category="dispatch",
-                    title="Open request is waiting for dispatch",
-                    summary=f"{label} is still open with a top candidate available.",
+                    title="待處理需求仍在等待派遣",
+                    summary=f"{label} 尚未派遣，已有可用候選資源。",
                     affected_objects=[_obj("ResourceRequest", need.id, label)],
                     evidence={
                         "urgency": need.urgency,
@@ -417,7 +417,7 @@ def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -
                     },
                     recommended_action={
                         "action_id": "manual_dispatch",
-                        "label": "Dispatch the top candidate",
+                        "label": "派遣最佳候選資源",
                         "endpoint": f"/api/resources/needs/{need.id}/match",
                         "reason": "A feasible candidate exists but the request is still open.",
                     },
@@ -431,13 +431,13 @@ def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -
                     fid=f"suggestion_stale:{need.id}",
                     severity="high" if need.urgency >= 4 else "medium",
                     category="dispatch",
-                    title="Dispatch suggestion is waiting for human confirmation",
-                    summary=f"{label} has been suggested for {event_age} minutes.",
+                    title="派遣建議等待人工確認",
+                    summary=f"{label} 的派遣建議已等待 {event_age} 分鐘。",
                     affected_objects=[_obj("ResourceRequest", need.id, label)],
                     evidence={"age_minutes": event_age, "matched_resource_id": str(need.matched_resource_id)},
                     recommended_action={
                         "action_id": "confirm_dispatch",
-                        "label": "Confirm or decline the suggestion",
+                        "label": "確認或拒絕派遣建議",
                         "endpoint": f"/api/resources/needs/{need.id}/confirm_dispatch",
                         "reason": "Reserved resources should not sit unconfirmed during a disaster.",
                     },
@@ -452,13 +452,13 @@ def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -
                     fid=f"matched_need_overdue:{need.id}",
                     severity="high",
                     category="dispatch",
-                    title="Matched request has no completion confirmation",
-                    summary=f"{label} has been matched for {event_age} minutes without delivery confirmation.",
+                    title="已媒合需求尚未確認完成",
+                    summary=f"{label} 已媒合 {event_age} 分鐘，尚未確認送達。",
                     affected_objects=[_obj("ResourceRequest", need.id, label)],
                     evidence={"age_minutes": event_age, "matched_resource_id": str(need.matched_resource_id)},
                     recommended_action={
                         "action_id": "task_delivered",
-                        "label": "Contact volunteer or reassign",
+                        "label": "聯絡志工或重新派遣",
                         "endpoint": f"/api/resources/needs/{need.id}/events",
                         "reason": "A matched task may be stalled in the field.",
                     },
@@ -490,8 +490,8 @@ def _alert_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             fid=f"alert_without_need:{alert.id}",
             severity=severity,
             category="care",
-            title="Active alert has no linked resource request",
-            summary=f"{alert.alert_type} alert is active, but no open dispatch request exists for this person.",
+            title="未解決警報沒有對應資源需求",
+            summary=f"{alert.alert_type} 警報尚未解除，此人員沒有待處理派遣需求。",
             affected_objects=[
                 _obj("Alert", alert.id, alert.alert_type),
                 _obj("Person", alert.elderly_id, alert.elderly.name if alert.elderly else None),
@@ -499,7 +499,7 @@ def _alert_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             evidence={"alert_type": alert.alert_type, "alert_status": alert.status},
             recommended_action={
                 "action_id": "manual_dispatch",
-                "label": "Create a resource request or resolve alert",
+                "label": "建立資源需求或解除警報",
                 "endpoint": "/api/resources/needs",
                 "reason": "Care alerts should either trigger a need or be explicitly resolved.",
             },
@@ -524,13 +524,13 @@ def _resource_integrity_risks(db: Session, findings: list[dict[str, Any]]) -> No
             fid=f"resource_locked_without_task:{resource.id}",
             severity="medium",
             category="data_integrity",
-            title="Resource is unavailable without an active or completed task",
-            summary=f"{resource.name} is locked, but no matching request explains the lock.",
+            title="資源無法使用且沒有對應任務",
+            summary=f"{resource.name} 已被占用，但沒有對應需求。",
             affected_objects=[_obj("Resource", resource.id, resource.name)],
             evidence={"resource_type": resource.resource_type, "is_available": resource.is_available},
             recommended_action={
                 "action_id": "mutate_resource_state",
-                "label": "Review and release resource if appropriate",
+                "label": "查核並視情況釋放資源",
                 "endpoint": f"/api/resources/{resource.id}/toggle",
                 "reason": "Orphaned locks reduce dispatch capacity.",
             },
@@ -569,8 +569,8 @@ def _supply_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             fid=f"supply_gap:{need_type}",
             severity=severity,
             category="capacity",
-            title="Open request demand exceeds visible supply",
-            summary=f"{need_count} open {need_type} requests compete for {supply_count} visible supply sources.",
+            title="待處理需求超過可用供應",
+            summary=f"有 {need_count} 筆 {need_type} 待處理需求，目前僅 {supply_count} 個供應來源。",
             affected_objects=[],
             evidence={
                 "need_type": need_type,
@@ -581,7 +581,7 @@ def _supply_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             },
             recommended_action={
                 "action_id": "create_resource_or_facility",
-                "label": "Add supply, open a facility, or request external support",
+                "label": "增援物資、啟用設施或請求外部支援",
                 "endpoint": "/api/resources",
                 "reason": "Demand exceeds supply visible to the dispatch engine.",
             },
@@ -601,13 +601,13 @@ def _facility_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             fid=f"facility_capacity:{facility.id}",
             severity="high" if ratio >= 1 else "medium",
             category="capacity",
-            title="Facility is near or over capacity",
-            summary=f"{facility.name} is at {facility.current_load}/{facility.capacity} capacity.",
+            title="設施接近滿載或已超載",
+            summary=f"{facility.name} 目前負載為 {facility.current_load}/{facility.capacity}。",
             affected_objects=[_obj("Facility", facility.id, facility.name)],
             evidence={"current_load": facility.current_load, "capacity": facility.capacity, "ratio": round(ratio, 3)},
             recommended_action={
                 "action_id": "redirect_to_alternate_facility",
-                "label": "Redirect new requests or open overflow capacity",
+                "label": "轉介新增需求或啟用備援容量",
                 "endpoint": f"/api/resources/points/{facility.id}",
                 "reason": "Overloaded facilities create secondary operational risk.",
             },

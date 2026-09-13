@@ -28,6 +28,7 @@ apscheduler==3.10.4
 # Utilities
 python-dotenv==1.0.1
 python-multipart==0.0.18
+networkx==3.4.2
 
 # Rate limiting（系統沒有登入驗證，用來擋掉短時間內狂打同一 IP 的濫用）
 slowapi==0.1.10
