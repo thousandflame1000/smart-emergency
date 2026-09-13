@@ -18,6 +18,11 @@ def courses_of_action_report(limit: int = 6, db=Depends(get_db)):
     return courses_of_action.compare_courses(db, limit=limit)
 
 
+@router.get("/courses-of-action/{course_id}/dry-run")
+def dry_run_course_of_action(course_id: str, db=Depends(get_db)):
+    return courses_of_action.dry_run_course(db, course_id)
+
+
 @router.post("/start")
 def start(intensity_scale: float = 1.0, capacity_scale: float = 1.0,
           population_size: int | None = None, db=Depends(get_db)):

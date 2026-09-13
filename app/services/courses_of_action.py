@@ -26,29 +26,9 @@ CRITICAL_CORRIDORS = [("chenggong", "yuli"), ("hualien", "taitung")]
 
 def compare_courses(db: Session, limit: int = 6) -> dict[str, Any]:
     limit = max(1, min(limit, 20))
-    open_needs = (
-        db.query(CommunityNeed)
-        .filter(CommunityNeed.status == "open")
-        .order_by(CommunityNeed.urgency.desc(), CommunityNeed.created_at)
-        .limit(120)
-        .all()
-    )
-    assessments = [_assess_need(need, db) for need in open_needs]
+    assessments = _open_assessments(db)
     baseline = _baseline_metrics(db, assessments)
-
-    courses = [
-        c
-        for c in [
-            _surge_resources_course(baseline, assessments),
-            _confirm_pending_course(db, baseline),
-            _restore_roads_course(baseline),
-            _open_overflow_course(baseline),
-        ]
-        if c
-    ]
-    if not courses:
-        courses.append(_monitor_course(baseline))
-    courses.sort(key=lambda c: (-c["rank_score"], c["id"]))
+    courses = _ranked_courses(db, baseline, assessments)
 
     return {
         "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
@@ -67,6 +47,61 @@ def compare_courses(db: Session, limit: int = 6) -> dict[str, Any]:
             "Road restoration estimates the effect of returning sandbox-modified road segments to baseline travel cost.",
         ],
     }
+
+
+def dry_run_course(db: Session, course_id: str) -> dict[str, Any]:
+    assessments = _open_assessments(db)
+    baseline = _baseline_metrics(db, assessments)
+    courses = _ranked_courses(db, baseline, assessments)
+    course = next((c for c in courses if c["id"] == course_id), None)
+    if not course:
+        return {
+            "error": "unknown_or_inactive_course",
+            "course_id": course_id,
+            "available_courses": [c["id"] for c in courses],
+        }
+
+    if course_id == "surge_local_resources":
+        return _dry_run_surge_resources(course, baseline, assessments)
+    if course_id == "restore_road_capacity":
+        return _dry_run_restore_roads(course, baseline, assessments, db)
+    if course_id == "confirm_pending_dispatch":
+        return _dry_run_confirm_pending(course, baseline, db)
+    if course_id == "open_overflow_facility":
+        return _dry_run_open_overflow(course, baseline)
+    return _dry_run_monitor(course, baseline)
+
+
+def _open_assessments(db: Session) -> list[dict[str, Any]]:
+    open_needs = (
+        db.query(CommunityNeed)
+        .filter(CommunityNeed.status == "open")
+        .order_by(CommunityNeed.urgency.desc(), CommunityNeed.created_at)
+        .limit(120)
+        .all()
+    )
+    return [_assess_need(need, db) for need in open_needs]
+
+
+def _ranked_courses(
+    db: Session,
+    baseline: dict[str, Any],
+    assessments: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    courses = [
+        c
+        for c in [
+            _surge_resources_course(baseline, assessments),
+            _confirm_pending_course(db, baseline),
+            _restore_roads_course(baseline),
+            _open_overflow_course(baseline),
+        ]
+        if c
+    ]
+    if not courses:
+        courses.append(_monitor_course(baseline))
+    courses.sort(key=lambda c: (-c["rank_score"], c["id"]))
+    return courses
 
 
 def _assess_need(need: CommunityNeed, db: Session) -> dict[str, Any]:
@@ -285,6 +320,271 @@ def _monitor_course(baseline: dict[str, Any]) -> dict[str, Any]:
             {"action_id": "inspect_operational_risks", "endpoint": "/api/ontology/reasoning/operational-risks", "label": "Refresh risk findings"}
         ],
     }
+
+
+def _dry_run_surge_resources(
+    course: dict[str, Any],
+    baseline: dict[str, Any],
+    assessments: list[dict[str, Any]],
+) -> dict[str, Any]:
+    uncovered = [a for a in assessments if not a["has_candidate"]]
+    request_changes = []
+    for assessment in uncovered:
+        score = _local_resource_score(assessment)
+        request_changes.append({
+            "request_id": assessment["id"],
+            "need_type": assessment["type"],
+            "urgency": assessment["urgency"],
+            "before": {"has_candidate": False, "top_score": None, "top_distance_km": None},
+            "after": {
+                "has_candidate": True,
+                "top_score": round(score, 1),
+                "top_distance_km": 0.0,
+                "source": "virtual_resource",
+            },
+            "delta": {"candidate_added": True, "score_delta": None},
+        })
+    return _dry_run_report(
+        course,
+        baseline,
+        course["metrics_after"],
+        request_changes,
+        virtual_objects=[
+            {
+                "type": "Resource",
+                "label": f"Virtual {a['type']} surge resource",
+                "near_request_id": a["id"],
+                "projected_score": round(_local_resource_score(a), 1),
+            }
+            for a in uncovered
+        ],
+        confidence="medium",
+    )
+
+
+def _dry_run_restore_roads(
+    course: dict[str, Any],
+    baseline: dict[str, Any],
+    assessments: list[dict[str, Any]],
+    db: Session,
+) -> dict[str, Any]:
+    request_changes = []
+    added = urgent_added = 0
+    score_deltas = []
+    for assessment in assessments:
+        restored = _best_candidate_for_need(assessment["need"], db, use_sandbox=False)
+        current_score = assessment["top_score"]
+        if not restored:
+            continue
+        restored_score = restored["score"]
+        score_delta = None if current_score is None else round(restored_score - current_score, 1)
+        candidate_added = not assessment["has_candidate"]
+        improved = candidate_added or (score_delta is not None and score_delta > 0.1)
+        if not improved:
+            continue
+        if candidate_added:
+            added += 1
+            if assessment["urgency"] >= 4:
+                urgent_added += 1
+        if score_delta is not None:
+            score_deltas.append(score_delta)
+        request_changes.append({
+            "request_id": assessment["id"],
+            "need_type": assessment["type"],
+            "urgency": assessment["urgency"],
+            "before": {
+                "has_candidate": assessment["has_candidate"],
+                "top_score": current_score,
+                "top_distance_km": assessment["top_distance_km"],
+            },
+            "after": restored,
+            "delta": {
+                "candidate_added": candidate_added,
+                "score_delta": score_delta,
+                "distance_delta_km": _distance_delta(assessment["top_distance_km"], restored["dist_km"]),
+            },
+        })
+
+    simulated_after = _with_delta(
+        course["metrics_after"],
+        requests_with_candidate=added,
+        uncovered_open=-added,
+        urgent_uncovered=-urgent_added,
+    )
+    return _dry_run_report(
+        course,
+        baseline,
+        simulated_after,
+        request_changes,
+        route_changes=baseline["road_network"]["critical_corridors"],
+        confidence="medium" if request_changes else "low",
+        extra_impact={
+            "avg_score_delta": round(mean(score_deltas), 1) if score_deltas else None,
+            "newly_covered_requests": added,
+        },
+    )
+
+
+def _dry_run_confirm_pending(course: dict[str, Any], baseline: dict[str, Any], db: Session) -> dict[str, Any]:
+    pending = (
+        db.query(CommunityNeed)
+        .filter(CommunityNeed.status == "suggested")
+        .order_by(CommunityNeed.urgency.desc(), CommunityNeed.created_at)
+        .limit(60)
+        .all()
+    )
+    request_changes = [
+        {
+            "request_id": str(need.id),
+            "need_type": need.need_type,
+            "urgency": need.urgency,
+            "before": {"status": "suggested", "matched_resource_id": str(need.matched_resource_id) if need.matched_resource_id else None},
+            "after": {"status": "matched", "matched_resource_id": str(need.matched_resource_id) if need.matched_resource_id else None},
+            "delta": {"status_change": "suggested -> matched"},
+        }
+        for need in pending
+    ]
+    return _dry_run_report(course, baseline, course["metrics_after"], request_changes, confidence="high")
+
+
+def _dry_run_open_overflow(course: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
+    gaps = course.get("evidence", {}).get("supply_gaps") or []
+    virtual_objects = [
+        {
+            "type": "Facility",
+            "label": f"Overflow {gap['need_type']} capacity",
+            "need_type": gap["need_type"],
+            "projected_supply_sources": gap["unmet"],
+        }
+        for gap in gaps
+    ]
+    return _dry_run_report(
+        course,
+        baseline,
+        course["metrics_after"],
+        [],
+        virtual_objects=virtual_objects,
+        confidence="medium",
+    )
+
+
+def _dry_run_monitor(course: dict[str, Any], baseline: dict[str, Any]) -> dict[str, Any]:
+    return _dry_run_report(course, baseline, baseline, [], confidence="high")
+
+
+def _dry_run_report(
+    course: dict[str, Any],
+    baseline: dict[str, Any],
+    simulated_after: dict[str, Any],
+    request_changes: list[dict[str, Any]],
+    *,
+    route_changes: list[dict[str, Any]] | None = None,
+    virtual_objects: list[dict[str, Any]] | None = None,
+    confidence: str,
+    extra_impact: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    impact = {
+        "requests_with_candidate_delta": _metric_delta(baseline, simulated_after, "requests_with_candidate"),
+        "uncovered_open_delta": _metric_delta(baseline, simulated_after, "uncovered_open"),
+        "urgent_uncovered_delta": _metric_delta(baseline, simulated_after, "urgent_uncovered"),
+        "suggested_requests_delta": _metric_delta(baseline, simulated_after, "suggested_requests"),
+        "matched_requests_delta": _metric_delta(baseline, simulated_after, "matched_requests"),
+        "changed_requests": len(request_changes),
+        "confidence": confidence,
+    }
+    if extra_impact:
+        impact.update(extra_impact)
+    return {
+        "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat() + "Z",
+        "course_id": course["id"],
+        "course": course,
+        "baseline": baseline,
+        "simulated_after": simulated_after,
+        "impact": impact,
+        "request_changes": request_changes[:30],
+        "route_changes": route_changes or [],
+        "virtual_objects": virtual_objects or [],
+        "non_mutating": True,
+        "assumptions": [
+            "Dry-run does not create, update, reserve, or delete database records.",
+            "Dispatch scoring reuses the production urgency, distance, vulnerability, and wait-time formula.",
+            "Operators must explicitly execute one of the returned actions to change live state.",
+        ],
+    }
+
+
+def _best_candidate_for_need(need: CommunityNeed, db: Session, *, use_sandbox: bool) -> dict[str, Any] | None:
+    vulnerability = dispatch._vulnerability_pts(need.requester_id, db)
+    wait_pts = dispatch._wait_pts(need)
+    compat = dispatch._compat_types(need.need_type)
+    type_aff = {t: a for t, a in compat}
+    candidates: list[dict[str, Any]] = []
+
+    for resource in (
+        db.query(CommunityResource)
+        .filter(CommunityResource.is_available == True, CommunityResource.resource_type.in_(list(type_aff.keys())))
+        .all()
+    ):
+        dist = _distance_for_mode(need.lat, need.lng, resource.lat, resource.lng, db, use_sandbox)
+        breakdown = dispatch._score_breakdown(
+            need.urgency,
+            type_aff.get(resource.resource_type, 0.0),
+            dist,
+            0,
+            vulnerability,
+            wait_pts,
+        )
+        if breakdown is None:
+            continue
+        candidates.append({
+            "has_candidate": True,
+            "source": "resource",
+            "id": str(resource.id),
+            "name": resource.name,
+            "score": round(breakdown["total"], 1),
+            "dist_km": round(dist, 2),
+        })
+
+    for point in db.query(ResourcePoint).filter(ResourcePoint.is_active == True).all():
+        pt_supplies = POINT_SUPPLY_TYPES.get(point.point_type, [])
+        best_aff = max((type_aff[t] for t in pt_supplies if t in type_aff), default=0.0)
+        if best_aff == 0.0:
+            continue
+        dist = _distance_for_mode(need.lat, need.lng, point.lat, point.lng, db, use_sandbox)
+        breakdown = dispatch._score_breakdown(need.urgency, best_aff, dist, 0, vulnerability, wait_pts)
+        if breakdown is None:
+            continue
+        candidates.append({
+            "has_candidate": True,
+            "source": "resource_point",
+            "id": str(point.id),
+            "name": point.name,
+            "score": round(breakdown["total"] * 0.8, 1),
+            "dist_km": round(dist, 2),
+        })
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: c["score"], reverse=True)
+    return candidates[0]
+
+
+def _distance_for_mode(lat1, lng1, lat2, lng2, db: Session, use_sandbox: bool) -> float:
+    return dispatch._distance_km(lat1, lng1, lat2, lng2, db if use_sandbox else None)
+
+
+def _distance_delta(before: float | None, after: float | None) -> float | None:
+    if before is None or after is None:
+        return None
+    return round(after - before, 2)
+
+
+def _metric_delta(before: dict[str, Any], after: dict[str, Any], key: str) -> int | None:
+    b = before.get(key)
+    a = after.get(key)
+    if isinstance(b, int) and isinstance(a, int):
+        return a - b
+    return None
 
 
 def _local_resource_score(assessment: dict[str, Any]) -> float:

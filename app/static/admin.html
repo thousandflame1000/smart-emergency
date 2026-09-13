@@ -1188,6 +1188,21 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </table>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">COA Dry Run Preview</div>
+            <div class="card-subtitle" id="scn-dryrun-label">Select a course to simulate its after-state without changing live data</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Impact</th><th>After-State</th><th>Changed Requests</th><th>Virtual Objects</th></tr></thead>
+            <tbody id="scn-dryrun"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
   </div><!-- /content -->
@@ -3203,10 +3218,70 @@ function scnRenderCourses(report) {
         </td>
         <td>
           ${actions}
+          <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="scnDryRunCourse('${esc(course.id)}')">Dry Run</button>
           <div style="margin-top:6px">${trades}</div>
         </td>
       </tr>`;
   }).join('');
+}
+
+async function scnDryRunCourse(courseId) {
+  const label = document.getElementById('scn-dryrun-label');
+  if (label) label.textContent = `Simulating ${courseId}...`;
+  try {
+    const report = await fetch(`/api/scenario/courses-of-action/${encodeURIComponent(courseId)}/dry-run`).then(r => r.json());
+    scnRenderDryRun(report);
+  } catch(e) {
+    if (label) label.textContent = 'Dry-run failed: ' + e.message;
+  }
+}
+
+function scnRenderDryRun(report) {
+  const label = document.getElementById('scn-dryrun-label');
+  const body = document.getElementById('scn-dryrun');
+  if (!body) return;
+  if (report?.error) {
+    body.innerHTML = `<tr><td colspan="4"><div class="empty">${esc(report.error)}: ${esc(report.course_id || '')}</div></td></tr>`;
+    if (label) label.textContent = 'Dry-run unavailable';
+    return;
+  }
+  const impact = report?.impact || {};
+  const after = report?.simulated_after || {};
+  const requests = report?.request_changes || [];
+  const virtualObjects = report?.virtual_objects || [];
+  if (label) {
+    label.textContent = `${report.course_id || 'course'} / ${impact.changed_requests || 0} changed requests / ${impact.confidence || 'medium'} confidence`;
+  }
+  const impactBits = Object.entries(impact)
+    .filter(([k]) => k !== 'confidence')
+    .slice(0, 8)
+    .map(([k, v]) => `<div class="muted">${esc(k)}: ${esc(v)}</div>`)
+    .join('');
+  const afterBits = [
+    `open: ${after.open_requests ?? 0}`,
+    `with candidate: ${after.requests_with_candidate ?? 0}`,
+    `uncovered: ${after.uncovered_open ?? 0}`,
+    `urgent uncovered: ${after.urgent_uncovered ?? 0}`,
+    `suggested: ${after.suggested_requests ?? 0}`,
+    `matched: ${after.matched_requests ?? 0}`,
+  ].map(x => `<div class="muted">${esc(x)}</div>`).join('');
+  const requestBits = requests.length
+    ? requests.slice(0, 8).map(r => {
+        const score = r.after?.top_score ?? r.after?.score ?? '';
+        const dist = r.after?.top_distance_km ?? r.after?.dist_km ?? '';
+        return `<div class="muted">${esc(r.need_type)} u${esc(r.urgency)} ${String(r.request_id || '').slice(0,8)} -> score ${esc(score)} / ${esc(dist)}km</div>`;
+      }).join('')
+    : '<div class="muted">No request-level change estimated.</div>';
+  const objectBits = virtualObjects.length
+    ? virtualObjects.slice(0, 8).map(o => `<div class="muted">${esc(o.type)}: ${esc(o.label || o.need_type || '')}</div>`).join('')
+    : '<div class="muted">No virtual objects required.</div>';
+  body.innerHTML = `
+    <tr>
+      <td>${impactBits}</td>
+      <td>${afterBits}</td>
+      <td>${requestBits}</td>
+      <td>${objectBits}</td>
+    </tr>`;
 }
 
 setInterval(() => {

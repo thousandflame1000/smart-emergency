@@ -281,6 +281,15 @@ ACTIONS: list[dict[str, Any]] = [
         "effects": ["Returns ranked non-mutating response alternatives with deltas, evidence, and tradeoffs"],
         "human_in_the_loop": True,
     },
+    {
+        "id": "dry_run_course_of_action",
+        "label": "Dry-run a course of action",
+        "method": "GET",
+        "endpoint": "/api/scenario/courses-of-action/{course_id}/dry-run",
+        "preconditions": ["A candidate course of action is active"],
+        "effects": ["Returns simulated after-state metrics and request-level changes without mutating live records"],
+        "human_in_the_loop": True,
+    },
 ]
 
 
@@ -340,6 +349,13 @@ FUNCTIONS: list[dict[str, Any]] = [
         "implementation": "app.services.courses_of_action.compare_courses",
         "inputs": ["open requests", "dispatch previews", "road sandbox", "facility capacity", "visible supply"],
         "outputs": ["ranked alternatives", "baseline metrics", "expected deltas", "tradeoffs"],
+    },
+    {
+        "id": "course_of_action_dry_run",
+        "label": "Course-of-action dry-run simulator",
+        "implementation": "app.services.courses_of_action.dry_run_course",
+        "inputs": ["course id", "open requests", "dispatch previews", "road sandbox", "visible supply"],
+        "outputs": ["simulated after-state", "request-level changes", "virtual objects", "impact summary"],
     },
 ]
 
