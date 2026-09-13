@@ -75,11 +75,13 @@ def test_schema_exposes_ontology_primitives():
     assert any(action["id"] == "mutate_road_topology" for action in schema["actions"])
     assert any(action["id"] == "inspect_operational_risks" for action in schema["actions"])
     assert any(action["id"] == "generate_operational_playbook" for action in schema["actions"])
+    assert any(action["id"] == "compare_courses_of_action" for action in schema["actions"])
     assert any(action["id"] == "task_delivered" for action in schema["actions"])
     assert any(action["id"] == "task_decline" for action in schema["actions"])
     assert any(fn["id"] == "batch_assignment" for fn in schema["functions"])
     assert any(fn["id"] == "operational_reasoning" for fn in schema["functions"])
     assert any(fn["id"] == "operational_playbook" for fn in schema["functions"])
+    assert any(fn["id"] == "courses_of_action" for fn in schema["functions"])
 
 
 def test_graph_links_people_requests_resources_and_alerts(db):

@@ -1172,6 +1172,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <div id="scn-log" style="display:flex;flex-direction:column;gap:10px;max-height:320px;overflow-y:auto"></div>
         </div>
       </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">Courses Of Action</div>
+            <div class="card-subtitle" id="scn-coa-label">Ranked non-mutating response alternatives</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="scnLoadCourses()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Rank</th><th>Course</th><th>Expected Delta</th><th>Evidence & Actions</th></tr></thead>
+            <tbody id="scn-coa"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
   </div><!-- /content -->
@@ -3015,8 +3031,12 @@ async function roadResetSandbox() {
 
 async function scnLoadStatus() {
   try {
-    const res = await fetch('/api/scenario/status');
-    scnRender(await res.json());
+    const [status, courses] = await Promise.all([
+      fetch('/api/scenario/status').then(r => r.json()),
+      fetch('/api/scenario/courses-of-action?limit=6').then(r => r.json()),
+    ]);
+    scnRender(status);
+    scnRenderCourses(courses);
   } catch(e) {
     document.getElementById('scn-progress-label').textContent = '載入失敗：' + e.message;
   }
@@ -3106,21 +3126,89 @@ async function scnStart() {
     population_size:  document.getElementById('scn-population').value || '7',
   });
   scnRender(await (await fetch(`/api/scenario/start?${params}`, { method: 'POST' })).json());
+  scnLoadCourses();
 }
 async function scnAdvance() {
   scnRender(await (await fetch('/api/scenario/advance', { method: 'POST' })).json());
+  scnLoadCourses();
 }
 async function scnReset() {
   if (!confirm('確定重置情境模擬？（只會清掉情境自己建立的資料，不影響其他任何資料）')) return;
   scnRender(await (await fetch('/api/scenario/reset', { method: 'POST' })).json());
+  scnLoadCourses();
 }
 async function scnToggleAutoplay() {
   const cur = await (await fetch('/api/scenario/status')).json();
   scnRender(await (await fetch(`/api/scenario/autoplay?enabled=${!cur.autoplay}`, { method: 'POST' })).json());
+  scnLoadCourses();
 }
 
 // 自動播放時後台每 8 秒自己推進一步，這裡每 3 秒輪詢一次狀態，
 // 只有真的在看這一頁時才打 API，避免不必要的背景請求。
+async function scnLoadCourses() {
+  try {
+    const report = await fetch('/api/scenario/courses-of-action?limit=6').then(r => r.json());
+    scnRenderCourses(report);
+  } catch(e) {
+    const label = document.getElementById('scn-coa-label');
+    if (label) label.textContent = 'Load failed: ' + e.message;
+  }
+}
+
+function scnRenderCourses(report) {
+  const label = document.getElementById('scn-coa-label');
+  const body = document.getElementById('scn-coa');
+  if (!body) return;
+  const counts = report?.counts || {};
+  const baseline = report?.baseline || {};
+  if (label) {
+    label.textContent = `${counts.courses || 0} courses / ${counts.urgent_uncovered || 0} urgent uncovered / ${counts.road_disruptions || 0} road disruptions`;
+  }
+  const courses = report?.courses || [];
+  if (!courses.length) {
+    body.innerHTML = '<tr><td colspan="4"><div class="empty">No courses of action available.</div></td></tr>';
+    return;
+  }
+  body.innerHTML = courses.map((course, i) => {
+    const delta = course.expected_delta || {};
+    const deltaBits = Object.entries(delta)
+      .slice(0, 5)
+      .map(([k, v]) => `${k}: ${v}`)
+      .join(' / ');
+    const actions = (course.operator_actions || []).slice(0, 3)
+      .map(a => `<div class="muted"><span class="src-badge src-gov">${esc(a.action_id || 'act')}</span> ${esc(a.label || '')}</div>`)
+      .join('');
+    const trades = (course.tradeoffs || []).slice(0, 2)
+      .map(t => `<div class="muted">- ${esc(t)}</div>`)
+      .join('');
+    const evidence = course.evidence || {};
+    const affected = (evidence.affected_requests || []).slice(0, 3)
+      .map(o => `${o.type}:${String(o.id).slice(0, 8)}`)
+      .join(', ');
+    const scoreCls = course.rank_score >= 100 ? 'danger' : course.rank_score >= 70 ? 'warn' : 'ok';
+    return `
+      <tr>
+        <td>
+          <div class="scn-stat-value ${scoreCls}" style="font-size:20px">${esc(course.rank_score)}</div>
+          <div class="muted">#${i + 1}</div>
+        </td>
+        <td>
+          <div style="font-weight:700">${esc(course.title)}</div>
+          <div class="muted">${esc(course.summary)}</div>
+          <div class="muted" style="margin-top:4px">${esc(affected)}</div>
+        </td>
+        <td>
+          <div>${esc(deltaBits || 'No direct metric change')}</div>
+          <div class="muted" style="margin-top:6px">baseline: ${baseline.open_requests || 0} open / ${baseline.uncovered_open || 0} uncovered</div>
+        </td>
+        <td>
+          ${actions}
+          <div style="margin-top:6px">${trades}</div>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
 setInterval(() => {
   const page = document.getElementById('page-scenario');
   if (page && page.classList.contains('active')) scnLoadStatus();

@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends
 
 from app.database import get_db
-from app.services import scenario
+from app.services import courses_of_action, scenario
 
 router = APIRouter()
 
@@ -11,6 +11,11 @@ router = APIRouter()
 @router.get("/status")
 def get_status(db=Depends(get_db)):
     return scenario.status(db)
+
+
+@router.get("/courses-of-action")
+def courses_of_action_report(limit: int = 6, db=Depends(get_db)):
+    return courses_of_action.compare_courses(db, limit=limit)
 
 
 @router.post("/start")

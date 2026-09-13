@@ -272,6 +272,15 @@ ACTIONS: list[dict[str, Any]] = [
         "effects": ["Groups findings into prioritized, evidence-backed operator actions"],
         "human_in_the_loop": True,
     },
+    {
+        "id": "compare_courses_of_action",
+        "label": "Compare courses of action",
+        "method": "GET",
+        "endpoint": "/api/scenario/courses-of-action",
+        "preconditions": ["Operational data, dispatch previews, and scenario state are available"],
+        "effects": ["Returns ranked non-mutating response alternatives with deltas, evidence, and tradeoffs"],
+        "human_in_the_loop": True,
+    },
 ]
 
 
@@ -324,6 +333,13 @@ FUNCTIONS: list[dict[str, Any]] = [
         "implementation": "app.services.reasoning.operational_playbook",
         "inputs": ["operational risk findings", "action ontology", "affected objects", "evidence"],
         "outputs": ["prioritized operator steps", "expected impact", "blockers", "checklists"],
+    },
+    {
+        "id": "courses_of_action",
+        "label": "Courses-of-action comparator",
+        "implementation": "app.services.courses_of_action.compare_courses",
+        "inputs": ["open requests", "dispatch previews", "road sandbox", "facility capacity", "visible supply"],
+        "outputs": ["ranked alternatives", "baseline metrics", "expected deltas", "tradeoffs"],
     },
 ]
 
