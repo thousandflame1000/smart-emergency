@@ -993,6 +993,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
+            <div class="card-title">Operational Playbook</div>
+            <div class="card-subtitle" id="ontology-playbook-label">Prioritized operator actions generated from current risks</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Priority</th><th>Action Step</th><th>Impact</th><th>Operator Checklist</th></tr></thead>
+            <tbody id="ontology-playbook"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
             <div class="card-title">Operational Ontology</div>
             <div class="card-subtitle">Object types, link types, actions, and current operating graph</div>
           </div>
@@ -2586,10 +2602,11 @@ async function loadOntology() {
   const labelEl = document.getElementById('ontology-graph-label');
   if (labelEl) labelEl.textContent = 'Loading...';
   try {
-    const [schema, graph, risks] = await Promise.all([
+    const [schema, graph, risks, playbook] = await Promise.all([
       fetch('/api/ontology/schema').then(r => r.json()),
       fetch('/api/ontology/graph?limit=80').then(r => r.json()),
       fetch('/api/ontology/reasoning/operational-risks?limit=20').then(r => r.json()),
+      fetch('/api/ontology/reasoning/playbook?limit=8').then(r => r.json()),
     ]);
     const m = graph.metrics || {};
     statsEl.innerHTML = `
@@ -2600,6 +2617,7 @@ async function loadOntology() {
       <div class="stat-tile"><div class="stat-tile-label">Decision Events</div><div class="stat-tile-value">${m.decision_events ?? 0}</div><div class="stat-tile-sub">action audit trail</div></div>`;
 
     renderOntologyRisks(risks);
+    renderOntologyPlaybook(playbook);
 
     const objectTypes = Object.entries(schema.object_types || {});
     document.getElementById('ontology-types').innerHTML = objectTypes.map(([name, meta]) => `
@@ -2681,6 +2699,49 @@ function renderOntologyRisks(report) {
           <span class="src-badge src-gov">${esc(action.action_id || 'inspect')}</span>
           <div class="muted" style="margin-top:4px">${esc(action.label || '')}</div>
         </td>
+      </tr>`;
+  }).join('');
+}
+
+function renderOntologyPlaybook(report) {
+  const label = document.getElementById('ontology-playbook-label');
+  const body = document.getElementById('ontology-playbook');
+  const counts = report?.counts || {};
+  if (label) {
+    label.textContent = `${counts.steps || 0} action steps / ${counts.critical_steps || 0} critical / ${counts.source_findings || 0} source findings`;
+  }
+  const steps = report?.steps || [];
+  if (!steps.length) {
+    body.innerHTML = '<tr><td colspan="4"><div class="empty">No playbook actions needed.</div></td></tr>';
+    return;
+  }
+  body.innerHTML = steps.map(step => {
+    const blocked = (step.blocked_by || []).slice(0, 2).join(' / ');
+    const checklist = (step.operator_checklist || []).slice(0, 4)
+      .map(item => `<div class="muted">- ${esc(item)}</div>`)
+      .join('');
+    const objects = (step.affected_objects || []).slice(0, 4)
+      .map(o => `${o.type}:${String(o.id).slice(0, 8)}`)
+      .join(', ');
+    return `
+      <tr>
+        <td>
+          <div style="font-weight:800">${esc(step.priority)}</div>
+          ${ontologySeverityBadge(step.severity)}
+          <div class="muted" style="margin-top:4px">${esc(step.confidence || 'medium')} confidence</div>
+        </td>
+        <td>
+          <div style="font-weight:700">${esc(step.title)}</div>
+          <div class="muted">${esc(step.summary)}</div>
+          <div style="margin-top:6px"><span class="src-badge src-gov">${esc(step.action_id)}</span></div>
+          <div class="muted" style="margin-top:4px">${esc(objects)}</div>
+        </td>
+        <td>
+          <div>${esc(step.expected_impact || '')}</div>
+          <div class="muted" style="margin-top:6px">${esc(step.finding_count || 0)} findings</div>
+          ${blocked ? `<div class="muted" style="margin-top:6px">${esc(blocked)}</div>` : ''}
+        </td>
+        <td>${checklist}</td>
       </tr>`;
   }).join('');
 }

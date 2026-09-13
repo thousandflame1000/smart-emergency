@@ -104,3 +104,63 @@ def test_operational_risks_endpoint_returns_ranked_findings(db):
     assert res.status_code == 200
     assert data["summary"]["critical"] >= 1
     assert data["findings"][0]["severity"] == "critical"
+
+
+def test_operational_playbook_groups_findings_into_action_steps(db):
+    elder = User(name="Playbook Elder", roles=["elderly"], lat=23.3333, lng=121.3167)
+    db.add(elder)
+    db.commit()
+    need = CommunityNeed(
+        requester_id=elder.id,
+        need_type="water",
+        urgency=5,
+        status="open",
+        lat=23.3333,
+        lng=121.3167,
+    )
+    db.add(need)
+    db.commit()
+
+    report = reasoning.operational_playbook(db)
+    step = next(s for s in report["steps"] if s["action_id"] == "manual_dispatch")
+
+    assert step["severity"] == "critical"
+    assert step["priority"] >= 100
+    assert f"open_need_no_candidate:{need.id}" in step["finding_ids"]
+    assert step["expected_impact"]
+    assert step["operator_checklist"]
+    assert step["blocked_by"]
+
+
+def test_operational_playbook_includes_road_topology_step(db):
+    road_network.set_edge_status(db, road_network.edge_id("yuli", "changbin"), "closed")
+
+    report = reasoning.operational_playbook(db)
+    step = next(s for s in report["steps"] if s["action_id"] == "mutate_road_topology")
+
+    assert step["finding_count"] >= 2
+    assert "road_topology_has_disruptions" in step["finding_ids"]
+    assert step["endpoint"] is not None
+
+
+def test_operational_playbook_endpoint_returns_prioritized_steps(db):
+    elder = User(name="Endpoint Playbook Elder", roles=["elderly"], lat=23.3333, lng=121.3167)
+    db.add(elder)
+    db.commit()
+    db.add(CommunityNeed(
+        requester_id=elder.id,
+        need_type="water",
+        urgency=5,
+        status="open",
+        lat=23.3333,
+        lng=121.3167,
+    ))
+    db.commit()
+
+    res = _client().get("/api/ontology/reasoning/playbook")
+    data = res.json()
+
+    assert res.status_code == 200
+    assert data["counts"]["critical_steps"] >= 1
+    assert data["steps"][0]["priority"] >= data["steps"][-1]["priority"]
+    assert any(step["action_id"] == "manual_dispatch" for step in data["steps"])

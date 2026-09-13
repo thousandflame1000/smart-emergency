@@ -30,3 +30,8 @@ def get_need_decision_context(need_id: str, db: Session = Depends(get_db)):
 @router.get("/reasoning/operational-risks")
 def get_operational_risks(limit: int = 30, db: Session = Depends(get_db)):
     return reasoning.operational_risks(db, limit=limit)
+
+
+@router.get("/reasoning/playbook")
+def get_operational_playbook(limit: int = 12, db: Session = Depends(get_db)):
+    return reasoning.operational_playbook(db, limit=limit)

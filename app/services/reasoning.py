@@ -24,7 +24,75 @@ from app.services import dispatch, road_network
 
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+SEVERITY_SCORE = {"critical": 100, "high": 70, "medium": 40, "low": 10}
 ACTIVE_NEED_STATUSES = {"open", "suggested", "matched"}
+
+
+PLAYBOOK_ACTIONS: dict[str, dict[str, Any]] = {
+    "manual_dispatch": {
+        "title": "Clear urgent dispatch blockers",
+        "summary": "Turn stranded requests and unresolved alerts into confirmed field action.",
+        "checklist": [
+            "Open the top affected request or alert.",
+            "Review feasible candidates and road-aware travel cost.",
+            "Dispatch a volunteer, create a new request, or escalate for external support.",
+        ],
+    },
+    "confirm_dispatch": {
+        "title": "Resolve pending dispatch suggestions",
+        "summary": "Convert stale algorithmic suggestions into a confirmed assignment or release the resource.",
+        "checklist": [
+            "Open each stale suggestion.",
+            "Confirm the assignment when the candidate is still valid.",
+            "Decline stale suggestions so the resource returns to the pool.",
+        ],
+    },
+    "task_delivered": {
+        "title": "Verify overdue matched tasks",
+        "summary": "Find matched tasks that may have stalled before delivery confirmation.",
+        "checklist": [
+            "Contact the assigned volunteer or facility.",
+            "Mark delivered when the task is complete.",
+            "Reassign if the responder cannot complete the task.",
+        ],
+    },
+    "mutate_resource_state": {
+        "title": "Release orphaned resource locks",
+        "summary": "Recover resources that are unavailable without an active task trail.",
+        "checklist": [
+            "Inspect the resource owner and recent dispatch events.",
+            "Release the resource when no field task explains the lock.",
+            "Leave a decision event for auditability.",
+        ],
+    },
+    "create_resource_or_facility": {
+        "title": "Close visible supply gaps",
+        "summary": "Add supply, activate a facility, or request outside support where demand exceeds capacity.",
+        "checklist": [
+            "Review demand by request type and urgency.",
+            "Activate compatible community facilities or volunteer resources.",
+            "Escalate unmet critical demand to external agencies.",
+        ],
+    },
+    "redirect_to_alternate_facility": {
+        "title": "Reduce facility overload",
+        "summary": "Protect near-capacity shelters and facilities from becoming secondary incidents.",
+        "checklist": [
+            "Check current load and the next compatible facilities.",
+            "Redirect new requests to lower-load alternatives.",
+            "Open overflow capacity if all alternatives are saturated.",
+        ],
+    },
+    "mutate_road_topology": {
+        "title": "Stabilize road topology assumptions",
+        "summary": "Validate road closures and detours before they distort dispatch scoring.",
+        "checklist": [
+            "Open the road sandbox and inspect changed segments.",
+            "Restore incorrect closures or add verified alternate edges.",
+            "Rerun dispatch previews for affected corridors.",
+        ],
+    },
+}
 
 
 def _now() -> datetime:
@@ -91,6 +159,146 @@ def operational_risks(db: Session, limit: int = 30) -> dict[str, Any]:
         },
         "findings": findings,
     }
+
+
+def operational_playbook(db: Session, limit: int = 12) -> dict[str, Any]:
+    """Aggregate risk findings into prioritized operator playbook steps."""
+    limit = max(1, min(limit, 50))
+    source_limit = min(100, max(30, limit * 5))
+    risk_report = operational_risks(db, limit=source_limit)
+    findings = risk_report["findings"]
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for finding in findings:
+        action = finding.get("recommended_action") or {}
+        action_id = action.get("action_id") or "inspect_operational_risks"
+        groups.setdefault(action_id, []).append(finding)
+
+    steps = [_playbook_step(action_id, items) for action_id, items in groups.items()]
+    steps.sort(key=lambda s: (-s["priority"], SEVERITY_ORDER.get(s["severity"], 9), s["id"]))
+    steps = steps[:limit]
+    severity_summary = Counter(step["severity"] for step in steps)
+    return {
+        "generated_at": risk_report["generated_at"],
+        "source_summary": risk_report["summary"],
+        "counts": {
+            "steps": len(steps),
+            "critical_steps": severity_summary.get("critical", 0),
+            "high_steps": severity_summary.get("high", 0),
+            "source_findings": len(findings),
+        },
+        "steps": steps,
+    }
+
+
+def _playbook_step(action_id: str, findings: list[dict[str, Any]]) -> dict[str, Any]:
+    ordered = sorted(findings, key=lambda f: (SEVERITY_ORDER.get(f["severity"], 9), f["id"]))
+    top = ordered[0]
+    meta = PLAYBOOK_ACTIONS.get(action_id, {})
+    severity = top["severity"]
+    breakdown = Counter(f["severity"] for f in ordered)
+    categories = sorted({f["category"] for f in ordered})
+    critical_or_high = breakdown.get("critical", 0) + breakdown.get("high", 0)
+    priority = (
+        SEVERITY_SCORE.get(severity, 0)
+        + min(len(ordered) - 1, 8) * 4
+        + min(len(categories), 4) * 3
+        + min(critical_or_high, 5) * 2
+    )
+    endpoints = _unique([
+        (f.get("recommended_action") or {}).get("endpoint")
+        for f in ordered
+        if (f.get("recommended_action") or {}).get("endpoint")
+    ])
+    affected = _unique_objects(obj for f in ordered for obj in (f.get("affected_objects") or []))
+    return {
+        "id": f"playbook:{action_id}",
+        "priority": priority,
+        "severity": severity,
+        "action_id": action_id,
+        "title": meta.get("title") or ((top.get("recommended_action") or {}).get("label") or top["title"]),
+        "summary": meta.get("summary") or top["summary"],
+        "expected_impact": _expected_impact(ordered, categories),
+        "confidence": _confidence(ordered),
+        "finding_ids": [f["id"] for f in ordered],
+        "finding_count": len(ordered),
+        "affected_objects": affected[:12],
+        "evidence": {
+            "severity_breakdown": dict(breakdown),
+            "categories": categories,
+            "primary_finding": top["id"],
+            "primary_evidence": top.get("evidence") or {},
+        },
+        "endpoint": endpoints[0] if endpoints else None,
+        "related_endpoints": endpoints[:6],
+        "blocked_by": _blocked_by(action_id, ordered),
+        "operator_checklist": meta.get("checklist") or ["Inspect the finding evidence.", "Choose and record a human-in-the-loop action."],
+    }
+
+
+def _expected_impact(findings: list[dict[str, Any]], categories: list[str]) -> str:
+    breakdown = Counter(f["severity"] for f in findings)
+    severe = breakdown.get("critical", 0) + breakdown.get("high", 0)
+    if "road_topology" in categories:
+        return f"Restores trusted routing assumptions for {len(findings)} topology finding(s), including {severe} high-severity blocker(s)."
+    if "dispatch" in categories:
+        return f"Moves {len(findings)} stalled request finding(s) toward assignment, confirmation, delivery, or reassignment."
+    if "capacity" in categories:
+        return f"Reduces demand/capacity pressure across {len(findings)} supply or facility finding(s)."
+    if "care" in categories:
+        return f"Converts {len(findings)} unresolved care alert finding(s) into dispatch or explicit resolution."
+    return f"Addresses {len(findings)} operational finding(s), including {severe} high-severity item(s)."
+
+
+def _confidence(findings: list[dict[str, Any]]) -> str:
+    if all(f.get("evidence") and f.get("affected_objects") for f in findings):
+        return "high"
+    if any(f.get("evidence") for f in findings):
+        return "medium"
+    return "low"
+
+
+def _blocked_by(action_id: str, findings: list[dict[str, Any]]) -> list[str]:
+    blockers: list[str] = []
+    ids = [f["id"] for f in findings]
+    if action_id == "manual_dispatch" and any(fid.startswith("open_need_no_candidate:") for fid in ids):
+        blockers.append("No feasible candidate exists for at least one urgent request; add supply or request outside support first.")
+    if action_id == "mutate_road_topology":
+        blockers.append("Road edits should be confirmed against field reports before operators trust rerouted dispatch scores.")
+    if action_id == "create_resource_or_facility":
+        blockers.append("Visible supply is below open demand; dispatch may remain impossible until capacity is added.")
+    if action_id == "confirm_dispatch":
+        blockers.append("Reserved resources stay unavailable until the suggestion is confirmed or declined.")
+    return blockers
+
+
+def _unique(values: list[Any]) -> list[Any]:
+    seen = set()
+    out = []
+    for value in values:
+        key = _dedupe_key(value)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(value)
+    return out
+
+
+def _unique_objects(values: Any) -> list[dict[str, Any]]:
+    seen = set()
+    out: list[dict[str, Any]] = []
+    for value in values:
+        key = (value.get("type"), value.get("id"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(value)
+    return out
+
+
+def _dedupe_key(value: Any) -> str:
+    if isinstance(value, (dict, list)):
+        return str(value)
+    return str(value)
 
 
 def _road_risks(db: Session, findings: list[dict[str, Any]]) -> None:

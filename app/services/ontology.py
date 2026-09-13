@@ -263,6 +263,15 @@ ACTIONS: list[dict[str, Any]] = [
         "effects": ["Returns evidence-backed risks and recommended actions"],
         "human_in_the_loop": True,
     },
+    {
+        "id": "generate_operational_playbook",
+        "label": "Generate operational playbook",
+        "method": "GET",
+        "endpoint": "/api/ontology/reasoning/playbook",
+        "preconditions": ["Operational risk findings can be generated"],
+        "effects": ["Groups findings into prioritized, evidence-backed operator actions"],
+        "human_in_the_loop": True,
+    },
 ]
 
 
@@ -308,6 +317,13 @@ FUNCTIONS: list[dict[str, Any]] = [
         "implementation": "app.services.reasoning.operational_risks",
         "inputs": ["requests", "resources", "alerts", "facilities", "road topology sandbox", "dispatch events"],
         "outputs": ["ranked findings", "evidence", "affected ontology objects", "recommended actions"],
+    },
+    {
+        "id": "operational_playbook",
+        "label": "Operational playbook generator",
+        "implementation": "app.services.reasoning.operational_playbook",
+        "inputs": ["operational risk findings", "action ontology", "affected objects", "evidence"],
+        "outputs": ["prioritized operator steps", "expected impact", "blockers", "checklists"],
     },
 ]
 
