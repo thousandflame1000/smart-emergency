@@ -254,6 +254,15 @@ ACTIONS: list[dict[str, Any]] = [
         "effects": ["Changes road distance calculations", "Updates dispatch candidate scoring"],
         "human_in_the_loop": True,
     },
+    {
+        "id": "inspect_operational_risks",
+        "label": "Inspect operational risk findings",
+        "method": "GET",
+        "endpoint": "/api/ontology/reasoning/operational-risks",
+        "preconditions": ["Operational data exists"],
+        "effects": ["Returns evidence-backed risks and recommended actions"],
+        "human_in_the_loop": True,
+    },
 ]
 
 
@@ -292,6 +301,13 @@ FUNCTIONS: list[dict[str, Any]] = [
         "implementation": "app.services.road_network.sandbox_snapshot",
         "inputs": ["node edits", "edge closures", "edge slowdown multipliers"],
         "outputs": ["mutable road graph used by dispatch scoring"],
+    },
+    {
+        "id": "operational_reasoning",
+        "label": "Operational risk reasoning engine",
+        "implementation": "app.services.reasoning.operational_risks",
+        "inputs": ["requests", "resources", "alerts", "facilities", "road topology sandbox", "dispatch events"],
+        "outputs": ["ranked findings", "evidence", "affected ontology objects", "recommended actions"],
     },
 ]
 

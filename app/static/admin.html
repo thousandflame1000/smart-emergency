@@ -977,6 +977,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header">
           <div>
+            <div class="card-title">Operational Risk Reasoning</div>
+            <div class="card-subtitle" id="ontology-risk-label">Evidence-backed findings and recommended actions</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="loadOntology()">Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>Severity</th><th>Finding</th><th>Evidence</th><th>Recommended Action</th></tr></thead>
+            <tbody id="ontology-risks"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div>
             <div class="card-title">Operational Ontology</div>
             <div class="card-subtitle">Object types, link types, actions, and current operating graph</div>
           </div>
@@ -2570,9 +2586,10 @@ async function loadOntology() {
   const labelEl = document.getElementById('ontology-graph-label');
   if (labelEl) labelEl.textContent = 'Loading...';
   try {
-    const [schema, graph] = await Promise.all([
+    const [schema, graph, risks] = await Promise.all([
       fetch('/api/ontology/schema').then(r => r.json()),
       fetch('/api/ontology/graph?limit=80').then(r => r.json()),
+      fetch('/api/ontology/reasoning/operational-risks?limit=20').then(r => r.json()),
     ]);
     const m = graph.metrics || {};
     statsEl.innerHTML = `
@@ -2581,6 +2598,8 @@ async function loadOntology() {
       <div class="stat-tile"><div class="stat-tile-label">Resources</div><div class="stat-tile-value ok">${m.available_resources ?? 0}</div><div class="stat-tile-sub">available now</div></div>
       <div class="stat-tile"><div class="stat-tile-label">Alerts</div><div class="stat-tile-value ${(m.active_alerts ?? 0)>0?'danger':''}">${m.active_alerts ?? 0}</div><div class="stat-tile-sub">${m.risky_checkins_today ?? 0} risky check-ins today</div></div>
       <div class="stat-tile"><div class="stat-tile-label">Decision Events</div><div class="stat-tile-value">${m.decision_events ?? 0}</div><div class="stat-tile-sub">action audit trail</div></div>`;
+
+    renderOntologyRisks(risks);
 
     const objectTypes = Object.entries(schema.object_types || {});
     document.getElementById('ontology-types').innerHTML = objectTypes.map(([name, meta]) => `
@@ -2618,6 +2637,52 @@ async function loadOntology() {
   } catch(e) {
     if (labelEl) labelEl.textContent = 'Load failed: ' + e.message;
   }
+}
+
+function ontologySeverityBadge(sev) {
+  const cls = sev === 'critical' ? 'badge-red'
+    : sev === 'high' ? 'badge-amber'
+    : sev === 'medium' ? 'badge-blue'
+    : 'badge-gray';
+  return `<span class="badge ${cls}">${esc(sev || 'low')}</span>`;
+}
+
+function renderOntologyRisks(report) {
+  const label = document.getElementById('ontology-risk-label');
+  const body = document.getElementById('ontology-risks');
+  const summary = report?.summary || {};
+  if (label) {
+    label.textContent = `${summary.total || 0} findings · ${summary.critical || 0} critical · ${summary.high || 0} high`;
+  }
+  const findings = report?.findings || [];
+  if (!findings.length) {
+    body.innerHTML = '<tr><td colspan="4"><div class="empty">No operational risks detected.</div></td></tr>';
+    return;
+  }
+  body.innerHTML = findings.map(f => {
+    const ev = f.evidence || {};
+    const evidenceBits = Object.entries(ev)
+      .slice(0, 4)
+      .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : (typeof v === 'object' && v !== null ? JSON.stringify(v) : v)}`);
+    const objects = (f.affected_objects || []).slice(0, 3)
+      .map(o => `${o.type}:${String(o.id).slice(0, 8)}`)
+      .join(', ');
+    const action = f.recommended_action || {};
+    return `
+      <tr>
+        <td>${ontologySeverityBadge(f.severity)}</td>
+        <td>
+          <div style="font-weight:700">${esc(f.title)}</div>
+          <div class="muted">${esc(f.summary)}</div>
+          <div class="muted">${esc(objects)}</div>
+        </td>
+        <td class="muted">${esc(evidenceBits.join(' · '))}</td>
+        <td>
+          <span class="src-badge src-gov">${esc(action.action_id || 'inspect')}</span>
+          <div class="muted" style="margin-top:4px">${esc(action.label || '')}</div>
+        </td>
+      </tr>`;
+  }).join('');
 }
 
 function shortOntologyId(id) {

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.services import ontology
+from app.services import ontology, reasoning
 
 router = APIRouter()
 
@@ -25,3 +25,8 @@ def get_object_context(object_type: str, object_id: str, db: Session = Depends(g
 @router.get("/needs/{need_id}/decision-context")
 def get_need_decision_context(need_id: str, db: Session = Depends(get_db)):
     return ontology.decision_context(db, need_id)
+
+
+@router.get("/reasoning/operational-risks")
+def get_operational_risks(limit: int = 30, db: Session = Depends(get_db)):
+    return reasoning.operational_risks(db, limit=limit)
