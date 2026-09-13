@@ -205,7 +205,7 @@ def _run_tick(db: Session, tick: int, entities: dict):
             COVERAGE_RADIUS_KM = 8.0  # matches dispatch.URGENCY_MAX_KM's urgency-3 tier
 
             def _dist(a, b):
-                d = road_network.road_distance_km(*a, *b)
+                d = road_network.road_distance_km(*a, *b, db=db)
                 return d if d is not None else hazard.haversine_km(*a, *b)
 
             def _coverage(loc):

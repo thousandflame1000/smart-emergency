@@ -23,7 +23,7 @@ from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.resource_point import ResourcePoint, POINT_SUPPLY_TYPES
 from app.models.user import User
-from app.services import dispatch
+from app.services import dispatch, road_network
 
 
 OBJECT_TYPES: dict[str, dict[str, Any]] = {
@@ -73,6 +73,18 @@ OBJECT_TYPES: dict[str, dict[str, Any]] = {
         "description": "Append-only audit trail for dispatch actions and algorithmic suggestions.",
         "key_fields": ["id"],
         "display_fields": ["action", "outcome", "actor_label", "previous_status", "new_status", "created_at"],
+    },
+    "RoadNode": {
+        "source_table": "system_config.road_network_sandbox + app.services.road_network.NODES",
+        "description": "Mutable road topology waypoint used by routing and dispatch what-if analysis.",
+        "key_fields": ["id"],
+        "display_fields": ["label", "lat", "lng", "custom"],
+    },
+    "RoadEdge": {
+        "source_table": "system_config.road_network_sandbox + app.services.road_network._EDGES",
+        "description": "Mutable road segment with normal, slow, or closed operating state.",
+        "key_fields": ["id"],
+        "display_fields": ["a", "b", "status", "distance_km", "effective_distance_km", "custom"],
     },
 }
 
@@ -148,6 +160,14 @@ LINK_TYPES: list[dict[str, Any]] = [
         "to": "Person",
         "source": "dispatch_events.actor_id -> users.id",
         "meaning": "Which user performed the action when known.",
+    },
+    {
+        "id": "ROAD_CONNECTS",
+        "from": "RoadEdge",
+        "to": "RoadNode",
+        "source": "road_network edge endpoints",
+        "meaning": "Which topology nodes a road segment connects.",
+        "computed": True,
     },
 ]
 
@@ -225,6 +245,15 @@ ACTIONS: list[dict[str, Any]] = [
         "effects": ["Marks sent alerts as resolved"],
         "human_in_the_loop": True,
     },
+    {
+        "id": "mutate_road_topology",
+        "label": "Mutate road topology sandbox",
+        "method": "PUT/POST/DELETE",
+        "endpoint": "/api/road-network/sandbox",
+        "preconditions": ["Operator is running a what-if or disaster-routing scenario"],
+        "effects": ["Changes road distance calculations", "Updates dispatch candidate scoring"],
+        "human_in_the_loop": True,
+    },
 ]
 
 
@@ -254,8 +283,15 @@ FUNCTIONS: list[dict[str, Any]] = [
         "id": "road_distance",
         "label": "Road-network distance",
         "implementation": "app.services.road_network.road_distance_km",
-        "inputs": ["origin lat/lng", "destination lat/lng"],
-        "outputs": ["Hua-Dong corridor road distance or haversine fallback"],
+        "inputs": ["origin lat/lng", "destination lat/lng", "optional road sandbox overlay"],
+        "outputs": ["Hua-Dong corridor road distance, sandbox-aware blocked route, or haversine fallback"],
+    },
+    {
+        "id": "road_topology_sandbox",
+        "label": "Road topology what-if sandbox",
+        "implementation": "app.services.road_network.sandbox_snapshot",
+        "inputs": ["node edits", "edge closures", "edge slowdown multipliers"],
+        "outputs": ["mutable road graph used by dispatch scoring"],
     },
 ]
 
@@ -275,6 +311,10 @@ TYPE_ALIASES = {
     "dispatch_event": "DecisionEvent",
     "dispatchevent": "DecisionEvent",
     "event": "DecisionEvent",
+    "roadnode": "RoadNode",
+    "road_node": "RoadNode",
+    "roadedge": "RoadEdge",
+    "road_edge": "RoadEdge",
 }
 
 
@@ -299,6 +339,7 @@ def graph(db: Session, limit: int = 80) -> dict[str, Any]:
     checkins = db.query(DailyCheckin).order_by(DailyCheckin.date.desc()).limit(limit).all()
     relations = db.query(CareRelation).filter(CareRelation.is_active == True).limit(limit).all()
     events = db.query(DispatchEvent).order_by(DispatchEvent.created_at.desc()).limit(limit).all()
+    road = road_network.sandbox_snapshot(db)
 
     nodes = []
     edges = []
@@ -337,6 +378,12 @@ def graph(db: Session, limit: int = 80) -> dict[str, Any]:
             edges.append(_edge("ACTION_RESOURCE", "DecisionEvent", event.id, "Resource", event.resource_id))
         if event.actor_id:
             edges.append(_edge("ACTION_ACTOR", "DecisionEvent", event.id, "Person", event.actor_id))
+    for road_node in road["nodes"]:
+        nodes.append(_road_node(road_node))
+    for road_edge in road["edges"]:
+        nodes.append(_road_edge_node(road_edge))
+        edges.append(_edge("ROAD_CONNECTS", "RoadEdge", road_edge["id"], "RoadNode", road_edge["a"]))
+        edges.append(_edge("ROAD_CONNECTS", "RoadEdge", road_edge["id"], "RoadNode", road_edge["b"]))
 
     return {
         "schema_version": 1,
@@ -409,6 +456,19 @@ def object_context(db: Session, object_type: str, object_id: str) -> dict[str, A
                 "actor": _person_node(event.actor) if event.actor else None,
             },
         }
+    if canonical in {"RoadNode", "RoadEdge"}:
+        road = road_network.sandbox_snapshot(db)
+        if canonical == "RoadNode":
+            node = next((n for n in road["nodes"] if n["id"] == object_id), None)
+            if not node:
+                raise HTTPException(status_code=404, detail="RoadNode not found")
+            incident_edges = [e for e in road["edges"] if e["a"] == object_id or e["b"] == object_id]
+            return {"object": _road_node(node), "related": {"edges": [_road_edge_node(e) for e in incident_edges]}}
+        road_edge = next((e for e in road["edges"] if e["id"] == object_id), None)
+        if not road_edge:
+            raise HTTPException(status_code=404, detail="RoadEdge not found")
+        endpoints = [n for n in road["nodes"] if n["id"] in {road_edge["a"], road_edge["b"]}]
+        return {"object": _road_edge_node(road_edge), "related": {"nodes": [_road_node(n) for n in endpoints]}}
     raise HTTPException(status_code=400, detail=f"Unsupported object_type: {object_type}")
 
 
@@ -468,6 +528,8 @@ def _metrics(db: Session) -> dict[str, int]:
         "facilities": db.query(ResourcePoint).filter(ResourcePoint.is_active == True).count(),
         "active_alerts": db.query(Alert).filter(Alert.status == "sent").count(),
         "decision_events": db.query(DispatchEvent).count(),
+        "road_closed_edges": road_network.sandbox_snapshot(db)["metrics"]["closed_edges"],
+        "road_slow_edges": road_network.sandbox_snapshot(db)["metrics"]["slow_edges"],
         "risky_checkins_today": db.query(DailyCheckin).filter(
             DailyCheckin.date == today,
             DailyCheckin.status.in_(["no_response", "help_needed"]),
@@ -595,6 +657,26 @@ def _event_node(event: DispatchEvent) -> dict[str, Any]:
         "new_status": event.new_status,
         "details": details,
         "created_at": event.created_at,
+    })
+
+
+def _road_node(node: dict[str, Any]) -> dict[str, Any]:
+    return _node("RoadNode", node["id"], node.get("label") or node["id"], {
+        "lat": node.get("lat"),
+        "lng": node.get("lng"),
+        "custom": node.get("custom", False),
+    })
+
+
+def _road_edge_node(edge: dict[str, Any]) -> dict[str, Any]:
+    return _node("RoadEdge", edge["id"], f"{edge['a']} -> {edge['b']}", {
+        "a": edge.get("a"),
+        "b": edge.get("b"),
+        "status": edge.get("status"),
+        "distance_km": edge.get("distance_km"),
+        "effective_distance_km": edge.get("effective_distance_km"),
+        "multiplier": edge.get("multiplier"),
+        "custom": edge.get("custom", False),
     })
 
 
