@@ -15,6 +15,7 @@ def main():
         page.on("dialog", lambda dialog: dialog.accept())
         page.goto("http://127.0.0.1:8012/workspace", wait_until="networkidle")
         page.wait_for_function("typeof map !== 'undefined' && !!map", timeout=45000)
+        page.locator('#close-region').click()
 
         def upload(name, text, kind):
             page.locator('#import').click()

@@ -8,6 +8,9 @@ const STATUS = {normal:'正常', slow:'緩行', closed:'封閉'};
 const state = {id:null, revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
   undo:[], redo:[], hidden:new Set(), report:null, connect:null, preview:null, editVersion:0, documentVersion:0, importVersion:0};
 let map, mapLayers, cy;
+let regionPlaces=[], regionPlace=null, regionBoundary=null, regionRequestVersion=0;
+function rememberWorkspace(id){try{if(id)localStorage.setItem('emergency:last-workspace',id);else localStorage.removeItem('emergency:last-workspace');}catch(e){}}
+function lastWorkspace(){try{return localStorage.getItem('emergency:last-workspace');}catch(e){return null;}}
 function icons() { if (window.lucide) lucide.createIcons(); }
 function message(text, error=false) { $('status').textContent=text; $('status').classList.toggle('error',error); }
 async function api(path, body, method='POST') {
@@ -36,10 +39,12 @@ function loadDocument(data) {
   $('save-state').textContent=data.id?`已儲存 · 版本 ${data.revision}`:'尚未儲存';
   $('analysis-result').textContent='';$('route-result').textContent='';render();fit();
   history.replaceState(null,'',data.id?'?id='+encodeURIComponent(data.id):location.pathname);
+  rememberWorkspace(data.id);
 }
 async function listWorkspaces() {
   const items=await api(''); $('workspace-list').innerHTML='<option value="">未儲存工作區</option>'+items.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('');
   $('workspace-list').value=state.id||'';
+  return items;
 }
 async function save(copy=false) {
   const version=state.editVersion, documentVersion=state.documentVersion, graph=structuredClone(state.graph), name=$('workspace-name').value.trim()||'未命名工作區';
@@ -48,6 +53,7 @@ async function save(copy=false) {
   if(documentVersion!==state.documentVersion){await listWorkspaces();message('先前工作區已儲存');return;}
   state.id=data.id;state.revision=data.revision;
   history.replaceState(null,'','?id='+data.id);
+  rememberWorkspace(data.id);
   if(version===state.editVersion){state.dirty=false;$('save-state').textContent=`已儲存 · 版本 ${data.revision}`;}
   await listWorkspaces();message(copy?'已另存副本':'工作區已儲存');
 }
@@ -57,7 +63,8 @@ function nodeById(id) { return state.graph.nodes.find(n=>n.id===id); }
 function visible(n) { return !state.hidden.has(n.kind); }
 function render() {
   const counts={};state.graph.nodes.forEach(n=>counts[n.kind]=(counts[n.kind]||0)+1);
-  $('layers').innerHTML=Object.entries(TYPES).map(([kind,label])=>`<label class="layer"><input type="checkbox" data-kind="${kind}" ${state.hidden.has(kind)?'':'checked'}><span class="swatch" style="background:${COLORS[kind]}"></span>${label}<small>${counts[kind]||0}</small></label>`).join('');
+  $('layers').innerHTML=Object.entries(TYPES).map(([kind,label])=>`<div class="layer-row"><label class="layer"><input type="checkbox" data-kind="${kind}" ${state.hidden.has(kind)?'':'checked'}><span class="swatch" style="background:${COLORS[kind]}"></span>${label}<small>${counts[kind]||0}</small></label><button class="layer-add" data-layer-add="${kind}" title="${kind==='road_node'||kind==='facility'?'載入地區資料':'匯入'+label}" aria-label="${kind==='road_node'||kind==='facility'?'載入'+label:'匯入'+label}"><i data-lucide="${kind==='road_node'||kind==='facility'?'map-pin':'upload'}"></i></button></div>`).join('');
+  $('layers').querySelectorAll('[data-layer-add]').forEach(button=>button.onclick=()=>{const kind=button.dataset.layerAdd;if(kind==='road_node'||kind==='facility')openRegion();else openImport(kind);});
   $('layers').querySelectorAll('input').forEach(input=>input.onchange=()=>{input.checked?state.hidden.delete(input.dataset.kind):state.hidden.add(input.dataset.kind);render();});
   const m=state.report?.metrics||{};
   $('metrics').innerHTML=[['物件',state.graph.nodes.length],['連線',state.graph.edges.length],['人員',counts.person||0],['可用物資點',state.graph.nodes.filter(n=>n.kind==='supply'&&n.available&&n.quantity>0).length],['路網分區',m.road_components??'—'],['關鍵道路',m.critical_roads??'—'],['物資不可達人員',m.unreachable_people??'—']].map(([label,value],i)=>`<div class="metric ${i===6&&value>0?'alert':''}"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
@@ -89,10 +96,10 @@ function renderSelection() {
   const isNode=selected.type==='node';
   el.innerHTML=`<form id="edit-form"><label>名稱<input id="edit-label" value="${escapeHtml(item.label)}" maxlength="300" required></label>
     <label>類型<select id="edit-kind">${options(isNode?TYPES:RELATIONS,item.kind)}</select></label>
-    ${isNode?`<div class="form-grid"><label>緯度<input id="edit-lat" type="number" step="any" min="-90" max="90" value="${item.lat??''}"></label><label>經度<input id="edit-lng" type="number" step="any" min="-180" max="180" value="${item.lng??''}"></label></div><label>數量<input id="edit-quantity" type="number" step="any" min="0" max="1000000000" value="${item.quantity}" required></label><label class="checkbox-label"><input id="edit-available" type="checkbox" ${item.available?'checked':''}>可用</label>`:
+    ${isNode?`<div class="form-grid"><label>緯度<input id="edit-lat" type="number" step="any" min="-90" max="90" value="${item.lat??''}"></label><label>經度<input id="edit-lng" type="number" step="any" min="-180" max="180" value="${item.lng??''}"></label></div><label>${item.kind==='facility'?'已確認可用容量':'數量'}<input id="edit-quantity" type="number" step="any" min="0" max="1000000000" value="${item.quantity}" required></label><label class="checkbox-label"><input id="edit-available" type="checkbox" ${item.available?'checked':''}>納入分析</label>`:
     `<label>起點<select id="edit-source" required>${nodeOptions(item.source)}</select></label><label>終點<select id="edit-target" required>${nodeOptions(item.target)}</select></label><label>狀態<select id="edit-status">${options(STATUS,item.status)}</select></label><div class="form-grid"><label>路速（公里／時）<input id="edit-speed" type="number" min="0.1" max="300" step="any" value="${item.speed_kph}" required></label><label>緩行倍率<input id="edit-multiplier" type="number" min="1" max="100" step="any" value="${item.multiplier}" required></label></div><label class="checkbox-label"><input id="edit-directed" type="checkbox" ${item.directed?'checked':''}>單向</label>`}
     <div class="actions"><button type="submit" class="primary">套用變更</button><button type="button" id="delete-selected" class="danger" title="刪除選取項目" aria-label="刪除選取項目"><i data-lucide="trash-2"></i></button></div>
-    <div class="muted">${escapeHtml(isNode?item.source:item.provenance)}</div><details><summary>原始屬性與識別碼</summary><pre>${escapeHtml(item.id+'\n'+JSON.stringify(item.properties,null,2))}</pre></details></form>`;
+    ${isNode&&item.properties.operational_status==='unknown'?'<div class="muted">公開地圖設施；營運狀態、容量與庫存未提供。</div>':''}<div class="muted">${escapeHtml(isNode?item.source:item.provenance)}</div><details><summary>原始屬性與識別碼</summary><pre>${escapeHtml(item.id+'\n'+JSON.stringify(item.properties,null,2))}</pre></details></form>`;
   $('edit-form').onsubmit=event=>{event.preventDefault();
     const patch={label:$('edit-label').value,kind:$('edit-kind').value};
     if(isNode){Object.assign(patch,{lat:$('edit-lat').value===''?null:+$('edit-lat').value,lng:$('edit-lng').value===''?null:+$('edit-lng').value,quantity:+$('edit-quantity').value,available:$('edit-available').checked});if((patch.lat===null)!==(patch.lng===null)){message('經緯度必須成對提供',true);return;}}
@@ -163,7 +170,52 @@ function mappingFields(){invalidatePreview();const format=$('import-format').val
   $('field-mapping').innerHTML=['json','osm'].includes(format)?'':Object.entries(names).filter(([k])=>format==='csv'||!['lat','lng'].includes(k)).map(([key,label])=>{const guess=fields.find(f=>aliases[key].includes(f));return `<label>${label}<select data-field="${key}"><option value="">使用預設值</option>${fields.map(f=>`<option value="${escapeHtml(f)}" ${f===guess?'selected':''}>${escapeHtml(f)}</option>`).join('')}</select></label>`;}).join('');
   $('field-mapping').querySelectorAll('select').forEach(s=>s.onchange=invalidatePreview);
 }
-function openImport(){invalidatePreview();$('import-dialog').showModal();}
+function openImport(kind){invalidatePreview();if(kind&&TYPES[kind]){$('import-kind').value=kind;mappingFields();}$('import-dialog').showModal();}
+function regionMessage(text,error=false){$('region-status').textContent=text;$('region-status').classList.toggle('error',error);}
+function regionBounds(){return regionPlace?L.latLng(regionPlace.lat,regionPlace.lng).toBounds(+$('region-radius').value*2):null;}
+function previewRegion(){
+  if(regionBoundary){map.removeLayer(regionBoundary);regionBoundary=null;}
+  const bounds=regionBounds();if(!bounds)return;
+  regionBoundary=L.rectangle(bounds,{color:'#087f72',weight:2,fillOpacity:.08,interactive:false}).addTo(map);
+  map.fitBounds(bounds,{padding:[35,35],maxZoom:18});
+}
+function openRegion(){
+  regionRequestVersion++;if(state.view!=='map')setView('map');
+  regionMessage('');$('region-load').disabled=!regionPlace;
+  $('region-dialog').showModal();previewRegion();
+}
+function closeRegion(){regionRequestVersion++;$('region-dialog').close();if(regionBoundary){map.removeLayer(regionBoundary);regionBoundary=null;}}
+async function searchRegion(event){
+  event.preventDefault();const query=$('region-query').value.trim(),token=++regionRequestVersion;
+  regionPlace=null;regionPlaces=[];$('region-load').disabled=true;$('region-search-button').disabled=true;$('region-results').replaceChildren();regionMessage('正在搜尋地區…');
+  try{
+    const result=await api('/places?q='+encodeURIComponent(query));
+    if(token!==regionRequestVersion)return;
+    regionPlaces=result.places||[];
+    $('region-results').innerHTML=regionPlaces.map((place,index)=>`<label><input type="radio" name="region-place" value="${index}" ${index===0?'checked':''}><span>${escapeHtml(place.name)}</span></label>`).join('');
+    $('region-results').querySelectorAll('input').forEach(input=>input.onchange=()=>{regionRequestVersion++;regionPlace=regionPlaces[+input.value];previewRegion();});
+    regionPlace=regionPlaces[0]||null;$('region-load').disabled=!regionPlace;previewRegion();
+    regionMessage(regionPlace?`找到 ${regionPlaces.length} 個地區`:'找不到符合的地區，請改用縣市、行政區或地標名稱');
+  }catch(e){if(token===regionRequestVersion)regionMessage(e.message,true);}finally{$('region-search-button').disabled=false;}
+}
+async function loadRegion(){
+  if(!regionPlace||!discardConfirmed())return;
+  const b=regionBounds(),name=regionPlace.name.slice(0,85)+' · 周邊 '+$('region-radius').selectedOptions[0].textContent;
+  if(b.getNorth()-b.getSouth()>.12||b.getEast()-b.getWest()>.12){regionMessage('這個緯度的範圍過大，請縮小周邊距離',true);return;}
+  const version=state.editVersion,token=++regionRequestVersion;
+  $('region-load').disabled=true;$('region-search-button').disabled=true;regionMessage('正在載入道路與公開設施…');
+  try{
+    const result=await api('/openstreetmap',{south:b.getSouth(),west:b.getWest(),north:b.getNorth(),east:b.getEast(),include_facilities:true});
+    if(token!==regionRequestVersion||version!==state.editVersion)return;
+    if(!result.graph.nodes.length){regionMessage('這個範圍沒有可載入的道路或公開設施，請調整地區或周邊距離');return;}
+    regionMessage('資料已取得，正在儲存工作區…');
+    const saved=await api('',{name,graph:result.graph});
+    if(token!==regionRequestVersion||version!==state.editVersion){await listWorkspaces();return;}
+    loadDocument(saved);await listWorkspaces();closeRegion();map.fitBounds(b,{padding:[30,30]});
+    const roads=result.graph.nodes.filter(n=>n.kind==='road_node').length,facilities=result.graph.nodes.filter(n=>n.kind==='facility').length;
+    message(`已儲存 ${roads} 個道路節點、${facilities} 處公開設施 · ${result.provider} / OpenStreetMap`);
+  }catch(e){if(token===regionRequestVersion)regionMessage(e.message,true);}finally{$('region-load').disabled=!regionPlace;$('region-search-button').disabled=false;}
+}
 async function previewImport(event){event.preventDefault();$('preview-import').disabled=true;invalidatePreview();const importVersion=state.importVersion;$('import-result').textContent='正在解析資料…';
   try{const mapping={};$('field-mapping').querySelectorAll('select').forEach(s=>{if(s.value)mapping[s.dataset.field]=s.value;});
     const result=await api('/import-preview',{format:$('import-format').value,kind:$('import-kind').value,content:$('import-content').value,source:$('import-source').value||'匯入資料',mapping,base:$('import-replace').checked?{nodes:[],edges:[]}:state.graph});
@@ -181,9 +233,13 @@ async function init(){
   map=L.map('map',{preferCanvas:true}).setView([23.7,121],7);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
   mapLayers=L.layerGroup().addTo(map);map.on('click',e=>addNode(e.latlng));
-  run('save',()=>save());run('duplicate',()=>save(true));run('new',()=>{if(discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');}});
+  run('save',()=>save());run('duplicate',()=>save(true));run('new',()=>{if(discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');openRegion();}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());
+  run('region',openRegion);run('empty-region',openRegion);run('layer-region',openRegion);run('close-region',closeRegion);run('region-file',()=>{closeRegion();openImport();});$('region-load').onclick=loadRegion;
+  $('region-search-form').onsubmit=searchRegion;$('region-radius').onchange=()=>{regionRequestVersion++;previewRegion();};
+  $('region-query').oninput=()=>{regionRequestVersion++;regionPlace=null;$('region-load').disabled=true;$('region-results').replaceChildren();previewRegion();regionMessage('');};
+  $('region-dialog').addEventListener('cancel',event=>{event.preventDefault();closeRegion();});
   run('export',exportDocument);run('osm',osm);run('analyze',()=>analyze());run('route',()=>{if(!$('route-start').value||!$('route-end').value)throw Error('請選擇起點與終點');return analyze(true);});run('access',connectAccess);
   $('workspace-list').onchange=async()=>{const id=$('workspace-list').value;if(!id){$('workspace-list').value=state.id||'';return;}if(!discardConfirmed()){$('workspace-list').value=state.id||'';return;}try{loadDocument(await api('/'+id));message('已載入工作區');}catch(e){message(e.message,true);}};
   $('workspace-name').oninput=changed;$('search').oninput=renderObjects;$('mode').onchange=()=>{state.connect=null;render();};
@@ -195,6 +251,6 @@ async function init(){
   run('apply-import',()=>{if(!state.preview)return;if(state.previewVersion!==state.editVersion)throw Error('工作區已變更，請重新預覽');const result=state.preview;mutate(()=>{state.graph=result.graph;state.selected=null;});$('import-dialog').close();fit();message(`已加入 ${result.added_nodes} 個物件、${result.added_edges} 條連線`);state.preview=null;});
   window.addEventListener('beforeunload',event=>{if(state.dirty){event.preventDefault();event.returnValue='';}});
   let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{map.invalidateSize();fit();},150);});
-  render();try{await listWorkspaces();const id=new URLSearchParams(location.search).get('id');if(id)loadDocument(await api('/'+encodeURIComponent(id)));}catch(e){message(e.message,true);}
+  render();try{const items=await listWorkspaces();const explicit=new URLSearchParams(location.search).get('id');const remembered=lastWorkspace();const id=explicit||(items.some(w=>w.id===remembered)?remembered:null);if(id){loadDocument(await api('/'+encodeURIComponent(id)));message('已回到上次儲存的工作區');}else{rememberWorkspace(null);openRegion();}}catch(e){message(e.message,true);}
 }
 init();

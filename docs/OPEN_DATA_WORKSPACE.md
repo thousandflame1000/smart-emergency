@@ -1,6 +1,14 @@
 # 開放資料工作區
 
-入口：`/workspace`，亦可從管理中心或儀表板開啟。預設為空白資料；每個工作區具有獨立名稱、圖資料與版本，不依賴花東示範情境。
+入口：`/workspace`，亦可從管理中心或儀表板開啟。首次開啟顯示選區視窗；每個工作區具有獨立名稱、圖資料與版本，不依賴花東示範情境。
+
+## 選擇地區
+
+輸入縣市、行政區或地標名稱並搜尋，選擇結果及中心周邊距離，再按「建立地區工作區」。系統載入該中心周邊矩形範圍的真實 OSM 道路與公開設施，自動儲存為新工作區，不覆蓋既有工作區。這不是整個行政區邊界的匯入；沒有資料時會提示調整範圍，不建立空白工作區。
+
+公開設施包含醫療、消防、警政、學校、社福與商店位置。保留原始標籤；建物與關係使用 OSM 回傳的包圍框中心，並非已查證入口。設施的營運狀態與容量標示為未知、數量設為零，不推定為可供應物資。人員名冊與物資庫存須另外匯入，可使用圖層旁的匯入按鈕。
+
+瀏覽器記住最近儲存或開啟的工作區，再次開啟 `/workspace` 會恢復；網址的 `?id=` 優先。後續拓樸編輯仍須按儲存。
 
 ## 資料格式
 
@@ -38,8 +46,11 @@ GeoJSON 道路只連接同一次匯入中共用的座標頂點，並區分 `laye
 | GET / PUT | `/api/workspaces/{id}` | 讀取／依 revision 儲存 |
 | POST | `/api/workspaces/import-preview` | 匯入驗證與預覽，不儲存 |
 | POST | `/api/workspaces/analyze` | 分析傳入的圖資料，不儲存 |
-| POST | `/api/workspaces/openstreetmap` | 取得目前範圍道路，不儲存 |
+| GET | `/api/workspaces/places?q=` | 依中文或其他地名搜尋中心座標 |
+| POST | `/api/workspaces/openstreetmap` | 取得目前範圍道路；`include_facilities: true` 同時載入公開設施，不儲存 |
 
-線上道路查詢的經緯度跨度各以 0.12 度為限；依序嘗試 VK Maps、FOSSGIS、Private.coffee 三個公開 Overpass 服務，全部不可用時回傳中文錯誤。成功使用的服務名稱、來源與授權會寫入資料。查詢僅送出範圍與道路篩選條件，不會送出工作區內的人員或物資資料。既有專案的 DemoAuth 設定同樣適用於工作區頁面及 API。
+線上道路查詢的經緯度跨度各以 0.12 度為限；依序嘗試 VK Maps、FOSSGIS、Private.coffee 三個公開 Overpass 服務，全部不可用時回傳中文錯誤。成功使用的服務名稱、來源與授權會寫入資料。查詢僅送出範圍與道路／設施篩選條件，不會送出工作區內的人員或物資資料。既有專案的 DemoAuth 設定同樣適用於工作區頁面及 API。
+
+地名搜尋使用 Nominatim，僅在提交搜尋時送出查詢文字，不提供逐字自動完成。單一服務程序將上游請求間隔限制為至少 1.1 秒，快取最多 128 個查詢、每個 6 小時。可用 `NOMINATIM_SEARCH_URL` 切換相容服務；擴增程序或副本前需改用集中限流或自有地理編碼服務，避免超過公開服務限制。使用政策見 [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/)。
 
 參考：[GeoJSON 標準](https://datatracker.ietf.org/doc/html/rfc7946)、[OpenStreetMap 公開查詢服務](https://wiki.openstreetmap.org/wiki/Overpass_API)、[OSM 授權](https://www.openstreetmap.org/copyright)、[NetworkX 路徑演算法](https://networkx.org/documentation/stable/reference/algorithms/shortest_paths.html)。

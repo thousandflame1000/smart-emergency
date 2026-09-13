@@ -88,7 +88,7 @@ def test_geojson_vertices_layers_multilines_and_wgs84():
 def test_osm_shared_ids_reverse_oneway_overlap_preserves_local_edits():
     data = {"elements":[
         {"type":"node", "id":1, "lat":51, "lon":0}, {"type":"node", "id":2, "lat":51, "lon":0.01},
-        {"type":"way", "id":10, "nodes":[1,2], "tags":{"oneway":"-1", "name":"道路"}},
+        {"type":"way", "id":10, "nodes":[1,2], "tags":{"oneway":"-1", "name":"道路", "highway":"residential"}},
     ]}
     request = ImportRequest(format="osm", content=json.dumps(data))
     result = import_document(request)
@@ -196,3 +196,42 @@ def test_online_roads_reports_all_services_unavailable(monkeypatch):
     })
     assert response.status_code == 502
     assert len(calls) == 3
+
+
+def test_public_facilities_do_not_create_fake_stock_or_building_roads():
+    data = {"elements":[
+        {"type":"node", "id":1, "lat":25, "lon":121, "tags":{"amenity":"hospital", "name":"公開醫院"}},
+        {"type":"way", "id":2, "nodes":[1,99], "center":{"lat":25.01,"lon":121.01},
+         "tags":{"shop":"supermarket", "name":"公開超市"}},
+        {"type":"relation", "id":3, "center":{"lat":25.02,"lon":121.02},
+         "tags":{"amenity":"school", "name":"公開學校"}},
+    ]}
+    result = import_document(ImportRequest(format="osm", content=json.dumps(data)))
+    graph = GraphDocument.model_validate(result["graph"])
+    assert len(graph.nodes) == 3
+    assert all(n.kind == "facility" and n.quantity == 0 for n in graph.nodes)
+    assert graph.edges == []
+    assert graph.nodes[1].properties["location_method"] == "bbox_center"
+    assert all(n.properties["operational_status"] == "unknown" for n in graph.nodes)
+    assert analyze(graph)["metrics"]["supply_quantity"] == 0
+
+
+def test_region_query_requests_facilities_only_when_selected(monkeypatch):
+    import io
+    from urllib.parse import parse_qs
+    queries = []
+
+    def fake_open(request, timeout):
+        queries.append(parse_qs(request.data.decode())["data"][0])
+        return io.BytesIO(json.dumps({"elements":[
+            {"type":"node", "id":1, "lat":25, "lon":121, "tags":{"amenity":"hospital"}},
+        ]}).encode())
+
+    monkeypatch.setattr('app.routers.workspace.urlopen', fake_open)
+    body = {"south":25,"north":25.01,"west":121,"east":121.01}
+    client = TestClient(app)
+    assert client.post('/api/workspaces/openstreetmap', json=body).status_code == 200
+    body["include_facilities"] = True
+    assert client.post('/api/workspaces/openstreetmap', json=body).status_code == 200
+    assert 'nwr[' not in queries[0]
+    assert 'nwr[' in queries[1] and 'out center;' in queries[1]

@@ -5,13 +5,14 @@ from urllib.parse import urlencode
 from urllib.request import Request as URLRequest, urlopen
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.workspace import TopologyWorkspace
 from app.services.workspace import GraphDocument, ImportRequest, analyze, import_document
+from app.services.places import search_places
 
 router = APIRouter()
 
@@ -40,6 +41,7 @@ class BoundsRequest(BaseModel):
     west: float = Field(ge=-180, le=180, allow_inf_nan=False)
     east: float = Field(ge=-180, le=180, allow_inf_nan=False)
     base: GraphDocument = Field(default_factory=GraphDocument)
+    include_facilities: bool = False
 
 
 def timestamp():
@@ -90,6 +92,11 @@ def openstreetmap(body: BoundsRequest):
         raise HTTPException(400, "請放大地圖：單次範圍的經度與緯度跨度須小於 0.12 度，可分區追加")
     bbox = f"{body.south},{body.west},{body.north},{body.east}"
     query = f'[out:json][timeout:15];way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|.*_link)$"]({bbox});(._;>;);out body;'
+    if body.include_facilities:
+        query += (
+            f'(nwr["amenity"~"^(hospital|clinic|pharmacy|fire_station|police|school|community_centre|social_facility|shelter)$"]({bbox});'
+            f'nwr["shop"~"^(supermarket|convenience)$"]({bbox}););out center;'
+        )
     data = None
     provider = None
     for service_name, endpoint in OVERPASS_SERVICES:
@@ -113,6 +120,16 @@ def openstreetmap(body: BoundsRequest):
         return result
     except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.get("/places")
+def places(q: str = Query(min_length=2, max_length=120)):
+    try:
+        return {"places": search_places(q), "source": "OpenStreetMap / Nominatim"}
+    except (URLError, TimeoutError) as exc:
+        raise HTTPException(502, "地區搜尋暫時無法回應，請稍後重試；也可移動地圖後載入範圍道路") from exc
+    except (ValueError, TypeError, KeyError) as exc:
+        raise HTTPException(400, "無法解析地區資料，請換個地區名稱重試") from exc
 
 
 @router.get("/{workspace_id}")

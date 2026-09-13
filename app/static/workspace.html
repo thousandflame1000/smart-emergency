@@ -40,6 +40,7 @@
     <button id="fit" title="顯示全部物件" aria-label="顯示全部物件"><i data-lucide="scan"></i></button>
     <button id="layout" title="重新排列關係圖" aria-label="重新排列關係圖"><i data-lucide="workflow"></i></button>
     <span class="spacer"></span>
+    <button id="region"><i data-lucide="map-pin"></i>選擇地區</button>
     <button id="import"><i data-lucide="upload"></i>匯入資料</button>
     <button id="osm"><i data-lucide="route"></i>載入範圍道路</button>
     <button id="analyze" class="primary"><i data-lucide="git-branch"></i>分析拓樸</button>
@@ -47,6 +48,7 @@
   <div id="metrics" class="metrics"></div>
   <main>
     <aside class="catalog">
+      <button id="layer-region" class="primary wide"><i data-lucide="map-pin"></i>載入地區資料</button>
       <h2>資料圖層</h2><div id="layers"></div>
       <div class="catalog-heading"><h2>物件</h2><span id="object-count"></span></div>
       <input id="search" type="search" placeholder="搜尋名稱、識別碼" aria-label="搜尋物件">
@@ -59,7 +61,7 @@
         <input id="center-lng" type="number" min="-180" max="180" step="any" placeholder="經度" aria-label="定位經度" required>
         <button title="定位" aria-label="定位"><i data-lucide="locate-fixed"></i></button>
       </form>
-      <div id="empty" class="empty-state"><strong>尚未加入資料</strong><button id="empty-import">匯入資料</button></div>
+      <div id="empty" class="empty-state"><strong>尚未載入地區</strong><button id="empty-region" class="primary">選擇地區</button><button id="empty-import">匯入檔案</button></div>
       <div id="connect-state" class="connect-state" hidden></div>
     </section>
     <aside class="inspector">
@@ -77,6 +79,22 @@
     </aside>
   </main>
   <footer><span id="status" role="status">空白工作區</span><span id="save-state">尚未儲存</span></footer>
+  <dialog id="region-dialog">
+    <div class="dialog-heading"><h2>選擇地區</h2><button id="close-region" aria-label="關閉地區選擇"><i data-lucide="x"></i></button></div>
+    <form id="region-search-form" class="region-search">
+      <input id="region-query" placeholder="輸入縣市、行政區或地標名稱" aria-label="地區或地標名稱" minlength="2" maxlength="120" required>
+      <button id="region-search-button" class="primary" aria-label="搜尋地區"><i data-lucide="search"></i></button>
+    </form>
+    <div id="region-results" role="radiogroup" aria-label="搜尋到的地區"></div>
+    <div class="region-options">
+      <label>中心周邊距離<select id="region-radius"><option value="250">250 公尺</option><option value="500" selected>500 公尺</option><option value="1000">1 公里</option><option value="2000">2 公里</option></select></label>
+      <div><strong>資料來源</strong><p>OpenStreetMap 道路與公開設施</p><span class="muted">醫療、消防、警政、學校、社福、商店位置</span></div>
+    </div>
+    <p class="muted">人員名冊與物資庫存需另行匯入；公開設施未提供即時營運與庫存。</p>
+    <div id="region-status" role="status"></div>
+    <div class="dialog-actions"><button id="region-file"><i data-lucide="upload"></i>匯入檔案</button><button id="region-load" class="primary" disabled><i data-lucide="download"></i>建立地區工作區</button></div>
+    <div class="region-attribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors · ODbL</a></div>
+  </dialog>
   <dialog id="import-dialog">
     <form id="import-form">
       <div class="dialog-heading"><h2>匯入開放資料</h2><button type="button" id="close-import" aria-label="關閉"><i data-lucide="x"></i></button></div>

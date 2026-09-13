@@ -139,6 +139,8 @@ def import_document(request: ImportRequest) -> dict:
             if way.get("type") != "way":
                 continue
             tags = way.get("tags", {})
+            if not tags.get("highway"):
+                continue
             refs = [str(n) for n in way.get("nodes", [])]
             for i, (a, b) in enumerate(zip(refs, refs[1:])):
                 if a not in by_id or b not in by_id:
@@ -157,6 +159,30 @@ def import_document(request: ImportRequest) -> dict:
                 ))
         nodes = [Node(id=f"osm:node:{n}", label=f"道路節點 {n}", kind="road_node",
                       lat=by_id[n]["lat"], lng=by_id[n]["lon"], source=request.source) for n in sorted(used)]
+        categories = {
+            "hospital": "醫院", "clinic": "診所", "pharmacy": "藥局", "fire_station": "消防站",
+            "police": "警政據點", "school": "學校", "community_centre": "社區中心",
+            "social_facility": "社福設施", "shelter": "庇護設施", "supermarket": "超市", "convenience": "便利商店",
+        }
+        facilities = {}
+        for item in elements:
+            tags = item.get("tags", {})
+            category = tags.get("amenity") or tags.get("shop")
+            if category not in categories:
+                continue
+            location = item if item.get("type") == "node" else item.get("center", {})
+            if "lat" not in location or "lon" not in location:
+                continue
+            node_id = f"osm:facility:{item['type']}:{item['id']}"
+            facilities[node_id] = Node(
+                id=node_id, label=tags.get("name:zh") or tags.get("name") or categories[category],
+                kind="facility", lat=location["lat"], lng=location["lon"], quantity=0, source=request.source,
+                properties={**tags, "facility_category": categories[category], "operational_status": "unknown",
+                            "capacity_known": False, "location_method": "point" if item["type"] == "node" else "bbox_center"},
+            )
+        nodes.extend(facilities.values())
+        if facilities:
+            warnings.append("公開設施僅代表地圖位置；營運狀態、可用容量與物資庫存尚未提供。")
         warnings.append("保留 OSM 共用節點與單行方向；預設路速 30 公里／時，可逐路調整。")
     else:
         data = json_object()
