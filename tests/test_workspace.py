@@ -175,5 +175,24 @@ def test_online_roads_falls_back_without_forwarding_workspace_data(monkeypatch):
     })
     assert response.status_code == 200
     assert response.json()["added_edges"] == 1
+    assert response.json()["provider"] == "FOSSGIS"
+    assert "FOSSGIS" in response.json()["graph"]["edges"][0]["provenance"]
     assert len(calls) == 2
     assert b"private-name" not in calls[1].data
+
+
+def test_online_roads_reports_all_services_unavailable(monkeypatch):
+    from urllib.error import URLError
+
+    calls = []
+
+    def offline(request, timeout):
+        calls.append(request.full_url)
+        raise URLError("unavailable")
+
+    monkeypatch.setattr('app.routers.workspace.urlopen', offline)
+    response = TestClient(app).post('/api/workspaces/openstreetmap', json={
+        "south":35,"north":35.01,"west":139,"east":139.01,
+    })
+    assert response.status_code == 502
+    assert len(calls) == 3

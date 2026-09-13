@@ -15,6 +15,12 @@ from app.services.workspace import GraphDocument, ImportRequest, analyze, import
 
 router = APIRouter()
 
+OVERPASS_SERVICES = (
+    ("VK Maps", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"),
+    ("FOSSGIS", "https://overpass-api.de/api/interpreter"),
+    ("Private.coffee", "https://overpass.private.coffee/api/interpreter"),
+)
+
 
 class WorkspaceWrite(BaseModel):
     name: str = Field(min_length=1, max_length=120)
@@ -85,12 +91,14 @@ def openstreetmap(body: BoundsRequest):
     bbox = f"{body.south},{body.west},{body.north},{body.east}"
     query = f'[out:json][timeout:15];way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|.*_link)$"]({bbox});(._;>;);out body;'
     data = None
-    for endpoint in ("https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter"):
+    provider = None
+    for service_name, endpoint in OVERPASS_SERVICES:
         request = URLRequest(endpoint, data=urlencode({"data": query}).encode(),
                              headers={"User-Agent": "SmartEmergency/1.0", "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"})
         try:
             with urlopen(request, timeout=22) as response:
                 data = response.read(5_000_001)
+            provider = service_name
             break
         except (URLError, TimeoutError):
             continue
@@ -99,8 +107,10 @@ def openstreetmap(body: BoundsRequest):
     try:
         if len(data) > 5_000_000:
             raise ValueError("資料過大，請縮小地圖範圍")
-        return import_document(ImportRequest(format="osm", content=data.decode("utf-8"), base=body.base,
-                                              source=f"OpenStreetMap contributors / ODbL / {timestamp()}"))
+        result = import_document(ImportRequest(format="osm", content=data.decode("utf-8"), base=body.base,
+                                              source=f"OpenStreetMap contributors / ODbL / {provider} / {timestamp()}"))
+        result["provider"] = provider
+        return result
     except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
         raise HTTPException(400, str(exc)) from exc
 

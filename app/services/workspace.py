@@ -155,7 +155,7 @@ def import_document(request: ImportRequest) -> dict:
                         tags.get("junction") == "roundabout" and tags.get("oneway") != "no"),
                     provenance=request.source, properties=tags,
                 ))
-        nodes = [Node(id=f"osm:node:{n}", label=f"路口 {n}", kind="road_node",
+        nodes = [Node(id=f"osm:node:{n}", label=f"道路節點 {n}", kind="road_node",
                       lat=by_id[n]["lat"], lng=by_id[n]["lon"], source=request.source) for n in sorted(used)]
         warnings.append("保留 OSM 共用節點與單行方向；預設路速 30 公里／時，可逐路調整。")
     else:
@@ -268,6 +268,7 @@ def analyze(document: GraphDocument, start: str | None = None, end: str | None =
         "unreachable_people": isolated, "route": route,
         "ignored_edges": missing_coordinates,
         "assumptions": ["可達性依道路與接駁連線計算，遵守單行方向；供應與指派關係不視為道路。",
+                        "僅分析已匯入的路網；範圍外道路未納入，邊界可能截斷可達路徑。",
                         "瓶頸為忽略方向後的橋接邊與割點；不代表真實道路損壞機率。",
                         "物資可達不等於足量或品項相符，未執行配給；接駁為人工假設。",
                         "時間依端點距離、路速與延遲倍率估算，未接入即時交通。"],
