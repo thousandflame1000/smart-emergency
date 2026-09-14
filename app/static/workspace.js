@@ -23,7 +23,7 @@ function run(id, fn) { $(id).addEventListener('click', async () => {
   const button=$(id); button.disabled=true;
   try { await fn(); } catch(e) { message(e.message,true); } finally { button.disabled=false; updateHistory(); }
 }); }
-function changed() { state.dirty=true; state.editVersion++; state.report=null; if(!state.baseline&&state.graph.nodes.length)state.baseline=currentBaseline(); invalidateComparison(); $('save-state').textContent='有未儲存變更'; $('analysis-result').textContent='分析尚未更新'; $('route-result').textContent=''; }
+function changed() { state.dirty=true; state.editVersion++; state.report=null; if(!state.baseline&&state.graph.nodes.length)state.baseline=currentBaseline(); invalidateComparison();invalidateAllocation(); $('save-state').textContent='有未儲存變更'; $('analysis-result').textContent='分析尚未更新'; $('route-result').textContent=''; }
 // Baselines are immutable snapshots; history can share them without copying the road network again.
 function historySnapshot(){return {graph:structuredClone(state.graph),baseline:state.baseline};}
 function checkpoint() { state.undo.push(historySnapshot()); if(state.undo.length>25)state.undo.shift(); state.redo=[]; }
@@ -38,7 +38,7 @@ function loadDocument(data) {
   state.id=data.id; state.revision=data.revision; state.graph=data.graph; state.selected=null; state.report=null;
   state.undo=[];state.redo=[];state.dirty=false;state.editVersion++;state.connect=null;
   $('workspace-name').value=data.name; $('workspace-list').value=data.id||'';
-  state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateComparison();
+  state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateComparison();invalidateAllocation();
   $('save-state').textContent=data.id?`已儲存 · 版本 ${data.revision}`:'尚未儲存';
   $('analysis-result').textContent='';$('route-result').textContent='';render();fit();
   history.replaceState(null,'',data.id?'?id='+encodeURIComponent(data.id):location.pathname);
@@ -70,7 +70,7 @@ function render() {
   $('layers').querySelectorAll('[data-layer-add]').forEach(button=>button.onclick=()=>{const kind=button.dataset.layerAdd;if(kind==='road_node'||kind==='facility')openRegion();else openImport(kind);});
   $('layers').querySelectorAll('input').forEach(input=>input.onchange=()=>{input.checked?state.hidden.delete(input.dataset.kind):state.hidden.add(input.dataset.kind);render();});
   const m=state.report?.metrics||{};
-  $('metrics').innerHTML=[['物件',state.graph.nodes.length],['連線',state.graph.edges.length],['人員',counts.person||0],['可用物資點',state.graph.nodes.filter(n=>n.kind==='supply'&&n.available&&n.quantity>0).length],['路網分區',m.road_components??'—'],['關鍵道路',m.critical_roads??'—'],['物資不可達人員',m.unreachable_people??'—']].map(([label,value],i)=>`<div class="metric ${i===6&&value>0?'alert':''}"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+  $('metrics').innerHTML=[['物件',state.graph.nodes.length],['連線',state.graph.edges.length],['人員',counts.person||0],['可用物資點',state.graph.nodes.filter(nodeHasSupply).length],['路網分區',m.road_components??'—'],['關鍵道路',m.critical_roads??'—'],['物資不可達人員',m.unreachable_people??'—']].map(([label,value],i)=>`<div class="metric ${i===6&&value>0?'alert':''}"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
   renderObjects();renderSelection();renderCanvas();updateHistory();
   for(const id of ['route-start','route-end']) { const val=$(id).value;$(id).innerHTML=nodeOptions(val,id==='route-start'?'選擇起點':'選擇終點'); }
   $('empty').hidden=state.graph.nodes.length>0;
@@ -168,8 +168,8 @@ function invalidatePreview(){state.importVersion++;state.preview=null;$('apply-i
 function mappingFields(){invalidatePreview();const format=$('import-format').value,text=$('import-content').value;let fields=[];
   try{if(format==='csv')fields=Papa.parse(text,{header:true,preview:1,skipEmptyLines:true}).meta.fields||[];
     else if(format==='geojson'){const data=JSON.parse(text);fields=Object.keys((data.features?.[0]||data).properties||{});}}catch(e){fields=[];}
-  const relation=$('import-kind').value==='relations';const names=relation?{id:'識別碼',label:'名稱',source:'起點識別碼',target:'終點識別碼',kind:'關係類型'}:{id:'識別碼',label:'名稱',lat:'緯度',lng:'經度',quantity:'數量'};
-  const aliases={id:['id','ID','識別碼','編號'],label:['label','name','名稱','姓名','物資名稱','機構名稱'],lat:['lat','latitude','緯度','緯度座標'],lng:['lng','lon','longitude','經度','經度座標'],quantity:['quantity','數量','庫存'],source:['source','from','起點'],target:['target','to','終點'],kind:['kind','type','類型']};
+  const relation=$('import-kind').value==='relations';const names=relation?{id:'識別碼',label:'名稱',source:'起點識別碼',target:'終點識別碼',kind:'關係類型'}:{id:'識別碼',label:'名稱',lat:'緯度',lng:'經度',quantity:'數量',item:'品項',unit:'單位',priority:'需求優先級',dispatch_limit:'出貨上限'};
+  const aliases={id:['id','ID','識別碼','編號'],label:['label','name','名稱','姓名','物資名稱','機構名稱'],lat:['lat','latitude','緯度','緯度座標'],lng:['lng','lon','longitude','經度','經度座標'],quantity:['quantity','數量','庫存'],item:['item','品項'],unit:['unit','單位'],priority:['priority','優先級','需求優先級'],dispatch_limit:['dispatch_limit','出貨上限'],source:['source','from','起點'],target:['target','to','終點'],kind:['kind','type','類型']};
   $('field-mapping').innerHTML=['json','osm'].includes(format)?'':Object.entries(names).filter(([k])=>format==='csv'||!['lat','lng'].includes(k)).map(([key,label])=>{const guess=fields.find(f=>aliases[key].includes(f));return `<label>${label}<select data-field="${key}"><option value="">使用預設值</option>${fields.map(f=>`<option value="${escapeHtml(f)}" ${f===guess?'selected':''}>${escapeHtml(f)}</option>`).join('')}</select></label>`;}).join('');
   $('field-mapping').querySelectorAll('select').forEach(s=>s.onchange=invalidatePreview);
 }
@@ -237,6 +237,7 @@ async function init(){
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
   mapLayers=L.layerGroup().addTo(map);map.on('click',e=>addNode(e.latlng));
   initComparison();
+  initAllocation();
   run('save',()=>save());run('duplicate',()=>save(true));run('new',()=>{if(discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');openRegion();}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());

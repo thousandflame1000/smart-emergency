@@ -8,7 +8,13 @@ from app.services.workspace import GraphDocument, analyze
 
 
 def _records(items):
-    return {item.id: item.model_dump(exclude={"properties": {"_layout"}}) for item in items}
+    records = {}
+    for item in items:
+        record = item.model_dump(exclude={"properties": {"_layout"}})
+        if "logistics" in record:
+            record["logistics"] = sorted(record["logistics"], key=lambda line: line["id"])
+        records[item.id] = record
+    return records
 
 
 def fingerprint(document: GraphDocument) -> str:
@@ -64,7 +70,7 @@ def compare(baseline: GraphDocument, graph: GraphDocument,
                        "minutes": round(new["minutes"] - old["minutes"], 2) if both else None,
                        "km": round(new["km"] - old["km"], 3) if both else None}
     return {
-        "model": "topology-comparison-v1", "generated_at": datetime.now(UTC).isoformat(),
+        "model": "topology-comparison-v2", "generated_at": datetime.now(UTC).isoformat(),
         "baseline_fingerprint": fingerprint(baseline), "scenario_fingerprint": fingerprint(graph),
         "before": before, "after": after,
         "metric_deltas": {key: after["metrics"][key] - value for key, value in before["metrics"].items()},

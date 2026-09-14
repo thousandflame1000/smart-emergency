@@ -11,6 +11,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
   <script defer src="/static/workspace-comparison.js"></script>
+  <script defer src="/static/workspace-allocation.js"></script>
   <script defer src="/static/workspace.js"></script>
 </head>
 <body>
@@ -46,6 +47,7 @@
     <button id="osm"><i data-lucide="route"></i>載入範圍道路</button>
     <button id="analyze" class="primary"><i data-lucide="git-branch"></i>分析拓樸</button>
     <button id="compare"><i data-lucide="git-compare-arrows"></i>情境比較</button>
+    <button id="allocation"><i data-lucide="package-check"></i>物資分配</button>
   </div>
   <div id="metrics" class="metrics"></div>
   <main>
@@ -81,6 +83,16 @@
     </aside>
   </main>
   <footer><span id="status" role="status">空白工作區</span><span id="save-state">尚未儲存</span></footer>
+  <dialog id="allocation-dialog" aria-labelledby="allocation-title">
+    <div class="dialog-heading"><h2 id="allocation-title">物資分配試算</h2><button id="close-allocation" aria-label="關閉物資分配"><i data-lucide="x"></i></button></div>
+    <div class="allocation-heading"><h3>供應庫存</h3><button id="add-stock"><i data-lucide="plus"></i>新增供應</button></div><div id="allocation-stock"></div>
+    <div class="allocation-heading"><h3>需求清單</h3><button id="add-demand"><i data-lucide="plus"></i>新增需求</button></div><div id="allocation-demand"></div>
+    <div class="allocation-controls"><label>品項／單位<select id="allocation-material" required></select></label><label>單程時間上限（分鐘）<input id="allocation-minutes" type="number" min="0.1" max="1440" step="0.1" value="120" required></label><label class="checkbox-label"><input id="allocation-compare" type="checkbox" checked>比較固定基準</label></div>
+    <div id="allocation-baseline-name" class="muted"></div>
+    <div class="comparison-actions"><button id="run-allocation" class="primary"><i data-lucide="package-check"></i>計算分配</button><button id="allocation-baseline" title="將目前資料固定為比較基準" aria-label="將目前資料固定為比較基準"><i data-lucide="flag"></i></button><button id="allocation-copy" title="另存物資情境" aria-label="另存物資情境"><i data-lucide="copy"></i></button><button id="allocation-save" title="儲存目前工作區" aria-label="儲存目前工作區"><i data-lucide="save"></i></button><button id="allocation-export" disabled title="匯出分配報告與資料快照" aria-label="匯出分配報告與資料快照"><i data-lucide="download"></i></button></div>
+    <p id="allocation-status" role="status"></p><div id="allocation-result"></div>
+  </dialog>
+  <dialog id="allocation-node-dialog" aria-labelledby="allocation-node-title"><div class="dialog-heading"><h2 id="allocation-node-title">選擇物件位置</h2><button id="close-allocation-node" aria-label="關閉物件選擇"><i data-lucide="x"></i></button></div><input id="allocation-node-query" type="search" placeholder="名稱、識別碼" aria-label="搜尋物件位置"><div id="allocation-node-results" class="object-list"></div></dialog>
   <dialog id="comparison-dialog" aria-labelledby="comparison-title">
     <div class="dialog-heading"><h2 id="comparison-title">情境影響比較</h2><button id="close-comparison" aria-label="關閉情境比較"><i data-lucide="x"></i></button></div>
     <div class="comparison-baseline"><div><span class="muted">固定比較基準</span><strong id="baseline-name"></strong><span id="baseline-time" class="muted"></span></div><button id="capture-baseline" title="將目前拓樸設為新基準" aria-label="將目前拓樸設為新基準"><i data-lucide="flag"></i></button></div>

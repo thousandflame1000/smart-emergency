@@ -13,6 +13,7 @@ from app.database import get_db
 from app.models.workspace import TopologyWorkspace
 from app.services.workspace import ComparisonBaseline, GraphDocument, ImportRequest, analyze, import_document
 from app.services.workspace_comparison import compare
+from app.services.workspace_allocation import AllocationRequest, plan_allocation
 from app.services.places import search_places
 
 router = APIRouter()
@@ -148,6 +149,14 @@ def places(q: str = Query(min_length=2, max_length=120)):
         raise HTTPException(502, "地區搜尋暫時無法回應，請稍後重試；也可移動地圖後載入範圍道路") from exc
     except (ValueError, TypeError, KeyError) as exc:
         raise HTTPException(400, "無法解析地區資料，請換個地區名稱重試") from exc
+
+
+@router.post("/allocate")
+def allocate_graph(body: AllocationRequest):
+    try:
+        return plan_allocation(body)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/{workspace_id}")

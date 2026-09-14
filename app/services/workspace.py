@@ -10,9 +10,32 @@ from typing import Any, Literal
 from uuid import uuid4
 
 import networkx as nx
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.services.hazard import haversine_km
+
+
+class LogisticsRecord(BaseModel):
+    id: str = Field(min_length=1, max_length=180)
+    role: Literal["supply", "demand"]
+    item: str = Field(min_length=1, max_length=80)
+    unit: str = Field(min_length=1, max_length=40)
+    quantity: int = Field(ge=0, le=1_000_000)
+    priority: int = Field(default=3, ge=1, le=5)
+    dispatch_limit: int | None = Field(default=None, ge=0, le=1_000_000)
+    source: str = Field(default="手動填報（未核實）", max_length=500)
+
+    @field_validator("item", "unit", mode="before")
+    @classmethod
+    def trim_text(cls, value):
+        return value.strip() if isinstance(value, str) else value
+
+    @field_validator("quantity", "priority", "dispatch_limit", mode="before")
+    @classmethod
+    def reject_boolean(cls, value):
+        if isinstance(value, bool):
+            raise ValueError("數量、上限與優先級不可為布林值")
+        return value
 
 
 class Node(BaseModel):
@@ -25,6 +48,7 @@ class Node(BaseModel):
     available: bool = True
     source: str = Field(default="手動建立", max_length=500)
     properties: dict[str, Any] = Field(default_factory=dict)
+    logistics: list[LogisticsRecord] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode="after")
     def coordinate_pair(self):
@@ -56,6 +80,9 @@ class GraphDocument(BaseModel):
         ids = {n.id for n in self.nodes}
         if len(ids) != len(self.nodes) or len({e.id for e in self.edges}) != len(self.edges):
             raise ValueError("物件或連線的識別碼重複")
+        logistics_ids = [line.id for node in self.nodes for line in node.logistics]
+        if len(logistics_ids) > 2000 or len(set(logistics_ids)) != len(logistics_ids):
+            raise ValueError("物資紀錄超過 2,000 筆或識別碼重複")
         for e in self.edges:
             if e.source not in ids or e.target not in ids:
                 raise ValueError(f"連線 {e.id} 指向不存在的物件")
@@ -106,12 +133,23 @@ def import_document(request: ImportRequest) -> dict:
         elif lat in (None, "") or lng in (None, ""):
             raise ValueError(f"第 {index + 1} 筆資料缺少經緯度之一")
         raw_id = field(props, "id", feature_id)
+        logistics = []
+        item, unit, quantity = field(props, "item"), field(props, "unit"), field(props, "quantity")
+        if request.kind in ("supply", "person") and (item not in (None, "") or unit not in (None, "")):
+            if item in (None, "") or unit in (None, "") or quantity in (None, ""):
+                raise ValueError(f"第 {index + 1} 筆物資資料須同時提供品項、單位與明確數量")
+            priority = field(props, "priority", 3)
+            dispatch_limit = field(props, "dispatch_limit")
+            logistics = [LogisticsRecord(id=f"{prefix}:logistics:{index}",
+                role="supply" if request.kind == "supply" else "demand", item=item, unit=unit,
+                quantity=quantity, priority=3 if priority in (None, "") else priority,
+                dispatch_limit=None if dispatch_limit in (None, "") else dispatch_limit, source=request.source)]
         nodes.append(Node(
             id=str(raw_id) if raw_id not in (None, "") else f"{prefix}:n:{index}",
             label=str(field(props, "label", field(props, "name", f"物件 {index + 1}"))),
             kind=request.kind if request.kind != "relations" else "custom",
             lat=lat, lng=lng, quantity=field(props, "quantity", 1) or 0,
-            source=request.source, properties=props,
+            source=request.source, properties=props, logistics=logistics,
         ))
 
     if request.format == "csv":
@@ -259,7 +297,8 @@ def import_document(request: ImportRequest) -> dict:
             "added_edges": len(result.edges) - len(request.base.edges)}
 
 
-def analyze(document: GraphDocument, start: str | None = None, end: str | None = None) -> dict:
+def build_routing_graphs(document: GraphDocument):
+    """Shared travel semantics for route analysis and capacitated allocation."""
     nodes = {n.id: n for n in document.nodes}
     graph = nx.MultiDiGraph()
     graph.add_nodes_from(n.id for n in document.nodes if n.available)
@@ -282,8 +321,22 @@ def analyze(document: GraphDocument, start: str | None = None, end: str | None =
             graph.add_edge(b.id, a.id, key=edge.id, weight=minutes, km=km)
         if edge.kind == "road":
             road_graph.add_edge(a.id, b.id, key=edge.id)
+    return graph, road_graph, missing_coordinates
+
+
+def has_supply(node: Node) -> bool:
+    if not node.available:
+        return False
+    if node.logistics:
+        return any(line.role == "supply" and line.quantity > 0 and line.dispatch_limit != 0 for line in node.logistics)
+    return node.kind in ("supply", "facility") and node.quantity > 0
+
+
+def analyze(document: GraphDocument, start: str | None = None, end: str | None = None) -> dict:
+    nodes = {n.id: n for n in document.nodes}
+    graph, road_graph, missing_coordinates = build_routing_graphs(document)
     bridges = [next(iter(road_graph[a][b])) for a, b in nx.bridges(road_graph)]
-    supplies = [n.id for n in document.nodes if n.kind in ("supply", "facility") and n.available and n.quantity > 0]
+    supplies = [n.id for n in document.nodes if has_supply(n)]
     reached = nx.multi_source_dijkstra_path_length(graph, supplies) if supplies else {}
     people = [n for n in document.nodes if n.kind == "person" and n.available]
     isolated = [n.id for n in people if n.id not in reached]

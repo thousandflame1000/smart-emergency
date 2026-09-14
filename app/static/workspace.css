@@ -84,6 +84,24 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 .preview-table { width: 100%; border-collapse: collapse; margin-top: 12px; } .preview-table td, .preview-table th { padding: 6px; text-align: left; border-bottom: 1px solid var(--line); word-break: break-word; }
 .leaflet-control-attribution { font-size: 10px; }
 #comparison-dialog { width: min(840px, calc(100% - 24px)); }
+#allocation-dialog { width: min(1080px, calc(100% - 24px)); }
+#allocation-dialog > .dialog-heading { position: sticky; top: -22px; z-index: 2; background: var(--paper); padding: 8px 0; border-bottom: 1px solid var(--line); }
+.allocation-heading { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px; gap: 12px; }
+.allocation-heading h3, #allocation-result h3 { font-size: 15px; margin: 0; }
+.allocation-row { display: grid; grid-template-columns: minmax(180px, 2fr) minmax(100px, 1fr) 80px 90px 100px 34px; gap: 8px; border-bottom: 1px solid var(--line); padding: 10px 0; align-items: start; }
+.allocation-row label { margin: 0; min-width: 0; }
+.allocation-location button { width: 100%; justify-content: flex-start; text-align: left; }
+.allocation-location span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.allocation-remove { height: 36px; color: var(--red); margin-top: 22px; }
+.allocation-controls { display: grid; grid-template-columns: minmax(150px, 1fr) 190px 160px; gap: 16px; align-items: end; margin-top: 20px; border-top: 1px solid var(--line); padding-top: 18px; }
+#allocation-baseline-name { margin: 0 0 12px; }
+#allocation-status { font-size: 13px; color: var(--accent); min-height: 22px; }
+#allocation-status.error { color: var(--red); }
+#allocation-result { font-size: 13px; overflow-wrap: anywhere; }
+#allocation-node-query { width: 100%; }
+#allocation-node-results { max-height: 55dvh; overflow: auto; margin-top: 12px; }
+#allocation-node-results small { display: block; }
+@media (max-width: 760px) { .allocation-row { grid-template-columns: 1fr 1fr; } .allocation-location { grid-column: 1 / -1; } .allocation-remove { justify-self: end; } .allocation-controls { grid-template-columns: 1fr; gap: 0; } #allocation-dialog { padding: 14px; } #allocation-dialog > .dialog-heading { top: -14px; } }
 .comparison-baseline { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
 .comparison-baseline > div { flex: 1; min-width: 0; }
 .comparison-baseline strong, .comparison-baseline span { display: block; overflow-wrap: anywhere; }
