@@ -38,6 +38,19 @@ GeoJSON 道路只連接同一次匯入中共用的座標頂點，並區分 `laye
 
 試算直接使用尚未儲存的圖資料；儲存才更新工作區。版本衝突會拒絕覆蓋，可另存副本。工作區不會自動更動既有正式派遣、LINE 通知或花東示範路網。
 
+## 情境比較
+
+開啟既有工作區時，若尚無比較基準，會將當下讀取的拓樸固定為初始基準。編輯道路、人員、物資或設施後，按「情境比較」即可比較兩份快照。視窗中的旗標按鈕可明確取代比較基準，支援復原；「另存情境」保留原工作區，將目前拓樸與固定基準一起另存。一般儲存也會保留基準，重新開啟不會用修改後資料覆蓋原基準。
+
+- 指標比較包含物件、連線、人員紀錄、路網分區、橋接瓶頸與物資不可達人員紀錄的前後差異。
+- 可選擇兩份資料中任一端點比較最快路徑，列出中斷、恢復或時間／距離差異；一份快照缺少端點時會明確標示，不把端點移除當作成功。
+- 新增不可達與恢復可達只計入兩份快照皆納入分析的同一批人員；新增人員與退出分析者另列。這是通行可達性，不代表已完成救援。
+- 物件與連線分列新增、移除、修改及變更欄位；點選仍存在的項目可回到畫布檢視。純關係圖排列不計入拓樸變更。
+- 匯出比較報告包含兩份完整快照、起終點、來源工作區版本、未儲存標記、結果與 SHA-256 計算輸入指紋。指紋排除 `_layout` 並依識別碼排序；等成本路徑以穩定輸入順序計算。編輯或更換端點會使舊報告失效，避免匯出過期結果。
+- 完整工作區 JSON 同時匯出固定基準；以「取代目前工作區內容」匯回時恢復基準，追加匯入不會擅自更換原基準。基準與目前拓樸各自適用節點／連線上限，匯入檔案仍受 5 MB 限制。
+
+比較功能使用既有 NetworkX 分析，不執行正式派遣、不發送通知，也不代表即時道路狀態或現場安全保證。其方向參考 [Palantir Ontology Scenarios](https://www.palantir.com/docs/foundry/ontology/overview-ontology-scenario) 的隔離情境與操作影響評估，但本專案尚未具備其完整權限治理、模型編排與審批回寫能力。
+
 ## API
 
 | 方法 | 路徑 | 用途 |
@@ -46,11 +59,14 @@ GeoJSON 道路只連接同一次匯入中共用的座標頂點，並區分 `laye
 | GET / PUT | `/api/workspaces/{id}` | 讀取／依 revision 儲存 |
 | POST | `/api/workspaces/import-preview` | 匯入驗證與預覽，不儲存 |
 | POST | `/api/workspaces/analyze` | 分析傳入的圖資料，不儲存 |
+| POST | `/api/workspaces/compare` | 比較 `baseline` 與 `graph`；可選 `start`、`end`，不儲存、不派遣 |
 | GET | `/api/workspaces/places?q=` | 依中文或其他地名搜尋中心座標 |
 | POST | `/api/workspaces/openstreetmap` | 取得目前範圍道路；`include_facilities: true` 同時載入公開設施，不儲存 |
 
 線上道路查詢的經緯度跨度各以 0.12 度為限；依序嘗試 VK Maps、FOSSGIS、Private.coffee 三個公開 Overpass 服務，全部不可用時回傳中文錯誤。成功使用的服務名稱、來源與授權會寫入資料。查詢僅送出範圍與道路／設施篩選條件，不會送出工作區內的人員或物資資料。既有專案的 DemoAuth 設定同樣適用於工作區頁面及 API。
 
 地名搜尋使用 Nominatim，僅在提交搜尋時送出查詢文字，不提供逐字自動完成。單一服務程序將上游請求間隔限制為至少 1.1 秒，快取最多 128 個查詢、每個 6 小時。可用 `NOMINATIM_SEARCH_URL` 切換相容服務；擴增程序或副本前需改用集中限流或自有地理編碼服務，避免超過公開服務限制。使用政策見 [Nominatim Usage Policy](https://operations.osmfoundation.org/policies/nominatim/)。
+
+工作區 API 可附帶 `baseline`（名稱、圖資料、擷取時間、來源工作區／版本及未儲存標記）。資料表沿用原本的 JSON 文件欄位，舊版純圖資料可直接讀取；舊客戶端省略 `baseline` 的更新不會清除既有基準，明確傳 `null` 才清除。儲存仍須符合 revision 樂觀鎖。
 
 參考：[GeoJSON 標準](https://datatracker.ietf.org/doc/html/rfc7946)、[OpenStreetMap 公開查詢服務](https://wiki.openstreetmap.org/wiki/Overpass_API)、[OSM 授權](https://www.openstreetmap.org/copyright)、[NetworkX 路徑演算法](https://networkx.org/documentation/stable/reference/algorithms/shortest_paths.html)。

@@ -10,6 +10,7 @@
   <script defer src="https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+  <script defer src="/static/workspace-comparison.js"></script>
   <script defer src="/static/workspace.js"></script>
 </head>
 <body>
@@ -44,6 +45,7 @@
     <button id="import"><i data-lucide="upload"></i>匯入資料</button>
     <button id="osm"><i data-lucide="route"></i>載入範圍道路</button>
     <button id="analyze" class="primary"><i data-lucide="git-branch"></i>分析拓樸</button>
+    <button id="compare"><i data-lucide="git-compare-arrows"></i>情境比較</button>
   </div>
   <div id="metrics" class="metrics"></div>
   <main>
@@ -79,6 +81,13 @@
     </aside>
   </main>
   <footer><span id="status" role="status">空白工作區</span><span id="save-state">尚未儲存</span></footer>
+  <dialog id="comparison-dialog" aria-labelledby="comparison-title">
+    <div class="dialog-heading"><h2 id="comparison-title">情境影響比較</h2><button id="close-comparison" aria-label="關閉情境比較"><i data-lucide="x"></i></button></div>
+    <div class="comparison-baseline"><div><span class="muted">固定比較基準</span><strong id="baseline-name"></strong><span id="baseline-time" class="muted"></span></div><button id="capture-baseline" title="將目前拓樸設為新基準" aria-label="將目前拓樸設為新基準"><i data-lucide="flag"></i></button></div>
+    <div class="form-grid comparison-route"><label>路徑起點<select id="compare-start"></select></label><label>路徑終點<select id="compare-end"></select></label></div>
+    <div class="comparison-actions"><button id="run-comparison" class="primary"><i data-lucide="git-compare-arrows"></i>重新比較</button><button id="copy-scenario"><i data-lucide="copy"></i>另存情境</button><button id="export-comparison" disabled title="匯出比較報告與輸入快照" aria-label="匯出比較報告與輸入快照"><i data-lucide="download"></i></button></div>
+    <p id="comparison-status" role="status"></p><div id="comparison-result"></div>
+  </dialog>
   <dialog id="region-dialog">
     <div class="dialog-heading"><h2>選擇地區</h2><button id="close-region" aria-label="關閉地區選擇"><i data-lucide="x"></i></button></div>
     <form id="region-search-form" class="region-search">

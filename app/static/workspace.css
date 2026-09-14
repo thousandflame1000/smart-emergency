@@ -83,6 +83,28 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 #import-result { font-size: 13px; overflow-wrap: anywhere; }
 .preview-table { width: 100%; border-collapse: collapse; margin-top: 12px; } .preview-table td, .preview-table th { padding: 6px; text-align: left; border-bottom: 1px solid var(--line); word-break: break-word; }
 .leaflet-control-attribution { font-size: 10px; }
+#comparison-dialog { width: min(840px, calc(100% - 24px)); }
+.comparison-baseline { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.comparison-baseline > div { flex: 1; min-width: 0; }
+.comparison-baseline strong, .comparison-baseline span { display: block; overflow-wrap: anywhere; }
+.comparison-baseline strong { font-size: 15px; margin: 3px 0; }
+.comparison-route { margin-top: 16px; }
+.comparison-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+#comparison-status { min-height: 20px; color: var(--accent); font-size: 12px; }
+#comparison-status.error { color: var(--red); }
+#comparison-result { font-size: 13px; overflow-wrap: anywhere; }
+.comparison-table-wrap { max-width: 100%; overflow-x: auto; }
+.comparison-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.comparison-table td, .comparison-table th { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.comparison-table thead { background: var(--bg); }
+.comparison-table th { font-weight: 500; }
+.comparison-table td:not(:first-child) { font-variant-numeric: tabular-nums; }
+.comparison-table button { white-space: normal; overflow-wrap: anywhere; text-align: left; justify-content: flex-start; max-width: 100%; border: 0; border-radius: 0; padding: 2px 0; color: var(--accent); }
+.comparison-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.comparison-section h3 { font-size: 14px; margin: 0 0 10px; }
+.comparison-people { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
+.comparison-people button { white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 540px) { #comparison-dialog { padding: 14px; } .comparison-route { grid-template-columns: 1fr; } .comparison-table td, .comparison-table th { padding: 6px 3px; font-size: 12px; } }
 @media (max-width: 540px) { .empty-state { flex-wrap: wrap; justify-content: center; white-space: normal; width: min(310px, calc(100% - 32px)); } .empty-state strong { flex-basis: 100%; text-align: center; } .region-options { grid-template-columns: 1fr; gap: 4px; } .layer-row { flex: 1 1 135px; } }
 @media (max-width: 540px) { header h1 { flex: 1 0 calc(100% - 70px) !important; margin-right: 0; white-space: nowrap; } }
 @media (max-width: 1100px) { main { grid-template-columns: 180px minmax(240px, 1fr) 260px; } header select, #workspace-name { width: 160px; } .metric { padding: 10px 15px; min-width: 112px; } }

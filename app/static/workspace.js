@@ -23,12 +23,14 @@ function run(id, fn) { $(id).addEventListener('click', async () => {
   const button=$(id); button.disabled=true;
   try { await fn(); } catch(e) { message(e.message,true); } finally { button.disabled=false; updateHistory(); }
 }); }
-function changed() { state.dirty=true; state.editVersion++; state.report=null; $('save-state').textContent='有未儲存變更'; $('analysis-result').textContent='分析尚未更新'; $('route-result').textContent=''; }
-function checkpoint() { state.undo.push(structuredClone(state.graph)); if(state.undo.length>25)state.undo.shift(); state.redo=[]; }
+function changed() { state.dirty=true; state.editVersion++; state.report=null; if(!state.baseline&&state.graph.nodes.length)state.baseline=currentBaseline(); invalidateComparison(); $('save-state').textContent='有未儲存變更'; $('analysis-result').textContent='分析尚未更新'; $('route-result').textContent=''; }
+// Baselines are immutable snapshots; history can share them without copying the road network again.
+function historySnapshot(){return {graph:structuredClone(state.graph),baseline:state.baseline};}
+function checkpoint() { state.undo.push(historySnapshot()); if(state.undo.length>25)state.undo.shift(); state.redo=[]; }
 function mutate(fn) { checkpoint(); fn(); changed(); render(); }
 function updateHistory() { $('undo').disabled=!state.undo.length; $('redo').disabled=!state.redo.length; }
 function undo(redo=false) { const from=redo?state.redo:state.undo, to=redo?state.undo:state.redo; if(!from.length)return;
-  to.push(structuredClone(state.graph)); state.graph=from.pop(); state.selected=null; changed(); render(); }
+  to.push(historySnapshot()); const previous=from.pop();state.graph=previous.graph;state.baseline=previous.baseline;state.selected=null; changed(); render(); }
 function discardConfirmed() { return !state.dirty || confirm('目前有未儲存變更，確定離開這個工作區？'); }
 function loadDocument(data) {
   state.documentVersion++;
@@ -36,6 +38,7 @@ function loadDocument(data) {
   state.id=data.id; state.revision=data.revision; state.graph=data.graph; state.selected=null; state.report=null;
   state.undo=[];state.redo=[];state.dirty=false;state.editVersion++;state.connect=null;
   $('workspace-name').value=data.name; $('workspace-list').value=data.id||'';
+  state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateComparison();
   $('save-state').textContent=data.id?`已儲存 · 版本 ${data.revision}`:'尚未儲存';
   $('analysis-result').textContent='';$('route-result').textContent='';render();fit();
   history.replaceState(null,'',data.id?'?id='+encodeURIComponent(data.id):location.pathname);
@@ -49,7 +52,7 @@ async function listWorkspaces() {
 async function save(copy=false) {
   const version=state.editVersion, documentVersion=state.documentVersion, graph=structuredClone(state.graph), name=$('workspace-name').value.trim()||'未命名工作區';
   const id=copy?null:state.id;
-  const data=await api(id?'/'+id:'',{name,graph,revision:state.revision},id?'PUT':'POST');
+  const data=await api(id?'/'+id:'',{name,graph,baseline:state.baseline||null,revision:state.revision},id?'PUT':'POST');
   if(documentVersion!==state.documentVersion){await listWorkspaces();message('先前工作區已儲存');return;}
   state.id=data.id;state.revision=data.revision;
   history.replaceState(null,'','?id='+data.id);
@@ -227,12 +230,13 @@ async function osm(){const b=map.getBounds(),version=state.editVersion;message('
   const result=await api('/openstreetmap',{south:b.getSouth(),west:b.getWest(),north:b.getNorth(),east:b.getEast(),base:state.graph});
   if(version!==state.editVersion)throw Error('載入期間資料已變更，請重新載入道路');
   mutate(()=>{state.graph=result.graph;state.selected=null;});message(`已載入 ${result.added_nodes} 個道路節點、${result.added_edges} 段道路 · OpenStreetMap / ODbL`);}
-function exportDocument(){const data={format:'smart-emergency-workspace-v1',name:$('workspace-name').value,graph:state.graph};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=($('workspace-name').value||'工作區')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+function exportDocument(){const data={format:'smart-emergency-workspace-v1',name:$('workspace-name').value,graph:state.graph,baseline:state.baseline||null};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=($('workspace-name').value||'工作區')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function init(){
   if(!window.L||!window.cytoscape||!window.Papa){message('地圖元件載入失敗，請檢查網路後重新整理',true);return;}
   map=L.map('map',{preferCanvas:true}).setView([23.7,121],7);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
   mapLayers=L.layerGroup().addTo(map);map.on('click',e=>addNode(e.latlng));
+  initComparison();
   run('save',()=>save());run('duplicate',()=>save(true));run('new',()=>{if(discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');openRegion();}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());
@@ -248,7 +252,7 @@ async function init(){
   $('import-file').onchange=async()=>{const file=$('import-file').files[0];if(!file)return;if(file.size>5_000_000){$('import-result').textContent='檔案上限為 5 MB，請分區匯入';return;}
     const text=await file.text();$('import-content').value=text;$('import-source').value=file.name;
     if(file.name.toLowerCase().endsWith('.csv'))$('import-format').value='csv';else{try{const d=JSON.parse(text);$('import-format').value=d.graph||d.nodes?'json':d.elements?'osm':'geojson';}catch(e){$('import-format').value='geojson';}}mappingFields();};
-  run('apply-import',()=>{if(!state.preview)return;if(state.previewVersion!==state.editVersion)throw Error('工作區已變更，請重新預覽');const result=state.preview;mutate(()=>{state.graph=result.graph;state.selected=null;});$('import-dialog').close();fit();message(`已加入 ${result.added_nodes} 個物件、${result.added_edges} 條連線`);state.preview=null;});
+  run('apply-import',()=>{if(!state.preview)return;if(state.previewVersion!==state.editVersion)throw Error('工作區已變更，請重新預覽');const result=state.preview;mutate(()=>{state.graph=result.graph;state.selected=null;if($('import-replace').checked&&result.baseline)state.baseline=structuredClone(result.baseline);});$('import-dialog').close();fit();message(`已加入 ${result.added_nodes} 個物件、${result.added_edges} 條連線`);state.preview=null;});
   window.addEventListener('beforeunload',event=>{if(state.dirty){event.preventDefault();event.returnValue='';}});
   let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{map.invalidateSize();fit();},150);});
   render();try{const items=await listWorkspaces();const explicit=new URLSearchParams(location.search).get('id');const remembered=lastWorkspace();const id=explicit||(items.some(w=>w.id===remembered)?remembered:null);if(id){loadDocument(await api('/'+encodeURIComponent(id)));message('已回到上次儲存的工作區');}else{rememberWorkspace(null);openRegion();}}catch(e){message(e.message,true);}

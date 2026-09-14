@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.workspace import TopologyWorkspace
-from app.services.workspace import GraphDocument, ImportRequest, analyze, import_document
+from app.services.workspace import ComparisonBaseline, GraphDocument, ImportRequest, analyze, import_document
+from app.services.workspace_comparison import compare
 from app.services.places import search_places
 
 router = APIRouter()
@@ -27,12 +28,17 @@ class WorkspaceWrite(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     graph: GraphDocument = Field(default_factory=GraphDocument)
     revision: int = Field(default=0, ge=0)
+    baseline: ComparisonBaseline | None = None
 
 
 class AnalysisRequest(BaseModel):
     graph: GraphDocument
     start: str | None = None
     end: str | None = None
+
+
+class ComparisonRequest(AnalysisRequest):
+    baseline: GraphDocument
 
 
 class BoundsRequest(BaseModel):
@@ -51,7 +57,11 @@ def timestamp():
 def serialize(row, detail=True):
     result = {"id": row.id, "name": row.name, "revision": row.revision, "updated_at": row.updated_at}
     if detail:
-        result["graph"] = json.loads(row.document)
+        document = json.loads(row.document)
+        if "graph" in document:
+            result.update(graph=document["graph"], baseline=document.get("baseline"))
+        else:
+            result.update(graph=document, baseline=None)
     return result
 
 
@@ -63,7 +73,7 @@ def list_workspaces(db: Session = Depends(get_db)):
 @router.post("", status_code=201)
 def create_workspace(body: WorkspaceWrite, db: Session = Depends(get_db)):
     row = TopologyWorkspace(id=uuid4().hex, name=body.name.strip() or "未命名工作區",
-                            document=body.graph.model_dump_json(), revision=1, updated_at=timestamp())
+                            document=body.model_dump_json(include={"graph", "baseline"}), revision=1, updated_at=timestamp())
     db.add(row)
     db.commit()
     return serialize(row)
@@ -122,6 +132,14 @@ def openstreetmap(body: BoundsRequest):
         raise HTTPException(400, str(exc)) from exc
 
 
+@router.post("/compare")
+def compare_graphs(body: ComparisonRequest):
+    try:
+        return compare(body.baseline, body.graph, body.start, body.end)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.get("/places")
 def places(q: str = Query(min_length=2, max_length=120)):
     try:
@@ -142,9 +160,14 @@ def get_workspace(workspace_id: str, db: Session = Depends(get_db)):
 
 @router.put("/{workspace_id}")
 def save_workspace(workspace_id: str, body: WorkspaceWrite, db: Session = Depends(get_db)):
+    if "baseline" not in body.model_fields_set:
+        row = db.get(TopologyWorkspace, workspace_id)
+        previous = json.loads(row.document).get("baseline") if row else None
+        if previous:
+            body.baseline = ComparisonBaseline.model_validate(previous)
     changed = db.query(TopologyWorkspace).filter(TopologyWorkspace.id == workspace_id,
                                                 TopologyWorkspace.revision == body.revision).update({
-        "name": body.name.strip() or "未命名工作區", "document": body.graph.model_dump_json(),
+        "name": body.name.strip() or "未命名工作區", "document": body.model_dump_json(include={"graph", "baseline"}),
         "revision": body.revision + 1, "updated_at": timestamp(),
     }, synchronize_session=False)
     if not changed:

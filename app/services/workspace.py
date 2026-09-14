@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import uuid4
 
@@ -64,6 +65,15 @@ class GraphDocument(BaseModel):
         return self
 
 
+class ComparisonBaseline(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    graph: GraphDocument
+    captured_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    workspace_id: str | None = Field(default=None, max_length=180)
+    revision: int = Field(default=0, ge=0)
+    unsaved: bool = False
+
+
 class ImportRequest(BaseModel):
     format: Literal["geojson", "csv", "json", "osm"]
     content: str = Field(max_length=5_000_000)
@@ -75,6 +85,7 @@ class ImportRequest(BaseModel):
 
 def import_document(request: ImportRequest) -> dict:
     nodes, edges = [], []
+    baseline = None
     warnings = []
     prefix = uuid4().hex[:10]
     mapping = request.mapping
@@ -128,6 +139,8 @@ def import_document(request: ImportRequest) -> dict:
         data = json_object()
         document = GraphDocument.model_validate(data.get("graph", data))
         nodes, edges = document.nodes, document.edges
+        if data.get("baseline") is not None:
+            baseline = ComparisonBaseline.model_validate(data["baseline"]).model_dump(mode="json")
     elif request.format == "osm":
         data = json_object()
         if data.get("remark"):
@@ -241,7 +254,7 @@ def import_document(request: ImportRequest) -> dict:
                 raise ValueError(f"識別碼重複：{item.id}，請改用取代或調整識別碼")
             collection[item.id] = item
     result = GraphDocument(nodes=list(merged_nodes.values()), edges=list(merged_edges.values()))
-    return {"graph": result.model_dump(), "warnings": warnings,
+    return {"graph": result.model_dump(), "baseline": baseline, "warnings": warnings,
             "added_nodes": len(result.nodes) - len(request.base.nodes),
             "added_edges": len(result.edges) - len(request.base.edges)}
 
