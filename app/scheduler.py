@@ -48,6 +48,16 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    from app.services.outbox import process_outbox_batch
+    _scheduler.add_job(
+        process_outbox_batch,
+        IntervalTrigger(seconds=5),
+        id="notification_outbox",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+    )
+
     # 決賽展演用情境模擬引擎的「自動播放」開關——見 app/services/scenario.py。
     # 這個 job 一直存在、每 8 秒檢查一次 SystemConfig 的 scenario_autoplay
     # 旗標，關閉時什麼都不做，開銷可忽略；比動態新增/移除 job 簡單可靠。

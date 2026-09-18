@@ -56,8 +56,10 @@ from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.services.hungarian import min_cost_assignment
 from app.services import road_network
+from app.services.proposal_workflow import ProposalService
 
 from app.database import SessionLocal
 from app.models.need import CommunityNeed
@@ -509,6 +511,7 @@ def auto_dispatch() -> dict:
 
         matched = suggested = skipped = notified = 0
         details = []
+        proposal_service = ProposalService(db) if settings.TASK_WORKFLOW_V2 else None
 
         for need, vulnerability in needs_with_vuln:
             best = resource_assignment.get(str(need.id))
@@ -541,6 +544,25 @@ def auto_dispatch() -> dict:
                 ).first()
                 if res_obj:
                     res_obj.is_available = False
+                proposal = None
+                decision_details = {
+                    "source": best.source,
+                    "resource_name": best.res_name,
+                    "score": round(best.score, 3),
+                    "dist_km": round(best.dist_km, 3) if not math.isinf(best.dist_km) else None,
+                    "vulnerability": round(vulnerability, 3),
+                    "breakdown": best.breakdown,
+                }
+                if proposal_service:
+                    proposal = proposal_service.create_from_dispatch_suggestion(
+                        need=need,
+                        algorithm="legacy-dispatch-hungarian",
+                        algorithm_version="1",
+                        score=best.score,
+                        explanation_json=decision_details,
+                        candidate_resource_id=best.resource_id,
+                        candidate_assignee_id=res_obj.owner_id if res_obj else None,
+                    )
                 _log_dispatch_event(
                     db,
                     "propose_dispatch",
@@ -551,12 +573,8 @@ def auto_dispatch() -> dict:
                     new_status=need.status,
                     outcome="suggested",
                     details={
-                        "source": best.source,
-                        "resource_name": best.res_name,
-                        "score": round(best.score, 3),
-                        "dist_km": round(best.dist_km, 3) if not math.isinf(best.dist_km) else None,
-                        "vulnerability": round(vulnerability, 3),
-                        "breakdown": best.breakdown,
+                        **decision_details,
+                        "proposal_id": str(proposal.id) if proposal else None,
                     },
                 )
 
@@ -569,41 +587,62 @@ def auto_dispatch() -> dict:
                     "dist_km":       round(best.dist_km, 2) if not math.isinf(best.dist_km) else None,
                     "score":         round(best.score, 1),
                     "vulnerability": round(vulnerability, 1),
+                    "proposal_id":   str(proposal.id) if proposal else None,
                 })
             else:
                 # 資源點（固定設施）：本來就不會發 LINE 通知志工，
                 # 只是把「有哪個資源點可用」標記出來給管理員手動協調，
                 # 不牽涉「自動指派志工」，維持直接標記完成。
                 previous_status = need.status
-                need.status = "matched"
+                decision_details = {
+                    "source": best.source,
+                    "point_id": best.point_id,
+                    "facility_name": best.res_name,
+                    "score": round(best.score, 3),
+                    "dist_km": round(best.dist_km, 3) if not math.isinf(best.dist_km) else None,
+                    "vulnerability": round(vulnerability, 3),
+                    "breakdown": best.breakdown,
+                }
+                proposal = None
+                if proposal_service:
+                    need.status = "suggested"
+                    proposal = proposal_service.create_from_dispatch_suggestion(
+                        need=need,
+                        algorithm="legacy-dispatch-facility",
+                        algorithm_version="1",
+                        score=best.score,
+                        explanation_json=decision_details,
+                        candidate_facility_id=best.point_id,
+                    )
+                else:
+                    need.status = "matched"
                 _log_dispatch_event(
                     db,
-                    "auto_match_facility",
+                    "propose_dispatch" if proposal_service else "auto_match_facility",
                     need=need,
                     actor_label="system:auto_dispatch",
                     previous_status=previous_status,
                     new_status=need.status,
-                    outcome="matched",
+                    outcome="suggested" if proposal_service else "matched",
                     details={
-                        "source": best.source,
-                        "point_id": best.point_id,
-                        "facility_name": best.res_name,
-                        "score": round(best.score, 3),
-                        "dist_km": round(best.dist_km, 3) if not math.isinf(best.dist_km) else None,
-                        "vulnerability": round(vulnerability, 3),
-                        "breakdown": best.breakdown,
+                        **decision_details,
+                        "proposal_id": str(proposal.id) if proposal else None,
                     },
                 )
-                matched += 1
+                if proposal_service:
+                    suggested += 1
+                else:
+                    matched += 1
                 details.append({
                     "need_id":       str(need.id),
-                    "result":        "matched",
+                    "result":        "suggested" if proposal_service else "matched",
                     "source":        best.source,
                     "matched":       best.res_name,
                     "dist_km":       round(best.dist_km, 2) if not math.isinf(best.dist_km) else None,
                     "score":         round(best.score, 1),
                     "vulnerability": round(vulnerability, 1),
                     "notified":      False,
+                    "proposal_id":   str(proposal.id) if proposal else None,
                 })
 
         db.commit()

@@ -1,9 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from datetime import datetime
+
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.services import road_network
+from app.services.road_replanning import (
+    RoadReplanningError,
+    RoadReplanningService,
+    TaskRouteService,
+)
 
 router = APIRouter()
 
@@ -30,6 +37,20 @@ class EdgeCreate(BaseModel):
     b: str
     status: str = "normal"
     multiplier: float | None = None
+
+
+class ObservationCreate(BaseModel):
+    road_segment_id: str
+    state: str
+    source: str
+    observed_at: datetime | None = None
+    details: dict = Field(default_factory=dict)
+
+
+class TaskRouteCreate(BaseModel):
+    start_node: str
+    end_node: str
+    proposal_id: str | None = None
 
 
 def _bad_request(exc: ValueError):
@@ -94,3 +115,52 @@ def route(start: str, end: str, db: Session = Depends(get_db)):
     if "error" in result:
         raise HTTPException(status_code=404, detail=result["error"])
     return result
+
+
+@router.post("/observations")
+def create_observation(item: ObservationCreate, db: Session = Depends(get_db)):
+    try:
+        return RoadReplanningService(db).observe(
+            road_segment_id=item.road_segment_id,
+            state=item.state,
+            source=item.source,
+            observed_at=item.observed_at,
+            details=item.details,
+        )
+    except RoadReplanningError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except ValueError as exc:
+        _bad_request(exc)
+
+
+@router.get("/segments/{road_segment_id}/state")
+def segment_state(road_segment_id: str, db: Session = Depends(get_db)):
+    state = road_network.current_road_state(db, road_segment_id)
+    if state is None:
+        raise HTTPException(status_code=404, detail="Road segment not found")
+    return {"road_segment_id": road_segment_id, "state": state}
+
+
+@router.post("/tasks/{task_id}/route")
+def attach_task_route(
+    task_id: str,
+    item: TaskRouteCreate,
+    db: Session = Depends(get_db),
+):
+    try:
+        route = TaskRouteService(db).attach_route(
+            task_id=task_id,
+            start_node=item.start_node,
+            end_node=item.end_node,
+            proposal_id=item.proposal_id,
+        )
+        return {
+            "route_id": str(route.id),
+            "task_id": str(route.task_id),
+            "status": route.status,
+            "path": route.node_path,
+            "segment_ids": route.segment_ids,
+            "distance_km": route.distance_km,
+        }
+    except RoadReplanningError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

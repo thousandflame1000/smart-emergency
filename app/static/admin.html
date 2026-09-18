@@ -504,19 +504,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <span class="icon">🧠</span> 知識庫
   </div>
 
-  <div class="nav-section">資料建模與推演</div>
+  <div class="nav-section">資料工作區</div>
   <a class="nav-item" href="/workspace" style="text-decoration:none">
     <span class="icon">圖</span> 開放資料工作區
   </a>
-  <div class="nav-item" onclick="showPage('page-ontology')" data-page="page-ontology">
-    <span class="icon">圖</span> 物件關係模型
-  </div>
-  <div class="nav-item" onclick="showPage('page-road-sandbox')" data-page="page-road-sandbox">
-    <span class="icon">路</span> 花東路網示範
-  </div>
-  <div class="nav-item" onclick="showPage('page-scenario')" data-page="page-scenario">
-    <span class="icon">🌀</span> 情境模擬
-  </div>
 
   <div class="sidebar-bottom">
     <a href="/" class="back-link">
@@ -1582,11 +1573,8 @@ const PAGE_TITLE = {
   'page-points':    '社區資源點',
   'page-needs':     '緊急需求',
   'page-kb':        '知識庫',
-  'page-scenario':  '情境模擬',
 };
 let allUsers = [];
-PAGE_TITLE['page-ontology'] = '物件關係模型';
-PAGE_TITLE['page-road-sandbox'] = '花東路網示範';
 
 // ════════════════════════════════════════════════
 // HTML escaping —— 使用者輸入（長者/志工姓名、地址、需求說明…）
@@ -1621,9 +1609,6 @@ function showPage(id) {
   if (id === 'page-points')    loadPoints();
   if (id === 'page-needs')     loadNeeds();
   if (id === 'page-kb')        loadKB();
-  if (id === 'page-ontology')  loadOntology();
-  if (id === 'page-road-sandbox') roadLoadSandbox();
-  if (id === 'page-scenario')  scnLoadStatus();
 }
 
 // ════════════════════════════════════════════════

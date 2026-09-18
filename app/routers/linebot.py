@@ -10,6 +10,10 @@ from app.config import settings
 from app.database import get_db
 from app.services import checkin as checkin_svc
 from app.services.line_notify import reply_text
+from app.services.task_commands import TaskWorkflowError
+from app.services.task_line_execution import TaskLineExecutionService
+from app.services.task_line_messages import reply_task_progress_message
+from app.services.task_line_security import TaskLineSecurityError
 from app.models.user import User
 
 router  = APIRouter()
@@ -439,6 +443,25 @@ def handle_postback(event: PostbackEvent):
     action   = data.get("action")
     line_uid = event.source.user_id
     db       = next(get_db())
+
+    if action == "task_v2":
+        try:
+            result = TaskLineExecutionService(db).execute(raw, line_uid)
+            reply_task_progress_message(
+                event.reply_token,
+                result.task,
+                result.assignment,
+                result.need,
+            )
+        except (TaskWorkflowError, TaskLineSecurityError) as exc:
+            if exc.status_code == 403:
+                message = "你不是目前受派志工，無法操作這項任務。"
+            elif exc.status_code == 409:
+                message = "任務狀態已更新，請使用最新的任務訊息。"
+            else:
+                message = "任務指令無效，請聯絡管理員。"
+            reply_text(event.reply_token, message)
+        return
 
     user = db.query(User).filter(User.line_uid == line_uid).first()
     if not user:

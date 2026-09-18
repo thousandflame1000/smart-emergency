@@ -13,6 +13,20 @@ def _get_api() -> MessagingApi:
     return MessagingApi(ApiClient(_line_config))
 
 
+def push_flex_message(line_uid: str, alt_text: str, contents: dict) -> None:
+    _get_api().push_message(PushMessageRequest(
+        to=line_uid,
+        messages=[FlexMessage(alt_text=alt_text, contents=contents)],
+    ))
+
+
+def reply_flex_message(reply_token: str, alt_text: str, contents: dict) -> None:
+    _get_api().reply_message(ReplyMessageRequest(
+        reply_token=reply_token,
+        messages=[FlexMessage(alt_text=alt_text, contents=contents)],
+    ))
+
+
 # ──────────────────────────────────────────────
 # 打卡訊息
 # ──────────────────────────────────────────────

@@ -101,6 +101,34 @@ def _load_sandbox(db: Session | None) -> dict[str, Any]:
     return sandbox
 
 
+def _latest_observation_states(db: Session | None) -> dict[str, str]:
+    if db is None:
+        return {}
+    from app.models.road_workflow import RoadObservation
+
+    rows = (
+        db.query(RoadObservation)
+        .order_by(
+            RoadObservation.observed_at,
+            RoadObservation.created_at,
+            RoadObservation.id,
+        )
+        .all()
+    )
+    return {row.road_segment_id: row.state for row in rows}
+
+
+def _apply_observation(override: dict[str, Any] | None, state: str | None) -> dict[str, Any]:
+    effective = dict(override or {})
+    if state == "OPEN":
+        effective.update(status="normal", multiplier=1.0)
+    elif state == "SLOW":
+        effective.update(status="slow", multiplier=STATUS_MULTIPLIER["slow"])
+    elif state == "BLOCKED":
+        effective.update(status="closed", multiplier=None)
+    return effective
+
+
 def _save_sandbox(db: Session, data: dict[str, Any]) -> None:
     row = db.query(SystemConfig).filter(SystemConfig.key == SANDBOX_KEY).first()
     payload = json.dumps(data, ensure_ascii=False, sort_keys=True)
@@ -181,6 +209,7 @@ def _edge_record(
 
 def _effective_edges(db: Session | None = None) -> list[dict[str, Any]]:
     sandbox = _load_sandbox(db)
+    observations = _latest_observation_states(db)
     nodes = _effective_nodes(db)
     deleted = set(sandbox["deleted_edges"])
     edges: list[dict[str, Any]] = []
@@ -189,14 +218,18 @@ def _effective_edges(db: Session | None = None) -> list[dict[str, Any]]:
         eid = edge_id(a, b)
         if eid in deleted:
             continue
-        rec = _edge_record(eid, a, b, nodes, sandbox["edge_overrides"].get(eid))
+        override = _apply_observation(
+            sandbox["edge_overrides"].get(eid), observations.get(eid)
+        )
+        rec = _edge_record(eid, a, b, nodes, override)
         if rec:
             edges.append(rec)
 
     for eid, item in sandbox["custom_edges"].items():
         if eid in deleted:
             continue
-        rec = _edge_record(eid, item["a"], item["b"], nodes, item, custom=True)
+        override = _apply_observation(item, observations.get(eid))
+        rec = _edge_record(eid, item["a"], item["b"], nodes, override, custom=True)
         if rec:
             edges.append(rec)
     return edges
@@ -312,8 +345,35 @@ def route_between_nodes(db: Session, start: str, end: str) -> dict[str, Any]:
     graph = _graph_from_edges(nodes, _effective_edges(db))
     distance, path = _dijkstra_path(start, end, graph)
     if distance == float("inf"):
-        return {"start": start, "end": end, "distance_km": None, "path": [], "reachable": False}
-    return {"start": start, "end": end, "distance_km": round(distance, 3), "path": path, "reachable": True}
+        return {
+            "start": start,
+            "end": end,
+            "distance_km": None,
+            "path": [],
+            "segment_ids": [],
+            "reachable": False,
+        }
+    return {
+        "start": start,
+        "end": end,
+        "distance_km": round(distance, 3),
+        "path": path,
+        "segment_ids": [edge_id(path[i], path[i + 1]) for i in range(len(path) - 1)],
+        "reachable": True,
+    }
+
+
+def current_road_state(db: Session, road_segment_id: str) -> str | None:
+    observation = _latest_observation_states(db).get(road_segment_id)
+    if observation:
+        return observation
+    edge = next(
+        (item for item in _effective_edges(db) if item["id"] == road_segment_id),
+        None,
+    )
+    if not edge:
+        return None
+    return {"normal": "OPEN", "slow": "SLOW", "closed": "BLOCKED"}[edge["status"]]
 
 
 def sandbox_snapshot(db: Session) -> dict[str, Any]:

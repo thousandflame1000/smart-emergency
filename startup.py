@@ -7,12 +7,13 @@ Railway / 生產環境啟動腳本
 import sys, os
 sys.path.insert(0, os.path.dirname(__file__))
 
-from app.database import engine, Base, SessionLocal
+from app.database import engine, SessionLocal
+from app.schema_migrations import ensure_additive_schema
 from app.models import user, care_relation, checkin, alert, resource, need, config, knowledge
 
 def run():
     print("[startup] 建立資料表...")
-    Base.metadata.create_all(bind=engine)
+    ensure_additive_schema(engine)
 
     db = SessionLocal()
     from app.models.user import User

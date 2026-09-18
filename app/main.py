@@ -8,11 +8,12 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 import os
 
-from app.database import engine, Base
+from app.database import engine
+from app.schema_migrations import ensure_additive_schema
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.rate_limit import limiter
 from app.demo_auth import DemoAuthMiddleware
-from app.routers import linebot, dashboard, resources, rag, scenario, ontology, road_network, workspace
+from app.routers import linebot, dashboard, resources, rag, scenario, ontology, road_network, workspace, tasks
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
@@ -21,7 +22,7 @@ import app.models.dispatch_event  # noqa: F401
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 啟動時
-    Base.metadata.create_all(bind=engine)
+    ensure_additive_schema(engine)
     # 生產環境：自動 seed + ingest（只在空 DB 執行）
     import os
     if os.getenv("APP_ENV", "development") == "production":
@@ -76,6 +77,7 @@ app.include_router(rag.router,       prefix="/api/rag",       tags=["RAG"])
 app.include_router(scenario.router,  prefix="/api/scenario",  tags=["Scenario"])
 app.include_router(ontology.router,  prefix="/api/ontology",  tags=["Ontology"])
 app.include_router(road_network.router, prefix="/api/road-network", tags=["Road Network"])
+app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(workspace.router, prefix="/api/workspaces", tags=["開放資料工作區"])
 
 
