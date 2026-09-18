@@ -31,7 +31,7 @@ def _ensure_postgresql_append_only_triggers(engine: Engine) -> None:
             CREATE OR REPLACE FUNCTION reject_task_workflow_event_mutation()
             RETURNS trigger AS $$
             BEGIN
-                RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
+                RAISE EXCEPTION '%% is append-only', TG_TABLE_NAME;
             END;
             $$ LANGUAGE plpgsql
             """
@@ -56,7 +56,7 @@ def _ensure_postgresql_append_only_triggers(engine: Engine) -> None:
             CREATE OR REPLACE FUNCTION reject_road_observation_mutation()
             RETURNS trigger AS $$
             BEGIN
-                RAISE EXCEPTION '% is append-only', TG_TABLE_NAME;
+                RAISE EXCEPTION '%% is append-only', TG_TABLE_NAME;
             END;
             $$ LANGUAGE plpgsql
             """

@@ -1,8 +1,10 @@
+import inspect as py_inspect
+import re
 from pathlib import Path
 
 from sqlalchemy import create_engine, inspect
 
-from app.schema_migrations import ensure_additive_schema
+from app.schema_migrations import _ensure_postgresql_append_only_triggers, ensure_additive_schema
 
 
 def test_additive_schema_upgrades_existing_task_table_idempotently():
@@ -41,3 +43,22 @@ def test_outbox_and_road_migrations_are_additive_and_reversible_definitions():
     assert "DROP TABLE IF EXISTS TASK_ROUTES" in road_down
     assert "DROP TABLE IF EXISTS ROAD_OBSERVATIONS" in road_down
     assert "DROP TABLE COMMUNITY_NEEDS" not in outbox_up + road_up
+
+
+def test_postgres_trigger_sql_has_no_unescaped_percent():
+    """Regression test for a real production incident.
+
+    _ensure_postgresql_append_only_triggers only runs when the engine dialect
+    is "postgresql" (never sqlite), so the sqlite-only test above never
+    exercises it. exec_driver_sql hands the string straight to psycopg2,
+    which uses pyformat paramstyle — a bare "%" in "RAISE EXCEPTION '% is
+    append-only'" reads as an incomplete placeholder and crashes app startup
+    with "immutabledict is not a sequence" the moment Postgres is the
+    dialect, i.e. the first deploy after this file changes. It must be
+    "%%" to survive that substitution. Static-check the source instead of
+    spinning up a real Postgres, which this test suite doesn't have.
+    """
+    source = py_inspect.getsource(_ensure_postgresql_append_only_triggers)
+    for block in re.findall(r'"""(.*?)"""', source, re.S):
+        unescaped = re.findall(r"(?<!%)%(?!%)", block)
+        assert not unescaped, f"unescaped '%' will break psycopg2 pyformat substitution: {block!r}"
