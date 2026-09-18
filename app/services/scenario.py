@@ -344,6 +344,16 @@ def reset(db: Session) -> dict:
     for r in db.query(CommunityResource).filter(CommunityResource.note == SCENARIO_TAG).all():
         db.delete(r)
     for u in db.query(User).filter(User.address.like(f"%{SCENARIO_TAG}%")).all():
+        # A need can point at a tagged resident without being tagged itself —
+        # e.g. an operator manually created one via the admin "+ 新增需求"
+        # form and picked a simulated resident from the requester dropdown.
+        # community_needs.requester_id is NOT NULL, so deleting that user
+        # without also clearing their needs makes SQLAlchemy's cascade try
+        # to null the column and crash reset()/start() with a 500 — which
+        # then makes every future reset()/start() call crash the same way,
+        # since the broken need never gets cleaned up. Catch it by
+        # requester_id too, not just by description tag.
+        db.query(CommunityNeed).filter(CommunityNeed.requester_id == u.id).delete(synchronize_session=False)
         db.query(Alert).filter(Alert.elderly_id == u.id).delete(synchronize_session=False)
         db.query(DailyCheckin).filter(DailyCheckin.elderly_id == u.id).delete(synchronize_session=False)
         db.delete(u)
