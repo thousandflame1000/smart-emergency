@@ -293,3 +293,69 @@ def test_my_needs_command_shows_status(db, monkeypatch):
     lb.handle_text(_FakeEvent("需要食物", "Uelder4"))
     lb.handle_text(_FakeEvent("我的需求", "Uelder4"))
     assert "食物" in replies[-1] and "待媒合" in replies[-1]
+
+
+class _FakeLocationMsg:
+    def __init__(self, latitude, longitude, address=None):
+        self.latitude = latitude
+        self.longitude = longitude
+        self.address = address
+
+
+class _FakeLocationEvent:
+    def __init__(self, latitude, longitude, uid, address=None, reply_token="tok"):
+        self.message = _FakeLocationMsg(latitude, longitude, address)
+        self.source = _FakeSource(uid)
+        self.reply_token = reply_token
+
+
+def test_share_location_updates_user_coordinates(db, monkeypatch):
+    replies = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    resident = User(name="陳小華", roles=["elderly"], line_uid="Uloc1")
+    db.add(resident); db.commit(); db.refresh(resident)
+    resident_id = str(resident.id)
+    db.close()
+
+    lb.handle_location(_FakeLocationEvent(24.151, 120.681, "Uloc1", address="台中市南區崇倫街88號"))
+    assert "已更新您的位置" in replies[-1]
+
+    db2 = SessionLocal()
+    updated = db2.query(User).filter(User.id == resident_id).first()
+    assert updated.lat == 24.151 and updated.lng == 120.681
+    assert updated.address == "台中市南區崇倫街88號"
+    db2.close()
+
+
+def test_share_location_backfills_own_open_needs_missing_coordinates(db, monkeypatch):
+    """今天實際卡住好幾小時的根因：沒座標的需求永遠配不到——分享位置
+    時應該順手把自己名下沒座標的待處理需求一起補上。"""
+    replies = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    resident = User(name="李小美", roles=["elderly"], line_uid="Uloc2")
+    db.add(resident); db.commit(); db.refresh(resident)
+    resident_id = str(resident.id)
+    stuck_need = CommunityNeed(requester_id=resident.id, need_type="water",
+                                description="需要水", address="沒填座標", urgency=3, status="open")
+    other_need = CommunityNeed(requester_id=resident.id, need_type="food",
+                                description="需要食物", lat=1.0, lng=1.0, urgency=3, status="open")
+    db.add_all([stuck_need, other_need]); db.commit()
+    stuck_id, other_id = str(stuck_need.id), str(other_need.id)
+    db.close()
+
+    lb.handle_location(_FakeLocationEvent(24.15, 120.68, "Uloc2"))
+    assert "補上 1 筆" in replies[-1]
+
+    db2 = SessionLocal()
+    fixed = db2.query(CommunityNeed).filter(CommunityNeed.id == stuck_id).first()
+    untouched = db2.query(CommunityNeed).filter(CommunityNeed.id == other_id).first()
+    assert fixed.lat == 24.15 and fixed.lng == 120.68
+    assert untouched.lat == 1.0, "已經有座標的需求不該被位置分享覆蓋"
+    db2.close()
+
+
+def test_share_location_without_registration_asks_to_register_first(db, monkeypatch):
+    replies = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    lb.handle_location(_FakeLocationEvent(24.15, 120.68, "UlocUnknown"))
+    assert "先傳一句話" in replies[-1]

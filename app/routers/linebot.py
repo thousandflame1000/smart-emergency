@@ -3,7 +3,7 @@ from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import (
     MessageEvent, PostbackEvent,
-    TextMessageContent,
+    TextMessageContent, LocationMessageContent,
 )
 
 from app.config import settings
@@ -215,6 +215,7 @@ def handle_text(event: MessageEvent):
                    "・「狀態」— 查看系統模式\n"
                    "・「需要水／需要食物／需要藥」— 提出物資需求\n"
                    "・「我的需求」— 查看求助進度\n"
+                   "・點選 LINE 的「＋」→「位置資訊」分享目前位置 — 更新您的座標\n"
                    f"・「需要幫忙」— 觸發緊急求助（會先跟您確認一次）{vol_extra}")
         return
 
@@ -502,6 +503,48 @@ def handle_text(event: MessageEvent):
                "收到您的訊息了 😊\n"
                "如需幫忙請按打卡訊息的「需要幫忙」按鈕。\n"
                "傳「幫助」可查看可用指令。")
+
+
+# ──────────────────────────────────────────────
+# 位置訊息（LINE 原生「分享位置」，點一下就傳真實 GPS）
+# ──────────────────────────────────────────────
+# 這是今天實際卡住好幾小時的根因在使用者這端的解法：管理員後台的
+# 地址欄位再怎麼自動定位，都比不上請使用者自己在 LINE 裡點「分享
+# 位置」——不用長者記得自己家在哪個路口，也不用猜地址打對字，直接
+# 拿到準確座標。LINE 這個訊息類型是官方原生功能，不需要額外服務。
+@handler.add(MessageEvent, message=LocationMessageContent)
+def handle_location(event: MessageEvent):
+    line_uid = event.source.user_id
+    db = next(get_db())
+    user = db.query(User).filter(User.line_uid == line_uid).first()
+    if not user:
+        reply_text(event.reply_token, "請先傳一句話讓系統幫您註冊帳號，再分享位置。")
+        return
+
+    user.lat = event.message.latitude
+    user.lng = event.message.longitude
+    if event.message.address:
+        user.address = event.message.address
+
+    # 之前分享位置前提出的求助，如果當時沒有座標而永遠配不到（今天
+    # 實際發生過的狀況），這裡順手一起補上，不用使用者自己知道要
+    # 重新提出。
+    from app.models.need import CommunityNeed
+    backfilled = (
+        db.query(CommunityNeed)
+        .filter(
+            CommunityNeed.requester_id == user.id,
+            CommunityNeed.status == "open",
+            CommunityNeed.lat.is_(None),
+        )
+        .update({"lat": user.lat, "lng": user.lng}, synchronize_session=False)
+    )
+    db.commit()
+
+    note = f"\n\n已一併補上 {backfilled} 筆先前缺座標的求助，現在可以正常配對了。" if backfilled else ""
+    reply_text(event.reply_token,
+               f"✅ 已更新您的位置{'：' + event.message.address if event.message.address else ''}\n"
+               f"之後的求助跟派遣都會用這個位置計算距離。{note}")
 
 
 # ──────────────────────────────────────────────
