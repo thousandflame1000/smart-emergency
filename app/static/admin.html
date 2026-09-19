@@ -134,6 +134,7 @@ body {
 .badge-green  { background: rgba(45,212,167,.1);  color: var(--success); border-color: rgba(45,212,167,.3); }
 .badge-red    { background: rgba(245,69,92,.1);   color: var(--danger);  border-color: rgba(245,69,92,.3); }
 .badge-amber  { background: rgba(244,183,64,.1);  color: var(--warning); border-color: rgba(244,183,64,.3); }
+.is-hidden { display: none !important; }
 .badge-gray   { background: rgba(255,255,255,.04); color: var(--text-dim); border-color: var(--border); }
 .badge-blue   { background: rgba(34,211,238,.1);  color: var(--primary); border-color: rgba(34,211,238,.3); }
 .badge-purple { background: rgba(196,140,255,.1); color: #c48cff; border-color: rgba(196,140,255,.3); }
@@ -484,7 +485,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <span class="icon">👴</span> 長者管理
   </div>
   <div class="nav-item" onclick="showPage('page-volunteers')" data-page="page-volunteers">
-    <span class="icon">🙋</span> 志工 / 家屬
+    <span class="icon">🙋</span> 志工 / 家屬 <span id="nav-volunteer-app-badge" class="badge badge-amber is-hidden" style="margin-left:4px"></span>
   </div>
   <div class="nav-item" onclick="showPage('page-relations')" data-page="page-relations">
     <span class="icon">🔗</span> 照護關係
@@ -568,6 +569,23 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-volunteers">
       <div class="stat-strip" id="volunteers-stats"></div>
+      <div class="card is-hidden" id="volunteer-applications-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">待審核志工申請</div>
+            <div class="card-subtitle">從 LINE 傳「志工申請 姓名 電話 服務區域」送出的申請，核准後才會取得志工權限並自動通知申請人</div>
+          </div>
+          <span class="badge badge-amber" id="volunteer-applications-count"></span>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr><th>姓名</th><th>電話</th><th>服務區域</th><th>申請時間</th><th>操作</th></tr>
+            </thead>
+            <tbody id="volunteer-applications-tbody"></tbody>
+          </table>
+        </div>
+      </div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -1243,11 +1261,12 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label">需求地址 <span class="req">*</span></label>
-        <input type="text" class="form-control" id="need-address" placeholder="台中市南區崇倫街…">
+        <input type="text" class="form-control" id="need-address" placeholder="台中市南區崇倫街…" oninput="scheduleGeocode('need')" onblur="geocodeNow('need')">
+        <span class="form-hint" id="need-geocode-status"></span>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度</label>
+          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="need-lat" placeholder="24.1234">
         </div>
         <div class="form-group">
@@ -1344,7 +1363,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label">地址</label>
-        <input type="text" class="form-control" id="user-address" placeholder="台中市南區…">
+        <input type="text" class="form-control" id="user-address" placeholder="台中市南區…" oninput="scheduleGeocode('user')" onblur="geocodeNow('user')">
+        <span class="form-hint" id="user-geocode-status"></span>
       </div>
       <div class="form-group">
         <label class="form-label">LINE User ID</label>
@@ -1353,7 +1373,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度</label>
+          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="user-lat" placeholder="24.1234">
         </div>
         <div class="form-group">
@@ -1446,11 +1466,12 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label">地址</label>
-        <input type="text" class="form-control" id="pt-address" placeholder="台中市南區…">
+        <input type="text" class="form-control" id="pt-address" placeholder="台中市南區…" oninput="scheduleGeocode('pt')" onblur="geocodeNow('pt')">
+        <span class="form-hint" id="pt-geocode-status"></span>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度</label>
+          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="pt-lat" placeholder="24.1234">
         </div>
         <div class="form-group">
@@ -1533,7 +1554,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label">地址</label>
-        <input type="text" class="form-control" id="res-address">
+        <input type="text" class="form-control" id="res-address" oninput="scheduleGeocode('res')" onblur="geocodeNow('res')">
+        <span class="form-hint" id="res-geocode-status"></span>
       </div>
       <div class="form-group">
         <label class="form-label">備註</label>
@@ -1541,7 +1563,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度</label>
+          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="res-lat">
         </div>
         <div class="form-group">
@@ -1609,6 +1631,52 @@ function showPage(id) {
   if (id === 'page-points')    loadPoints();
   if (id === 'page-needs')     loadNeeds();
   if (id === 'page-kb')        loadKB();
+  if (id === 'page-volunteers') loadVolunteerApplications();
+}
+
+// ════════════════════════════════════════════════
+// 志工自助申請審核
+// ════════════════════════════════════════════════
+async function loadVolunteerApplications() {
+  const card = document.getElementById('volunteer-applications-card');
+  try {
+    const apps = await fetch('/api/dashboard/volunteer-applications?status=pending').then(r => r.json());
+    card.classList.toggle('is-hidden', !apps.length);
+    document.getElementById('volunteer-applications-count').textContent = `${apps.length} 筆待審`;
+    const navBadge = document.getElementById('nav-volunteer-app-badge');
+    navBadge.textContent = apps.length || '';
+    navBadge.classList.toggle('is-hidden', !apps.length);
+    document.getElementById('volunteer-applications-tbody').innerHTML = apps.map(a => `
+      <tr>
+        <td><strong>${esc(a.name)}</strong></td>
+        <td class="muted">${esc(a.phone) || '—'}</td>
+        <td class="muted">${esc(a.service_area) || '—'}</td>
+        <td class="muted" style="white-space:nowrap">${esc((a.created_at || '').slice(0,16).replace('T',' '))}</td>
+        <td style="display:flex;gap:6px">
+          <button class="btn btn-success btn-sm" onclick="decideVolunteerApplication('${a.id}','approve')">✅ 核准</button>
+          <button class="btn btn-ghost-danger btn-sm" onclick="decideVolunteerApplication('${a.id}','reject')">拒絕</button>
+        </td>
+      </tr>`).join('');
+  } catch (e) {
+    card.classList.add('is-hidden');
+  }
+}
+
+async function decideVolunteerApplication(id, decision) {
+  let note = '';
+  if (decision === 'reject') {
+    note = prompt('請輸入拒絕原因（會直接顯示給管理員自己看，不會透露給申請人）：') || '';
+  }
+  const params = new URLSearchParams({ decision });
+  if (note) params.set('note', note);
+  const res = await fetch(`/api/dashboard/volunteer-applications/${id}/decision?${params}`, { method: 'POST' });
+  const data = await res.json();
+  if (!res.ok) { alert('審核失敗：' + (data.detail || res.status)); return; }
+  alert(decision === 'approve'
+    ? (data.volunteer_notified ? '✅ 已核准，申請人已收到 LINE 通知。' : '✅ 已核准（申請人尚未綁定 LINE，通知失敗，請自行聯繫）')
+    : '已拒絕，申請人已收到 LINE 通知。');
+  await loadVolunteerApplications();
+  loadAll();
 }
 
 // ════════════════════════════════════════════════
@@ -1642,7 +1710,11 @@ async function loadAll() {
     ]);
     allUsers = users;
     renderElderly(users.filter(u => u.roles.includes('elderly')));
-    renderVolunteers(users.filter(u => !u.roles.includes('elderly')));
+    // "!includes('elderly')" 曾經漏掉長者本人兼志工的情況（例如志工
+    // 自助申請核准後仍保留 elderly 角色）——改成明確列出這頁該顯示
+    // 的角色，跟長者管理頁分流靠的是「有沒有志工/家屬/管理員身份」，
+    // 不是「不是長者」。
+    renderVolunteers(users.filter(u => ['volunteer', 'family', 'admin'].some(r => u.roles.includes(r))));
     renderResources(resources);
     populateOwnerSelect(users.filter(u => u.roles.includes('volunteer') || u.roles.includes('admin')));
   } catch(e) {
@@ -3313,6 +3385,7 @@ setInterval(() => {
 // Init
 // ════════════════════════════════════════════════
 loadAll();
+loadVolunteerApplications();
 </script>
 </body>
 </html>

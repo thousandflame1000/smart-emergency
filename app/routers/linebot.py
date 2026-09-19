@@ -208,6 +208,36 @@ def handle_text(event: MessageEvent):
             reply_text(event.reply_token, "\n".join(lines))
         return
 
+    # ── 志工自助申請（申請自助化，審核仍留給管理員）──────────
+    # 志工一旦通過就能看到長者地址與需求細節，這道人工關卡是刻意
+    # 保留的安全閘，不是要拿掉；拿掉的是「申請完全黑箱、不知道審
+    # 到哪」這件事。核准/拒絕都由 volunteer_application.decide()
+    # 主動推播通知申請者。
+    VOLUNTEER_APPLY_PREFIXES = ["志工申請", "申請志工", "我要當志工"]
+    matched_apply_prefix = next((p for p in VOLUNTEER_APPLY_PREFIXES if text.startswith(p)), None)
+    if matched_apply_prefix is not None:
+        if is_vol:
+            reply_text(event.reply_token, "您已經是志工／家屬／管理員了，不用重新申請。")
+            return
+        rest = text[len(matched_apply_prefix):].strip()
+        if not rest:
+            reply_text(event.reply_token,
+                       "請用以下格式：\n志工申請 [姓名] [電話] [服務區域]\n\n"
+                       "範例：\n志工申請 陳小美 0912345678 台中市南區")
+            return
+        parts = rest.split()
+        applicant_name = parts[0]
+        applicant_phone = parts[1] if len(parts) > 1 else None
+        service_area = " ".join(parts[2:]) if len(parts) > 2 else None
+        from app.services.volunteer_application import submit
+        application = submit(db, line_uid=line_uid, name=applicant_name,
+                              phone=applicant_phone, service_area=service_area)
+        reply_text(event.reply_token,
+                   f"📋 已收到您的志工申請，{applicant_name}！\n"
+                   f"管理員審核後會透過 LINE 通知您結果，不用再重複申請。\n"
+                   f"申請編號：{str(application.id)[:8]}")
+        return
+
     # ── 家屬代理登記長者（降低長者本人須操作 LINE 的門檻）──────
     # 計畫書「現有限制與改善方向」承諾的短期方向：家屬協助長者加入，
     # 不需要長者本人先學會用 LINE，也不需要每次都找管理員手動建檔。

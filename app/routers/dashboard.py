@@ -430,3 +430,24 @@ def alert_history(limit: int = 50, db: Session = Depends(get_db)):
         }
         for a in alerts
     ]
+
+
+# ──────────────────────────────────────────────
+# 志工自助申請審核——見 app/services/volunteer_application.py
+# ──────────────────────────────────────────────
+@router.get("/volunteer-applications")
+def list_volunteer_applications(status: str = "pending", db: Session = Depends(get_db)):
+    from app.services.volunteer_application import list_applications
+    return list_applications(db, status=status)
+
+
+@router.post("/volunteer-applications/{application_id}/decision")
+def decide_volunteer_application(
+    application_id: str,
+    decision: str,
+    reviewer_id: str | None = None,
+    note: str | None = None,
+    db: Session = Depends(get_db),
+):
+    from app.services.volunteer_application import decide
+    return decide(db, application_id, decision=decision, reviewer_id=reviewer_id, note=note)
