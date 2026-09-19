@@ -524,10 +524,19 @@ def auto_dispatch() -> dict:
 
             if best is None:
                 skipped += 1
+                # "無相符物資" 這個單一理由曾經逼管理員自己一筆筆點「查看
+                # 詳情」才查得出來——今天實際卡住好幾個小時的根因就是
+                # 「這筆需求根本沒有座標，永遠配不到，不管重試幾次」，
+                # 跟「有座標但單純太遠／沒有同類型物資」是完全不同的
+                # 處置方式，前者要去補地址，後者才是等資源或擴大範圍。
+                if need.lat is None or need.lng is None:
+                    reason = "缺少座標，需要先補地址才配得到（不是資源不足）"
+                else:
+                    reason = "距離過遠或沒有相符類型的可用物資"
                 details.append({
                     "need_id": str(need.id),
                     "result": "skipped",
-                    "reason": "無相符物資",
+                    "reason": reason,
                     "vulnerability": round(vulnerability, 1),
                 })
                 continue
@@ -1015,6 +1024,16 @@ def preview_candidates(need_id: str, db: Session) -> dict:
                 "dist_km":  round(c.dist_km, 2) if not math.isinf(c.dist_km) else None,
                 "id":       c.resource_id or c.point_id,
                 "breakdown": {k: round(v, 1) for k, v in c.breakdown.items()},
+                # 管理員按「確認派遣」之前就該知道這筆會不會真的發出 LINE
+                # 通知——之前是按下去才跳「志工未綁定 LINE」，等於白做工
+                # 才發現。資源點（固定設施）本來就不靠 LINE 通知，維持
+                # 直接標記完成，跟「志工沒綁 LINE」是兩種不同狀況，不能
+                # 都顯示成一樣的警告。
+                "notify_channel": (
+                    "auto" if c.source == "resource_point"
+                    else "line" if c.vol_line_uid
+                    else "line_unbound"
+                ),
             }
             for c in cands[:20]
         ],

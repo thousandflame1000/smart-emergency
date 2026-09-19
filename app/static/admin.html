@@ -2288,7 +2288,17 @@ async function runDispatch(btn) {
     if (data.reason === 'not_emergency') {
       alert('⚠️ 目前為日常模式，請先從儀表板切換至緊急模式');
     } else {
-      alert(`媒合完成！\n⏳ 待確認建議：${data.suggested} 筆（需到「緊急需求」頁確認才會通知志工）\n✅ 資源點直接媒合：${data.matched} 筆\n⏭️ 跳過：${data.skipped} 筆`);
+      // 曾經「跳過 N 筆」只給一個數字，管理員要自己一筆筆點「查看詳情」
+      // 才查得出原因——這裡直接把後端已經算好的 details 攤開分組顯示，
+      // 不用再逐筆點。
+      let summary = `媒合完成！\n⏳ 待確認建議：${data.suggested} 筆（需到「緊急需求」頁確認才會通知志工）\n✅ 資源點直接媒合：${data.matched} 筆\n⏭️ 跳過：${data.skipped} 筆`;
+      const skippedDetails = (data.details || []).filter(d => d.result === 'skipped');
+      if (skippedDetails.length) {
+        const byReason = {};
+        skippedDetails.forEach(d => { byReason[d.reason] = (byReason[d.reason] || 0) + 1; });
+        summary += '\n\n跳過原因：\n' + Object.entries(byReason).map(([reason, n]) => `・${reason}：${n} 筆`).join('\n');
+      }
+      alert(summary);
       loadAll();
     }
   } catch(e) {
@@ -2650,12 +2660,19 @@ async function showCandidates(needId) {
     const candidateHtml = cands.length ? `
       <table class="tbl" style="margin:8px 0">
         <thead><tr>
-          <th>評分</th><th>來源</th><th>名稱</th><th>志工/資源點</th><th>距離</th><th>操作</th>
+          <th>評分</th><th>來源</th><th>名稱</th><th>志工/資源點</th><th>距離</th><th>通知方式</th><th>操作</th>
         </tr></thead>
         <tbody>
           ${cands.map((c, i) => { const bd = c.breakdown || {}; const tip =
               `緊急度 +${bd.urgency_pts}｜脆弱度 +${bd.vulnerability_pts}｜類型 +${bd.affinity_pts}｜`
             + `等待 +${bd.wait_pts}｜距離 -${bd.dist_penalty}｜負荷 -${bd.load_penalty}`;
+            // 之前是按下「確認派遣」才跳出「志工未綁定 LINE」，等於白
+            // 做工才知道——這裡在候選清單就先標出來，選之前就看得到。
+            const notifyHtml = c.notify_channel === 'auto'
+              ? '<span class="badge badge-gray" title="固定設施媒合不透過 LINE 通知，會直接標記完成">🏢 自動完成</span>'
+              : c.notify_channel === 'line'
+              ? '<span class="badge badge-green">📱 會發 LINE 任務卡</span>'
+              : '<span class="badge badge-red" title="這位志工還沒綁定 LINE，確認派遣後系統不會發出任何通知，需要您自行聯繫">⚠️ 未綁定 LINE</span>';
             return `
             <tr style="${i===0?'background:rgba(45,212,167,.06)':''}">
               <td><strong style="color:${i===0?'var(--success)':'inherit'};cursor:help" title="${esc(tip)}">${c.score}</strong></td>
@@ -2663,6 +2680,7 @@ async function showCandidates(needId) {
               <td>${esc(c.name)}</td>
               <td class="muted">${esc(c.vol)}</td>
               <td class="muted">${c.dist_km != null ? c.dist_km + ' km' : '無座標'}</td>
+              <td>${notifyHtml}</td>
               <td>
                 ${c.source==='resource'
                   ? `<button class="btn btn-success btn-sm" onclick="matchNeed('${needId}','${c.id}')">媒合</button>`

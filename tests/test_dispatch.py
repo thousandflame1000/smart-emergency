@@ -144,3 +144,50 @@ def test_confirm_dispatch_rejects_non_suggested_need(db):
     out = dispatch.confirm_dispatch(need_id, db2)
     assert "error" in out
     db2.close()
+
+
+def test_preview_candidates_flags_unbound_line_before_confirm(db):
+    """曾經是按下「確認派遣」才跳出「志工未綁定 LINE」，管理員白做工
+    才知道——候選清單本身就該先標出來。"""
+    vol_no_line = User(name="志工無LINE", roles=["volunteer"], lat=24.15, lng=120.68)
+    db.add(vol_no_line); db.commit(); db.refresh(vol_no_line)
+    res = CommunityResource(owner_id=vol_no_line.id, resource_type="water", name="沒綁LINE的水",
+                             lat=24.15, lng=120.68, is_available=True)
+    db.add(res); db.commit()
+    elder = User(name="長者", roles=["elderly"], lat=24.151, lng=120.681)
+    db.add(elder); db.commit(); db.refresh(elder)
+    need = CommunityNeed(requester_id=elder.id, need_type="water", address="測試",
+                          lat=24.151, lng=120.681, urgency=3)
+    db.add(need); db.commit()
+
+    preview = dispatch.preview_candidates(str(need.id), db)
+    cand = preview["candidates"][0]
+    assert cand["notify_channel"] == "line_unbound"
+
+
+def test_preview_candidates_flags_bound_line_volunteer(db):
+    need_id, _ = _make_scenario(db)
+    preview = dispatch.preview_candidates(need_id, db)
+    cand = preview["candidates"][0]
+    assert cand["notify_channel"] == "line", "志工已綁 LINE 應該直接標示會發任務卡"
+
+
+def test_auto_dispatch_skip_reason_distinguishes_missing_coordinates(db, monkeypatch):
+    """今天實際卡住好幾個小時的根因：「沒座標永遠配不到」跟「有座標
+    但太遠/沒相符類型」需要不同的處置方式，回傳理由不能混成同一句。"""
+    monkeypatch.setattr(dispatch, "send_task_message", lambda *a, **k: None)
+    elder_no_coords = User(name="沒填地址的長者", roles=["elderly"])
+    elder_far = User(name="太遠的長者", roles=["elderly"], lat=25.5, lng=121.9)
+    db.add_all([elder_no_coords, elder_far]); db.commit()
+    need_no_coords = CommunityNeed(requester_id=elder_no_coords.id, need_type="water",
+                                    address="沒填座標", urgency=3)
+    need_far = CommunityNeed(requester_id=elder_far.id, need_type="water",
+                              address="太遠了", lat=25.5, lng=121.9, urgency=1)
+    db.add_all([need_no_coords, need_far])
+    db.add(SystemConfig(key="mode", value="emergency"))
+    db.commit()
+
+    result = dispatch.auto_dispatch()
+    reasons = {d["need_id"]: d["reason"] for d in result["details"] if d["result"] == "skipped"}
+    assert "缺少座標" in reasons[str(need_no_coords.id)]
+    assert "缺少座標" not in reasons.get(str(need_far.id), "")
