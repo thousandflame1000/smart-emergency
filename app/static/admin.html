@@ -880,6 +880,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <button class="filter-btn" data-status="suggested" onclick="filterNeeds(this,'suggested')">⏳ 待確認</button>
             <button class="filter-btn" data-status="matched" onclick="filterNeeds(this,'matched')">已媒合</button>
             <button class="filter-btn" data-status="fulfilled" onclick="filterNeeds(this,'fulfilled')">已完成</button>
+            <button class="filter-btn" data-status="cancelled" onclick="filterNeeds(this,'cancelled')">已取消</button>
           </div>
           <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
             <span style="font-size:11px;color:var(--muted)">緊急度：</span>
@@ -2510,21 +2511,27 @@ let needStatusFilter = '';
 
 async function loadNeeds() {
   try {
-    const [open, suggested, matched, fulfilled] = await Promise.all([
+    // "取消" 按下去之後之前完全沒有地方看得到——這裡只抓 open/
+    // suggested/matched/fulfilled 四種狀態，cancelled 從來沒被 fetch
+    // 過，等於取消跟刪除一樣，只是換一種方式讓垃圾資料永遠消失在
+    // 管理員視野外，不算真的解決「洗版」問題。補上第五種狀態。
+    const [open, suggested, matched, fulfilled, cancelled] = await Promise.all([
       fetch('/api/resources/needs?status=open').then(r => r.json()),
       fetch('/api/resources/needs?status=suggested').then(r => r.json()),
       fetch('/api/resources/needs?status=matched').then(r => r.json()),
       fetch('/api/resources/needs?status=fulfilled').then(r => r.json()),
+      fetch('/api/resources/needs?status=cancelled').then(r => r.json()),
     ]);
-    allNeeds = [...open, ...suggested, ...matched, ...fulfilled];
+    allNeeds = [...open, ...suggested, ...matched, ...fulfilled, ...cancelled];
     document.getElementById('needs-stats').innerHTML = `
       <div class="stat-tile"><div class="stat-tile-label">待媒合</div><div class="stat-tile-value ${open.length>0?'warn':''}">${open.length}</div></div>
       <div class="stat-tile"><div class="stat-tile-label">待確認</div><div class="stat-tile-value ${suggested.length>0?'danger':''}">${suggested.length}</div></div>
       <div class="stat-tile"><div class="stat-tile-label">已媒合</div><div class="stat-tile-value">${matched.length}</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">已完成</div><div class="stat-tile-value ok">${fulfilled.length}</div></div>`;
+      <div class="stat-tile"><div class="stat-tile-label">已完成</div><div class="stat-tile-value ok">${fulfilled.length}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">已取消</div><div class="stat-tile-value">${cancelled.length}</div></div>`;
     const lbl = document.getElementById('needs-count-label');
     if (lbl) lbl.textContent =
-      `待媒合 ${open.length} 筆 · 待確認 ${suggested.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆`;
+      `待媒合 ${open.length} 筆 · 待確認 ${suggested.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆 · 已取消 ${cancelled.length} 筆`;
     renderNeeds(allNeeds);
   } catch(e) {
     document.getElementById('needs-tbody').innerHTML =
@@ -2616,7 +2623,10 @@ function renderNeeds(data) {
       </td>
       <td>
         ${n.status === 'open'
-          ? `<button class="btn btn-ghost-danger btn-sm" onclick="cancelNeed('${n.id}')">取消</button>`
+          ? `<button class="btn btn-ghost-danger btn-sm" onclick="cancelNeed('${n.id}')">取消</button>
+             <button class="btn btn-ghost-danger btn-sm" onclick="deleteNeed('${n.id}')" title="永久刪除，只有還沒進入派遣流程的需求才能刪">🗑</button>`
+          : n.status === 'cancelled'
+          ? `<button class="btn btn-ghost-danger btn-sm" onclick="deleteNeed('${n.id}')" title="永久刪除">🗑 刪除</button>`
           : ''}
       </td>
     </tr>
@@ -2740,6 +2750,14 @@ async function cancelNeed(needId) {
   if (!confirm('確定取消此需求？')) return;
   // PUT status=cancelled
   await fetch(`/api/resources/needs/${needId}?status=cancelled`, { method: 'PUT' }).catch(() => {});
+  loadNeeds();
+}
+
+async function deleteNeed(needId) {
+  if (!confirm('永久刪除這筆需求？此動作無法復原。')) return;
+  const res = await fetch(`/api/resources/needs/${needId}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert('刪除失敗：' + (data.detail || res.status)); return; }
   loadNeeds();
 }
 

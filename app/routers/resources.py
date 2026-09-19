@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
@@ -215,6 +216,37 @@ def update_need_status(need_id: str, status: str, db: Session = Depends(get_db))
     need.status = status
     db.commit()
     return {"message": "更新成功"}
+
+
+@router.delete("/needs/{need_id}")
+def delete_need(need_id: str, db: Session = Depends(get_db)):
+    """永久刪除一筆需求，只允許還沒真的進入現場流程的狀態。
+
+    "取消"（PUT status=cancelled）之前是唯一的收尾動作，垃圾測試資料
+    （例如缺座標、地址打"1"這種永遠配不到的紀錄）會一直留在清單裡
+    洗版，沒有真正移除的辦法。suggested/matched/fulfilled 已經牽涉
+    真實的派遣決策與稽核紀錄，刻意不讓刪，只能走取消保留歷史。
+    """
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        raise HTTPException(status_code=404, detail="Not found")
+    if need.status not in ("open", "cancelled"):
+        raise HTTPException(
+            status_code=409,
+            detail=f"狀態為「{need.status}」的需求已進入派遣流程，不能刪除，只能取消以保留紀錄。",
+        )
+    try:
+        db.delete(need)
+        db.commit()
+    except IntegrityError:
+        # Task Workflow V2（TASK_WORKFLOW_V2）啟用時，即便需求本身回到
+        # open/cancelled，底下可能還留著 append-only 的 Task/Proposal
+        # 稽核紀錄（ondelete=RESTRICT，刻意不讓連帶砍掉）——今天才真的
+        # 撞過一次「刪使用者連帶被資料庫擋下但程式沒接住、變成 500」，
+        # 這裡明確接住轉成乾淨的錯誤，不要再重演一次。
+        db.rollback()
+        raise HTTPException(status_code=409, detail="這筆需求仍有派遣稽核紀錄關聯，無法刪除，只能取消。")
+    return {"message": "已永久刪除"}
 
 
 @router.get("/needs/{need_id}/events")
