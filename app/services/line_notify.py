@@ -344,6 +344,21 @@ def reply_text(reply_token: str, text: str) -> None:
     ))
 
 
+def reply_text_with_location_prompt(reply_token: str, text: str) -> None:
+    """Text reply plus a one-tap "share my location" quick-reply button.
+
+    The single most common reason a request could never be matched was that the
+    person's coordinates were unknown. LINE lets the chat itself ask for a location
+    with one tap, so ask right where the problem shows up instead of expecting the
+    user to remember a menu path."""
+    from linebot.v3.messaging import LocationAction, QuickReply, QuickReplyItem
+    message = TextMessage(
+        text=text,
+        quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="📍 分享我的位置"))]),
+    )
+    _get_api().reply_message(ReplyMessageRequest(reply_token=reply_token, messages=[message]))
+
+
 # ──────────────────────────────────────────────
 # 志工物資登記選單
 # ──────────────────────────────────────────────

@@ -34,3 +34,48 @@ def db():
         yield session
     finally:
         session.close()
+
+
+class LineOutbox:
+    """Stands in for the LINE Messaging API in every test.
+
+    Without this, any code path that pushes a LINE message (notifying a requester,
+    a volunteer, a family contact...) would try to reach api.line.me with a dummy
+    token — slow, flaky, and it would hide whether the right people were told.
+    Tests can assert on ``line_outbox.sent`` (list of (kind, to, message))."""
+
+    def __init__(self):
+        self.sent = []
+
+    def push_message(self, request):
+        for message in request.messages:
+            self.sent.append(("push", request.to, message))
+
+    def reply_message(self, request):
+        for message in request.messages:
+            self.sent.append(("reply", None, message))
+
+    def get_profile(self, uid):
+        class _Profile:
+            display_name = "測試用戶"
+        return _Profile()
+
+    def texts(self, to=None):
+        return [getattr(m, "text", "") for kind, target, m in self.sent
+                if hasattr(m, "text") and (to is None or target == to)]
+
+
+@pytest.fixture(autouse=True)
+def line_outbox(monkeypatch):
+    from app.services import line_notify
+    box = LineOutbox()
+    monkeypatch.setattr(line_notify, "_get_api", lambda: box)
+    return box
+
+
+@pytest.fixture(autouse=True)
+def no_real_geocoding(monkeypatch):
+    """Nominatim is a real network call with a 1s throttle; tests must never hit it.
+    Individual tests can override with monkeypatch.setattr(places, "search_places", ...)."""
+    from app.services import places
+    monkeypatch.setattr(places, "search_places", lambda query: [])

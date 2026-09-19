@@ -778,7 +778,7 @@ function renderAlerts(data) {
         <div class="alert-name">${esc(a.elderly)}</div>
         <div class="alert-type">${esc(typeLabel[a.alert_type]||a.alert_type)}</div>
       </div>
-      <div class="alert-time">${(a.created_at||'').slice(11,16)}</div>
+      <div class="alert-time">${twClock(a.created_at)}</div>
     </div>`;
   }).join('');
 }
@@ -803,6 +803,22 @@ function renderResources(data) {
 }
 
 // ── Load ───────────────────────────────────
+// 資料庫時間是 UTC，畫面顯示一律轉成台灣時間（+8）。
+function twDate(v) {
+  if (!v) return null;
+  const iso = String(v).replace(' ', 'T');
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+  return isNaN(d) ? null : new Date(d.getTime() + 8 * 3600 * 1000);
+}
+function twClock(v) {
+  const t = twDate(v);
+  return t ? String(t.getUTCHours()).padStart(2, '0') + ':' + String(t.getUTCMinutes()).padStart(2, '0') : '';
+}
+function twStamp(v) {
+  const t = twDate(v);
+  return t ? String(t.getUTCMonth() + 1).padStart(2, '0') + '-' + String(t.getUTCDate()).padStart(2, '0') + ' ' + twClock(v) : '';
+}
+
 async function loadAll() {
   try {
     const [summary, elderly, resources, alerts] = await Promise.all([
@@ -1045,7 +1061,7 @@ function renderDspNeeds(needs) {
         <div class="need-addr">📍 ${esc(n.address) || '未填地址'}</div>
       </div>
       <div class="need-actions">
-        <span style="font-size:10px;color:var(--muted)">${n.created_at?.slice(5,16)||''}</span>
+        <span style="font-size:10px;color:var(--muted)">${twStamp(n.created_at)}</span>
       </div>
     </div>
     <div class="cand-panel" id="cand-${n.id}" style="display:none"></div>

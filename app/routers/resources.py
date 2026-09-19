@@ -4,6 +4,11 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 import json
 
+from app.errors import ApiError, raise_if_error
+from app.validation import (
+    NEED_TYPES, RESOURCE_TYPES, check_choice, check_coords, check_name, check_urgency,
+)
+from app.timeutil import now_utc, today_tw
 from app.database import get_db
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
@@ -61,15 +66,20 @@ def create_resource(
     note: str | None = None,
     db: Session = Depends(get_db),
 ):
-    from fastapi import HTTPException
+    name = check_name(name, what="物資名稱")
+    check_choice(resource_type, RESOURCE_TYPES, what="物資類型")
+    check_coords(lat, lng)
     if owner_id:
-        owner = db.query(User).filter(User.id == owner_id).first()
+        try:
+            owner = db.query(User).filter(User.id == owner_id).first()
+        except Exception:
+            owner = None
     elif owner_line_uid:
         owner = db.query(User).filter(User.line_uid == owner_line_uid).first()
     else:
-        raise HTTPException(status_code=400, detail="owner_id 或 owner_line_uid 必填")
+        raise ApiError(400, "owner_id 或 owner_line_uid 必填")
     if not owner:
-        return {"error": "User not found"}
+        raise ApiError(404, "找不到這位物資擁有者。")
 
     resource = CommunityResource(
         owner_id=owner.id,
@@ -101,8 +111,11 @@ def update_resource(
 ):
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Not found")
+        raise ApiError(404, "找不到這筆物資。")
+    if lat is not None or lng is not None:
+        check_coords(lat if lat is not None else r.lat, lng if lng is not None else r.lng)
+    if name is not None:
+        name = check_name(name, what="物資名稱")
     if name         is not None: r.name         = name
     if quantity     is not None: r.quantity      = quantity
     if address      is not None: r.address       = address
@@ -110,7 +123,7 @@ def update_resource(
     if lat          is not None: r.lat           = lat
     if lng          is not None: r.lng           = lng
     if is_available is not None: r.is_available  = is_available
-    r.last_updated = datetime.now()
+    r.last_updated = now_utc()
     db.commit()
     return {"message": "更新成功"}
 
@@ -130,9 +143,9 @@ def delete_resource(resource_id: str, db: Session = Depends(get_db)):
 def toggle_availability(resource_id: str, db: Session = Depends(get_db)):
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
-        return {"error": "Not found"}
+        raise ApiError(404, "找不到這筆物資。")
     r.is_available = not r.is_available
-    r.last_updated = datetime.now()
+    r.last_updated = now_utc()
     db.commit()
     return {"id": resource_id, "is_available": r.is_available}
 
@@ -165,6 +178,19 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
     ]
 
 
+PROXY_REQUESTER_NAME = "管理員代建（未指定登記人）"
+
+
+def _proxy_requester(db: Session) -> User:
+    proxy = db.query(User).filter(User.name == PROXY_REQUESTER_NAME, User.is_active == False).first()
+    if not proxy:
+        proxy = User(name=PROXY_REQUESTER_NAME, roles=[], is_active=False)
+        db.add(proxy)
+        db.commit()
+        db.refresh(proxy)
+    return proxy
+
+
 @router.post("/needs")
 def create_need(
     need_type: str,
@@ -178,15 +204,23 @@ def create_need(
     urgency: int = 2,
     db: Session = Depends(get_db),
 ):
+    check_choice(need_type, NEED_TYPES, what="需求類型")
+    check_urgency(urgency)
+    check_coords(lat, lng)
     if requester_id:
-        requester = db.query(User).filter(User.id == requester_id).first()
+        try:
+            requester = db.query(User).filter(User.id == requester_id).first()
+        except Exception:
+            requester = None
     elif requester_line_uid:
         requester = db.query(User).filter(User.line_uid == requester_line_uid).first()
     else:
-        # 找第一個 active user 當 fallback（管理員手動建立需求時用）
-        requester = db.query(User).filter(User.is_active == True).first()
+        # 管理員沒指定登記人：之前是隨便抓「第一個啟用中的使用者」當登記人，
+        # 這筆需求就會冒名記在某位真實長者頭上（派遣通知、脆弱度評分、「我的需求」
+        # 全都算到他身上）。改成專用的代建帳號，不屬於任何真人。
+        requester = _proxy_requester(db)
     if not requester:
-        return {"error": "User not found"}
+        raise ApiError(404, "找不到這位登記人。")
 
     need = CommunityNeed(
         requester_id=requester.id,
@@ -209,13 +243,13 @@ def update_need_status(need_id: str, status: str, db: Session = Depends(get_db))
     """更新需求狀態（例如 cancelled）"""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        raise HTTPException(status_code=404, detail="Not found")
-    if status == "cancelled":
-        from app.services.dispatch import cancel_need
-        return cancel_need(need_id, db)
-    need.status = status
-    db.commit()
-    return {"message": "更新成功"}
+        raise ApiError(404, "找不到這筆需求。")
+    if status != "cancelled":
+        # 之前可以任意改成 matched / fulfilled 之類，需求會在沒有任何指派、
+        # 沒有稽核紀錄的情況下直接跳過整個派遣流程。
+        raise ApiError(422, "只能手動把需求改成 cancelled；其他狀態要走媒合、確認派遣、任務回報的流程。")
+    from app.services.dispatch import cancel_need
+    return raise_if_error(cancel_need(need_id, db))
 
 
 @router.delete("/needs/{need_id}")
@@ -267,11 +301,18 @@ def list_need_dispatch_events(
     return [_fmt_dispatch_event(e) for e in events]
 
 
+@router.post("/needs/{need_id}/resolve_sos")
+def resolve_sos_need(need_id: str, db: Session = Depends(get_db)):
+    """管理員確認已聯繫、處理完一筆一鍵求助"""
+    from app.services.dispatch import resolve_sos
+    return raise_if_error(resolve_sos(need_id, db))
+
+
 @router.post("/needs/{need_id}/match")
 def match_need(need_id: str, resource_id: str, db: Session = Depends(get_db)):
     """手動媒合需求與物資，並立即 LINE 通知志工"""
     from app.services.dispatch import manual_dispatch
-    return manual_dispatch(need_id, resource_id, db)
+    return raise_if_error(manual_dispatch(need_id, resource_id, db))
 
 
 @router.post("/dispatch")
@@ -290,14 +331,14 @@ def run_dispatch():
 def confirm_dispatch(need_id: str, db: Session = Depends(get_db)):
     """管理員確認自動媒合建議，此時才真正 LINE 通知志工"""
     from app.services.dispatch import confirm_dispatch as _confirm_dispatch
-    return _confirm_dispatch(need_id, db)
+    return raise_if_error(_confirm_dispatch(need_id, db))
 
 
 @router.post("/needs/{need_id}/decline_suggestion")
 def decline_suggestion(need_id: str, db: Session = Depends(get_db)):
     """管理員否決自動媒合建議，物資恢復可用、需求退回待媒合"""
     from app.services.dispatch import decline_suggestion as _decline_suggestion
-    return _decline_suggestion(need_id, db)
+    return raise_if_error(_decline_suggestion(need_id, db))
 
 
 @router.get("/needs/{need_id}/candidates")
@@ -364,6 +405,10 @@ def create_resource_point(
     db: Session = Depends(get_db),
 ):
     """新增固定資源點"""
+    name = check_name(name, what="資源點名稱")
+    check_coords(lat, lng)
+    if capacity is not None and capacity < 0:
+        raise ApiError(422, "容量不能是負數。")
     if point_type not in POINT_TYPES:
         raise HTTPException(status_code=400,
                             detail=f"point_type 必須是 {list(POINT_TYPES.keys())} 之一")

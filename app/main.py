@@ -6,12 +6,17 @@ from fastapi.responses import FileResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+import logging
 import os
 
+from app.config import settings
 from app.database import engine
 from app.schema_migrations import ensure_additive_schema
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.rate_limit import limiter
+from app.errors import http_exception_handler, validation_error_handler
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.demo_auth import DemoAuthMiddleware
 from app.routers import linebot, dashboard, resources, rag, scenario, ontology, road_network, workspace, tasks
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
@@ -33,6 +38,12 @@ async def lifespan(app: FastAPI):
             startup.run()
         except Exception as e:
             print(f"[startup] 警告：{e}")
+    if os.getenv("APP_ENV", "development") == "production" and not settings.DEMO_PASSWORD:
+        # 用 logging 而不是 print：print 在非 UTF-8 的 console（例如 Windows cp950）遇到
+        # emoji 會直接丟 UnicodeEncodeError，讓「只是一句提醒」把整個服務啟動搞掛。
+        logging.getLogger("security").warning(
+            "DEMO_PASSWORD is not set: the admin console and every API are publicly readable/writable, "
+            "including elder names, addresses and coordinates. Set DEMO_PASSWORD in the deployment environment.")
     start_scheduler()
     yield
     # 關閉時
@@ -68,6 +79,8 @@ app.add_middleware(
 # 一旦被限流回 429，Railway 會誤判服務掛掉而重啟部署。
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(StarletteHTTPException, http_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(linebot.router,   prefix="/webhook",       tags=["LINE Bot"])
@@ -101,4 +114,19 @@ def dashboard():
     return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"))
 
 # 靜態資源
+@app.get("/api/system/security", tags=["System"])
+def security_status():
+    """Tell the console whether the deployment is publicly readable.
+
+    On a production deployment with no DEMO_PASSWORD, every page and every write API is
+    open to anyone with the URL — including the elder list with names, addresses and
+    coordinates. The admin console shows a red banner when this is true."""
+    from app.config import settings as _settings
+    return {
+        "app_env": _settings.APP_ENV,
+        "auth_enabled": bool(_settings.DEMO_PASSWORD),
+        "public_admin": _settings.APP_ENV == "production" and not _settings.DEMO_PASSWORD,
+    }
+
+
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")

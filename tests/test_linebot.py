@@ -260,7 +260,7 @@ def test_duplicate_need_reply_is_honest_not_a_repeat_of_success(db, monkeypatch)
     需求」，使用者完全分不出這次有沒有真的送出新的一筆。"""
     replies = []
     monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
-    elder = User(name="林阿姨", roles=["elderly"], line_uid="Uelder3", address="測試地址")
+    elder = User(name="林阿姨", roles=["elderly"], line_uid="Uelder3", address="測試地址", lat=24.15, lng=120.68)
     db.add(elder); db.commit(); db.refresh(elder)
     elder_id = str(elder.id)
     db.close()
@@ -354,8 +354,13 @@ def test_share_location_backfills_own_open_needs_missing_coordinates(db, monkeyp
     db2.close()
 
 
-def test_share_location_without_registration_asks_to_register_first(db, monkeypatch):
+def test_share_location_without_prior_message_registers_and_saves(db, monkeypatch):
+    """之前要先傳一句話才能分享位置；現在直接自動註冊並存下座標。"""
     replies = []
     monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
     lb.handle_location(_FakeLocationEvent(24.15, 120.68, "UlocUnknown"))
-    assert "先傳一句話" in replies[-1]
+    assert "已更新您的位置" in replies[-1]
+    db2 = SessionLocal()
+    saved = db2.query(User).filter(User.line_uid == "UlocUnknown").first()
+    assert saved is not None and saved.lat == 24.15 and saved.lng == 120.68
+    db2.close()

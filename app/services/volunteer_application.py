@@ -109,6 +109,10 @@ def decide(
         if "volunteer" not in roles:
             roles.append("volunteer")
         user.roles = roles
+        # 申請表上填的是本人姓名；帳號裡原本是 LINE 顯示名稱（例如「小豬豬」）。
+        # 核准後名單與物資名稱都要看得出是誰，不然管理員對不上人。
+        if application.name:
+            user.name = application.name
         if not user.phone and application.phone:
             user.phone = application.phone
         application.applicant_id = user.id

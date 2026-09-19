@@ -522,11 +522,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   <div class="topbar">
     <span class="topbar-title" id="topbar-title">長者管理</span>
     <div class="topbar-actions">
+      <button class="btn btn-ghost btn-sm" onclick="toggleMode()" id="mode-btn" title="切換日常／緊急模式（切換到緊急會廣播給所有 LINE 使用者）">
+        載入中…
+      </button>
       <button class="btn btn-ghost btn-sm" onclick="triggerCheckin()" id="checkin-btn">
         📤 立即發送打卡
       </button>
     </div>
   </div>
+  <div id="security-banner" class="notice danger is-hidden" style="margin:10px 20px 0"></div>
   <div class="content">
 
     <!-- ══════════════════════════════════════════════ -->
@@ -1625,6 +1629,52 @@ function esc(s) {
 // 工作區選地區功能本來就在用）查座標帶進去，緯經度欄位仍然保留、
 // 可以手動覆蓋，不是拿掉，只是不再要求「必須」手填。
 // ════════════════════════════════════════════════
+// ── 時間顯示：資料庫時間是 UTC，畫面一律轉成台灣時間（+8）──
+function twTime(value, withSeconds = false) {
+  if (!value) return '—';
+  const iso = String(value).replace(' ', 'T');
+  const d = new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso) ? iso : iso + 'Z');
+  if (isNaN(d)) return String(value).slice(0, 16);
+  const p = n => String(n).padStart(2, '0');
+  const t = new Date(d.getTime() + 8 * 3600 * 1000);
+  return `${t.getUTCFullYear()}-${p(t.getUTCMonth() + 1)}-${p(t.getUTCDate())} ${p(t.getUTCHours())}:${p(t.getUTCMinutes())}` +
+         (withSeconds ? `:${p(t.getUTCSeconds())}` : '');
+}
+
+// ── 模式切換：之前只有另一個主控台（/）能切，這裡的「立即媒合」卻要人去別處切 ──
+async function loadMode() {
+  try {
+    const s = await fetch('/api/dashboard/summary').then(r => r.json());
+    const btn = document.getElementById('mode-btn');
+    btn.dataset.mode = s.mode;
+    btn.textContent = s.mode === 'emergency' ? '🚨 緊急模式（點此解除）' : '🟢 日常模式（點此啟動緊急）';
+    btn.classList.toggle('btn-danger', s.mode === 'emergency');
+  } catch (e) { /* ignore */ }
+}
+async function toggleMode() {
+  const btn = document.getElementById('mode-btn');
+  const next = btn.dataset.mode === 'emergency' ? 'normal' : 'emergency';
+  const label = next === 'emergency' ? '緊急' : '日常';
+  if (!confirm(`確定切換為${label}模式？${next === 'emergency' ? '\n\n⚠️ 系統將廣播通知所有已綁定 LINE 的使用者' : ''}`)) return;
+  const res = await fetch(`/api/dashboard/mode?mode=${next}`, { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert('切換失敗：' + (data.error || res.status)); return; }
+  loadMode();
+}
+
+// ── 部署安全提醒：正式環境沒設 DEMO_PASSWORD 時，整個後台對外公開 ──
+async function loadSecurityBanner() {
+  try {
+    const s = await fetch('/api/system/security').then(r => r.json());
+    const el = document.getElementById('security-banner');
+    if (s.public_admin) {
+      el.innerHTML = '⚠️ <strong>後台目前沒有任何登入保護</strong>：任何拿到網址的人都能看到長者姓名與地址、刪除資料。'
+        + '請到 Railway 的 Variables 設定 <code>DEMO_PASSWORD</code>，重新部署後就會要求密碼。';
+      el.classList.remove('is-hidden');
+    }
+  } catch (e) { /* ignore */ }
+}
+
 const _geocodeTimers = {};
 function scheduleGeocode(prefix) {
   clearTimeout(_geocodeTimers[prefix]);
@@ -1692,7 +1742,7 @@ async function loadVolunteerApplications() {
         <td><strong>${esc(a.name)}</strong></td>
         <td class="muted">${esc(a.phone) || '—'}</td>
         <td class="muted">${esc(a.service_area) || '—'}</td>
-        <td class="muted" style="white-space:nowrap">${esc((a.created_at || '').slice(0,16).replace('T',' '))}</td>
+        <td class="muted" style="white-space:nowrap">${esc(twTime(a.created_at))}</td>
         <td style="display:flex;gap:6px">
           <button class="btn btn-success btn-sm" onclick="decideVolunteerApplication('${a.id}','approve')">✅ 核准</button>
           <button class="btn btn-ghost-danger btn-sm" onclick="decideVolunteerApplication('${a.id}','reject')">拒絕</button>
@@ -2497,7 +2547,10 @@ async function seedPoints() {
 // ════════════════════════════════════════════════
 const NEED_TYPE_ICON = { water:'💧', food:'🍱', first_aid:'🩹',
                           shelter:'🛏️', vehicle:'🚗', tool:'🔧', other:'📦',
-                          demo_water:'🌀' };
+                          demo_water:'🌀', sos:'🆘' };
+const NEED_TYPE_LABEL = { water:'飲用水', food:'食物', first_aid:'急救用品', shelter:'庇護所',
+                           vehicle:'交通工具', tool:'工具', other:'其他', demo_water:'飲用水（演練）',
+                           sos:'緊急求助（需人工聯繫）' };
 const STATUS_BADGE = {
   open:      '<span class="badge badge-amber">待媒合</span>',
   suggested: '<span class="badge badge-red">⏳ 待確認</span>',
@@ -2607,13 +2660,15 @@ function renderNeeds(data) {
         <span class="urgency-dot u${n.urgency}" style="display:inline-block;margin-right:4px"></span>
         <strong style="font-size:15px">${n.urgency}</strong>
       </td>
-      <td>${NEED_TYPE_ICON[n.need_type]||'📦'} ${esc(n.need_type)}</td>
+      <td>${NEED_TYPE_ICON[n.need_type]||'📦'} ${n.need_type === 'sos' ? '<strong style="color:var(--danger)">' + esc(NEED_TYPE_LABEL.sos) + '</strong>' : esc(NEED_TYPE_LABEL[n.need_type] || n.need_type)}</td>
       <td class="muted">${esc(n.description) || '—'}</td>
       <td class="muted" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.address)||'—'}</td>
       <td>${STATUS_BADGE[n.status]||n.status}</td>
-      <td class="muted" style="white-space:nowrap">${n.created_at.slice(0,16).replace('T',' ')}</td>
+      <td class="muted" style="white-space:nowrap">${esc(twTime(n.created_at))}</td>
       <td id="match-${n.id}">
-        ${n.status === 'open'
+        ${n.status === 'open' && n.need_type === 'sos'
+          ? `<span class="muted" style="font-size:11px">請立即電話聯繫當事人，必要時通報 119</span>`
+          : n.status === 'open'
           ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">查看詳情</button>`
           : n.status === 'suggested'
           ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">詳情</button>
@@ -2622,7 +2677,10 @@ function renderNeeds(data) {
           : `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">紀錄</button>`}
       </td>
       <td>
-        ${n.status === 'open'
+        ${n.status === 'open' && n.need_type === 'sos'
+          ? `<button class="btn btn-success btn-sm" onclick="resolveSos('${n.id}')">✅ 已聯繫處理</button>
+             <button class="btn btn-ghost-danger btn-sm" onclick="cancelNeed('${n.id}')">取消</button>`
+          : n.status === 'open'
           ? `<button class="btn btn-ghost-danger btn-sm" onclick="cancelNeed('${n.id}')">取消</button>
              <button class="btn btn-ghost-danger btn-sm" onclick="deleteNeed('${n.id}')" title="永久刪除，只有還沒進入派遣流程的需求才能刪">🗑</button>`
           : n.status === 'cancelled'
@@ -2683,9 +2741,10 @@ async function showCandidates(needId) {
               : c.notify_channel === 'line'
               ? '<span class="badge badge-green">📱 會發 LINE 任務卡</span>'
               : '<span class="badge badge-red" title="這位志工還沒綁定 LINE，確認派遣後系統不會發出任何通知，需要您自行聯繫">⚠️ 未綁定 LINE</span>';
+            const currentBadge = c.is_current ? ' <span class="badge badge-blue" title="系統目前建議（已保留）的這一筆">目前建議</span>' : '';
             return `
             <tr style="${i===0?'background:rgba(45,212,167,.06)':''}">
-              <td><strong style="color:${i===0?'var(--success)':'inherit'};cursor:help" title="${esc(tip)}">${c.score}</strong></td>
+              <td><strong style="color:${i===0?'var(--success)':'inherit'};cursor:help" title="${esc(tip)}">${c.score}</strong>${currentBadge}</td>
               <td><span class="src-badge ${c.source==='resource'?'src-line':'src-gov'}">${c.source==='resource'?'個人物資':'資源點'}</span></td>
               <td>${esc(c.name)}</td>
               <td class="muted">${esc(c.vol)}</td>
@@ -2720,7 +2779,7 @@ function renderNeedEvents(events) {
     if (d.volunteer_notified !== undefined) detailBits.push(d.volunteer_notified ? '已通知' : '未通知');
     return `
       <tr>
-        <td class="muted" style="white-space:nowrap">${esc((e.created_at || '').slice(0,16).replace('T',' '))}</td>
+        <td class="muted" style="white-space:nowrap">${esc(twTime(e.created_at))}</td>
         <td><span class="badge badge-purple">${esc(e.action)}</span></td>
         <td class="muted">${esc(e.previous_status || '—')} → ${esc(e.new_status || '—')}</td>
         <td class="muted">${esc(e.actor_label || 'system')}</td>
@@ -2750,6 +2809,14 @@ async function cancelNeed(needId) {
   if (!confirm('確定取消此需求？')) return;
   // PUT status=cancelled
   await fetch(`/api/resources/needs/${needId}?status=cancelled`, { method: 'PUT' }).catch(() => {});
+  loadNeeds();
+}
+
+async function resolveSos(needId) {
+  if (!confirm('確認已經聯繫到當事人、事件處理完畢？\n（當事人會收到 LINE 通知）')) return;
+  const res = await fetch(`/api/resources/needs/${encodeURIComponent(needId)}/resolve_sos`, { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert('操作失敗：' + (data.error || res.status)); return; }
   loadNeeds();
 }
 
@@ -3462,6 +3529,8 @@ setInterval(() => {
 // ════════════════════════════════════════════════
 loadAll();
 loadVolunteerApplications();
+loadMode();
+loadSecurityBanner();
 </script>
 </body>
 </html>

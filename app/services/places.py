@@ -42,3 +42,15 @@ def search_places(query: str) -> list[dict]:
         while len(_cache) > 128:
             _cache.popitem(last=False)
         return result
+
+
+def geocode_address(address: str) -> tuple[float, float] | None:
+    """Best-effort address -> (lat, lng). Never raises: callers use it to fill in
+    coordinates opportunistically and must keep working when the lookup fails."""
+    try:
+        results = search_places(address)
+    except Exception:
+        return None
+    if not results:
+        return None
+    return results[0]["lat"], results[0]["lng"]

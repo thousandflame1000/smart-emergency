@@ -61,7 +61,53 @@ def test_line_missing_name_shows_usage_and_creates_nothing(db, monkeypatch):
     db.add(resident); db.commit(); db.close()
 
     lb.handle_text(_FakeEvent("志工申請", "Uapply2"))
-    assert "請用以下格式" in replies[-1]
+    assert "請問您的姓名" in replies[-1], "沒帶資料時改成一題一題問，不再要求使用者背格式"
+
+    db2 = SessionLocal()
+    assert db2.query(VolunteerApplication).count() == 0
+    db2.close()
+
+
+def test_guided_application_asks_one_question_at_a_time(db, monkeypatch):
+    replies = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    resident = User(name="LINE暱稱", roles=["elderly"], line_uid="Uguide1")
+    db.add(resident); db.commit(); db.close()
+
+    lb.handle_text(_FakeEvent("我要當志工", "Uguide1"))
+    assert "姓名" in replies[-1]
+    lb.handle_text(_FakeEvent("陳小美", "Uguide1"))
+    assert "電話" in replies[-1]
+    lb.handle_text(_FakeEvent("abc", "Uguide1"))
+    assert "格式" in replies[-1], "電話格式錯誤要重問，不能把整個流程吃掉"
+    lb.handle_text(_FakeEvent("0912-345-678", "Uguide1"))
+    assert "區域" in replies[-1]
+    lb.handle_text(_FakeEvent("台中市南區", "Uguide1"))
+    assert "已收到您的志工申請" in replies[-1]
+
+    db2 = SessionLocal()
+    row = db2.query(VolunteerApplication).filter(VolunteerApplication.line_uid == "Uguide1").one()
+    assert (row.name, row.phone, row.service_area, row.status) == ("陳小美", "0912345678", "台中市南區", "pending")
+    db2.close()
+
+
+def test_guided_application_can_be_cancelled_and_sos_takes_priority(db, monkeypatch):
+    replies = []
+    confirmations = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    monkeypatch.setattr("app.services.line_notify.reply_sos_confirmation", lambda token: confirmations.append(token))
+    resident = User(name="LINE暱稱", roles=["elderly"], line_uid="Uguide2")
+    db.add(resident); db.commit(); db.close()
+
+    lb.handle_text(_FakeEvent("我要當志工", "Uguide2"))
+    lb.handle_text(_FakeEvent("取消", "Uguide2"))
+    assert "已取消" in replies[-1]
+    lb.handle_text(_FakeEvent("陳小美", "Uguide2"))  # 流程已結束，不該被當成姓名
+    assert "請問聯絡電話" not in replies[-1]
+
+    lb.handle_text(_FakeEvent("我要當志工", "Uguide2"))
+    lb.handle_text(_FakeEvent("救命", "Uguide2"))
+    assert confirmations, "申請途中喊救命，必須優先進入求救確認，不能被當成姓名"
 
     db2 = SessionLocal()
     assert db2.query(VolunteerApplication).count() == 0

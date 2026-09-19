@@ -143,6 +143,43 @@ def _log_dispatch_event(
     return event
 
 
+NEED_TYPE_ZH = {
+    "water": "飲用水", "food": "食物", "first_aid": "急救用品", "shelter": "庇護所",
+    "vehicle": "交通工具", "tool": "工具", "other": "物資", "sos": "緊急求助",
+    "demo_water": "飲用水",
+}
+
+
+def _push_text(line_uid: str | None, text: str) -> bool:
+    """Best-effort LINE text push. Never raises: a notification failure must not roll
+    back or block a dispatch decision that has already been committed."""
+    if not line_uid:
+        return False
+    try:
+        from app.services import line_notify
+        line_notify.send_text(line_uid, text)
+        return True
+    except Exception:
+        return False
+
+
+def notify_requester(need: CommunityNeed, text: str) -> bool:
+    """Tell the person who asked for help what is happening with their request.
+
+    Before this existed the whole dispatch chain only ever talked to the volunteer:
+    the resident who reported the need never learned anyone was coming, that the
+    volunteer had cancelled, or that the delivery was done."""
+    requester = need.requester
+    return _push_text(requester.line_uid if requester else None, text)
+
+
+def assignee_user_id(need: CommunityNeed) -> str | None:
+    """User id of the volunteer this need is currently assigned to (owner of the
+    matched resource), or None for facility matches / unassigned needs."""
+    res = need.matched_resource
+    return str(res.owner_id) if res and res.owner_id else None
+
+
 def _wait_pts(need: CommunityNeed) -> float:
     if not need.created_at:
         return 0.0
@@ -320,15 +357,22 @@ def _collect_from_resources(
     db: Session,
     volunteer_load: dict[str, int],
     vulnerability: float = 0.0,
+    include_resource_id=None,
 ) -> list[Candidate]:
     compat = _compat_types(need.need_type)
     type_aff = {t: a for t, a in compat}
 
+    availability = CommunityResource.is_available == True
+    if include_resource_id is not None:
+        # 已被建議給這筆需求的物資因為保留而 is_available=False，如果不特別
+        # 帶進來，管理員打開「待確認」需求的詳情只會看到「無候選資源」，
+        # 完全看不到系統為什麼配這個人。
+        availability = (availability) | (CommunityResource.id == include_resource_id)
     res_list = (
         db.query(CommunityResource)
         .filter(
             CommunityResource.resource_type.in_(list(type_aff.keys())),
-            CommunityResource.is_available == True,
+            availability,
         )
         .all()
     )
@@ -336,6 +380,8 @@ def _collect_from_resources(
     wait_pts = _wait_pts(need)
     candidates = []
     for r in res_list:
+        if r.owner_id == need.requester_id:
+            continue  # 不能把自己的物資配給自己的需求
         affinity = type_aff.get(r.resource_type, 0.0)
         dist = _distance_km(need.lat, need.lng, r.lat, r.lng, db)
         vol_load = volunteer_load.get(str(r.owner_id), 0)
@@ -489,7 +535,7 @@ def auto_dispatch() -> dict:
 
         open_needs = (
             db.query(CommunityNeed)
-            .filter(CommunityNeed.status == "open")
+            .filter(CommunityNeed.status == "open", CommunityNeed.need_type != "sos")
             .all()
         )
         needs_with_vuln = [
@@ -642,6 +688,12 @@ def auto_dispatch() -> dict:
                     suggested += 1
                 else:
                     matched += 1
+                    notify_requester(
+                        need,
+                        f"📍 已為您的「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」需求找到資源點："
+                        f"{best.res_name}。資源點不會主動送到府，管理員會協助聯繫；"
+                        f"如需人力協助請傳「需要幫忙」。",
+                    )
                 details.append({
                     "need_id":       str(need.id),
                     "result":        "suggested" if proposal_service else "matched",
@@ -670,6 +722,16 @@ def auto_dispatch() -> dict:
 # ──────────────────────────────────────────────────────────
 # 手動媒合
 # ──────────────────────────────────────────────────────────
+def _announce_match_to_requester(need: CommunityNeed, resource: CommunityResource | None) -> None:
+    label = NEED_TYPE_ZH.get(need.need_type, need.need_type)
+    who = resource.owner.name if resource is not None and resource.owner else "社區志工"
+    notify_requester(
+        need,
+        f"🚚 好消息！已有人接下您的「{label}」需求：{who} 正在準備前往。\n"
+        f"傳「我的需求」可以查看最新進度；如果一直沒等到人，請傳「需要幫忙」。",
+    )
+
+
 def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
     """手動指定媒合，立即 LINE 通知志工"""
     need     = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
@@ -677,8 +739,20 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
 
     if not need or not resource:
         return {"error": "need or resource not found"}
+    if need.status not in ("open", "suggested"):
+        return {"error": f"需求目前狀態為「{need.status}」，只有待媒合或待確認的需求可以手動指派。"}
+    if need.need_type == "sos":
+        return {"error": "緊急求助是人身安全事件，不是物資需求，請直接聯絡當事人或撥打 119。"}
+    if resource.owner_id == need.requester_id:
+        return {"error": "不能把需求者自己的物資指派給自己的需求。"}
+    if not resource.is_available and str(resource.id) != str(need.matched_resource_id or ""):
+        return {"error": "這份物資已經被其他需求保留，不能重複指派。"}
 
     previous_status = need.status
+    if need.matched_resource_id and str(need.matched_resource_id) != str(resource.id):
+        old = db.query(CommunityResource).filter(CommunityResource.id == need.matched_resource_id).first()
+        if old:
+            old.is_available = True  # 放掉原本建議的那份，不要讓它永遠卡在保留狀態
     need.matched_resource_id = resource.id
     need.status  = "matched"
     resource.is_available = False
@@ -703,6 +777,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
             pass
 
     dist = _distance_km(need.lat, need.lng, resource.lat, resource.lng, db)
+    _announce_match_to_requester(need, resource)
     _log_dispatch_event(
         db,
         "manual_dispatch",
@@ -781,6 +856,7 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
     previous_status = need.status
     need.status = "matched"
     db.commit()
+    _announce_match_to_requester(need, resource)
     _log_dispatch_event(
         db,
         "confirm_dispatch",
@@ -841,6 +917,37 @@ def decline_suggestion(need_id: str, db: Session) -> dict:
 # ──────────────────────────────────────────────────────────
 # 取消需求 / 資源釋放
 # ──────────────────────────────────────────────────────────
+def resolve_sos(need_id: str, db: Session, *, actor_label: str = "manager") -> dict:
+    """管理員確認已經聯繫、處理完一筆一鍵求助。
+
+    一鍵求助不是物資需求，不會被媒合、也沒有志工任務卡可以「送達」，所以之前它一旦建立就
+    只能被「取消」——取消的語意是「這個需求不成立」，不是「人已經確認安全」，稽核紀錄上
+    分不出來，當事人也不會收到任何後續。"""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "need not found"}
+    if need.need_type != "sos":
+        return {"error": "只有一鍵求助可以用「已聯繫處理」關閉，一般物資需求請走媒合流程。"}
+    if need.status == "fulfilled":
+        return {"message": "already resolved", "need_id": need_id, "already_resolved": True}
+    if need.status != "open":
+        return {"error": f"求助單目前狀態為「{need.status}」，不能標成已處理。"}
+    previous_status = need.status
+    need.status = "fulfilled"
+    _log_dispatch_event(
+        db, "sos_resolved", need=need, actor_label=actor_label,
+        previous_status=previous_status, new_status=need.status, outcome="resolved",
+        details={},
+    )
+    db.commit()
+    notify_requester(
+        need,
+        "✅ 管理員已確認處理您的緊急求助。如果您仍然需要協助，請再傳「需要幫忙」；"
+        "生命危險請直接撥打 119。",
+    )
+    return {"message": "sos resolved", "need_id": need_id}
+
+
 def cancel_need(need_id: str, db: Session) -> dict:
     """Cancel a request and release any active resource reservation."""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
@@ -866,8 +973,19 @@ def cancel_need(need_id: str, db: Session) -> dict:
             resource.is_available = True
             resource_released = True
 
+    volunteer_uid = None
+    if previous_status == "matched" and need.matched_resource_id:
+        _res = db.query(CommunityResource).filter(CommunityResource.id == need.matched_resource_id).first()
+        if _res is not None and _res.owner is not None:
+            volunteer_uid = _res.owner.line_uid
     need.status = "cancelled"
     need.matched_resource_id = None
+    if volunteer_uid:
+        _push_text(
+            volunteer_uid,
+            f"ℹ️ 剛才派給您的「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」任務已取消"
+            f"（需求已撤回），不需要再前往，謝謝您！",
+        )
     _log_dispatch_event(
         db,
         "cancel_need",
@@ -916,6 +1034,15 @@ def mark_task_delivered(
             "need_id": need_id,
             "already_fulfilled": True,
         }
+    if previous_status != "matched":
+        # 過期的任務卡：需求已被退回、取消或還沒核准，不能憑一次按鈕就直接
+        # 變成「已完成」——之前需求退回 open 之後志工再按「已送達」，會在
+        # 沒有任何指派的狀況下直接完成，物資也沒有被消耗。
+        return {
+            "error": "invalid task state",
+            "need_id": need_id,
+            "need_status": previous_status,
+        }
 
     need.status = "fulfilled"
     _log_dispatch_event(
@@ -931,6 +1058,11 @@ def mark_task_delivered(
         details={"matched_resource_id": previous_resource_id},
     )
     db.commit()
+    notify_requester(
+        need,
+        f"✅ 志工回報已把「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」送達。\n"
+        f"如果您其實還沒收到，請傳「需要幫忙」讓我們知道。",
+    )
 
     return {
         "message": "task marked fulfilled",
@@ -960,6 +1092,13 @@ def decline_task_assignment(
             "need_id": need_id,
             "already_open": True,
         }
+    if previous_status != "matched":
+        # 已完成或已取消的需求不能被舊的「無法前往」按鈕復活回 open。
+        return {
+            "error": "invalid task state",
+            "need_id": need_id,
+            "need_status": previous_status,
+        }
 
     resource_released = False
     if need.matched_resource_id:
@@ -988,6 +1127,11 @@ def decline_task_assignment(
         },
     )
     db.commit()
+    notify_requester(
+        need,
+        f"⚠️ 原本要送「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」給您的志工臨時無法前往，"
+        f"系統正在重新尋找其他志工，請再稍等一下。",
+    )
 
     return {
         "message": "task declined",
@@ -1013,11 +1157,13 @@ def preview_candidates(need_id: str, db: Session) -> dict:
 
     vulnerability = _vulnerability_pts(need.requester_id, db)
 
+    include_id = need.matched_resource_id if need.status in ("suggested", "matched") else None
     cands = (
-        _collect_from_resources(need, db, {}, vulnerability) +
+        _collect_from_resources(need, db, {}, vulnerability, include_resource_id=include_id) +
         _collect_from_points(need, db, {}, vulnerability)
     )
     cands.sort(key=lambda c: c.score, reverse=True)
+    current_id = str(include_id) if include_id else None
 
     return {
         "vulnerability": round(vulnerability, 1),
@@ -1029,6 +1175,7 @@ def preview_candidates(need_id: str, db: Session) -> dict:
                 "vol":      c.vol_name,
                 "dist_km":  round(c.dist_km, 2) if not math.isinf(c.dist_km) else None,
                 "id":       c.resource_id or c.point_id,
+                "is_current": bool(current_id and c.resource_id == current_id),
                 "breakdown": {k: round(v, 1) for k, v in c.breakdown.items()},
                 # 管理員按「確認派遣」之前就該知道這筆會不會真的發出 LINE
                 # 通知——之前是按下去才跳「志工未綁定 LINE」，等於白做工

@@ -2,6 +2,7 @@ from datetime import date, datetime
 import logging
 from sqlalchemy.orm import Session
 
+from app.timeutil import now_utc, today_tw
 from app.database import SessionLocal
 from app.models.checkin import DailyCheckin
 from app.models.alert import Alert
@@ -11,20 +12,39 @@ from app.services.line_notify import send_alert_message
 logger = logging.getLogger(__name__)
 
 
-def send_alerts_for_checkin(checkin_id, alert_type: str, db: Session) -> None:
-    """即時發送警報（長者主動求助時呼叫）"""
+HELP_REALERT_MINUTES = 30
+
+
+def send_alerts_for_checkin(checkin_id, alert_type: str, db: Session) -> int:
+    """即時發送警報（長者主動求助時呼叫）。回傳實際被通知的聯絡人數，
+    呼叫端要用這個數字誠實告訴求助的人「有沒有人被通知到」。"""
     checkin = db.query(DailyCheckin).filter(DailyCheckin.id == checkin_id).first()
     if not checkin:
-        return
-    _escalate(db, checkin, alert_type, datetime.now())
+        return 0
+    return _escalate(db, checkin, alert_type, now_utc())
+
+
+def notify_admins(db: Session, text: str) -> int:
+    """推播給所有綁了 LINE 的管理員。一鍵求助之前只通知照護聯絡人，長者沒有
+    聯絡人時完全沒有任何人知道，管理員只能靠自己盯著後台。"""
+    from app.models.user import User
+    from app.services.line_notify import send_text
+    sent = 0
+    for admin in db.query(User).filter(User.role_filter("admin"), User.line_uid != None).all():
+        try:
+            send_text(admin.line_uid, text)
+            sent += 1
+        except Exception as e:
+            logger.error(f"[alert] 通知管理員失敗（{admin.name}）：{e}")
+    return sent
 
 
 def check_no_response() -> None:
     """Scheduler 每 15 分鐘呼叫：偵測未回應長者並升級通知"""
     db: Session = SessionLocal()
     try:
-        today = date.today()
-        now = datetime.now()
+        today = today_tw()
+        now = now_utc()
 
         pending = (
             db.query(DailyCheckin)
@@ -48,18 +68,27 @@ def check_no_response() -> None:
         db.close()
 
 
-def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime) -> None:
-    """發出警報（避免重複）"""
+def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime) -> int:
+    """發出警報（避免重複），回傳被通知的聯絡人數。"""
     already = (
         db.query(Alert)
         .filter(
             Alert.checkin_id == checkin.id,
             Alert.alert_type == alert_type,
         )
+        .order_by(Alert.created_at.desc())
         .first()
     )
     if already:
-        return
+        # 主動求助（help_needed）不能一天只通知一次：下午再求助一次就完全沒人
+        # 收到——超過 HELP_REALERT_MINUTES 就視為新的一次求助，重新通知。
+        stale = (
+            alert_type == "help_needed"
+            and already.created_at is not None
+            and (now - already.created_at.replace(tzinfo=None)).total_seconds() > HELP_REALERT_MINUTES * 60
+        )
+        if not stale:
+            return 0
 
     # 依 notify_order 取聯絡人，再依警報類型分層篩選對象
     all_relations = (
@@ -106,6 +135,7 @@ def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime
         checkin.status = "no_response"
 
     db.commit()
+    return len(notified_ids)
 
 
 def _relations_for_alert(relations: list[CareRelation], alert_type: str) -> list[CareRelation]:

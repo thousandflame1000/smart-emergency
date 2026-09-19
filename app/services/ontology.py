@@ -15,6 +15,7 @@ from typing import Any
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.timeutil import now_utc, today_tw
 from app.models.alert import Alert
 from app.models.care_relation import CareRelation
 from app.models.checkin import DailyCheckin
@@ -581,7 +582,7 @@ def decision_context(db: Session, need_id: str) -> dict[str, Any]:
 
 
 def _metrics(db: Session) -> dict[str, int]:
-    today = date.today()
+    today = today_tw()
     return {
         "people": db.query(User).count(),
         "active_people": db.query(User).filter(User.is_active == True).count(),
