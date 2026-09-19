@@ -1616,6 +1616,46 @@ function esc(s) {
 }
 
 // ════════════════════════════════════════════════
+// 地址自動定位——共用給需求/使用者/資源點/個人物資四個表單。
+// 原本這四個表單都要求管理員自己手填緯度經度小數點數字，沒人查得出
+// 這個數字，結果就是留空，留空的紀錄永遠配不到任何候選（本輪從
+// "急需用水"/"水分" 這兩筆卡死的需求上實際踩到）。改成打完地址、
+// 游標移開就自動用既有的 Nominatim 代理（/api/workspaces/places，
+// 工作區選地區功能本來就在用）查座標帶進去，緯經度欄位仍然保留、
+// 可以手動覆蓋，不是拿掉，只是不再要求「必須」手填。
+// ════════════════════════════════════════════════
+const _geocodeTimers = {};
+function scheduleGeocode(prefix) {
+  clearTimeout(_geocodeTimers[prefix]);
+  _geocodeTimers[prefix] = setTimeout(() => geocodeNow(prefix), 900);
+}
+async function geocodeNow(prefix) {
+  clearTimeout(_geocodeTimers[prefix]);
+  const addrEl = document.getElementById(`${prefix}-address`);
+  const statusEl = document.getElementById(`${prefix}-geocode-status`);
+  const address = (addrEl && addrEl.value || '').trim();
+  if (address.length < 2) { if (statusEl) statusEl.textContent = ''; return; }
+  if (statusEl) statusEl.textContent = '📍 定位中…';
+  try {
+    const res = await fetch(`/api/workspaces/places?q=${encodeURIComponent(address)}`);
+    const data = await res.json();
+    const places = data.places || [];
+    if (!res.ok || !places.length) {
+      if (statusEl) statusEl.textContent = '⚠️ 找不到座標，請確認地址或直接手動輸入緯度／經度';
+      return;
+    }
+    const top = places[0];
+    const latEl = document.getElementById(`${prefix}-lat`);
+    const lngEl = document.getElementById(`${prefix}-lng`);
+    if (latEl) latEl.value = top.lat.toFixed(6);
+    if (lngEl) lngEl.value = top.lng.toFixed(6);
+    if (statusEl) statusEl.textContent = `✅ 已定位：${esc(top.name)}`;
+  } catch (e) {
+    if (statusEl) statusEl.textContent = '⚠️ 定位服務暫時無法使用，請直接手動輸入緯度／經度';
+  }
+}
+
+// ════════════════════════════════════════════════
 // Navigation
 // ════════════════════════════════════════════════
 function showPage(id) {
