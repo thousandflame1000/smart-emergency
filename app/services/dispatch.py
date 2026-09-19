@@ -694,6 +694,9 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
                 address=need.address or "地址未填",
                 resource_name=resource.name,
                 need_id=str(need.id),
+                distance_km=None if need.lat is None or need.lng is None or resource.lat is None or resource.lng is None else _distance_km(need.lat, need.lng, resource.lat, resource.lng, db),
+                dest_lat=need.lat,
+                dest_lng=need.lng,
             )
             notified = True
         except Exception:
@@ -767,6 +770,9 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
                 address=need.address or "地址未填",
                 resource_name=resource.name,
                 need_id=str(need.id),
+                distance_km=None if need.lat is None or need.lng is None or resource.lat is None or resource.lng is None else _distance_km(need.lat, need.lng, resource.lat, resource.lng, db),
+                dest_lat=need.lat,
+                dest_lng=need.lng,
             )
             notified = True
         except Exception:

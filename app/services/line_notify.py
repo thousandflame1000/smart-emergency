@@ -231,7 +231,35 @@ def send_task_message(
     address: str,
     resource_name: str,
     need_id: str = "",
+    distance_km: float | None = None,
+    dest_lat: float | None = None,
+    dest_lng: float | None = None,
 ) -> None:
+    # 任務卡之前只有地址文字，志工接不接單之前完全不知道要跑多遠、
+    # 也沒有地圖連結——只能自己另外查。距離跟地圖連結都是既有資料
+    # （派遣當下 need/resource 都有座標），順手帶進卡片，不用志工
+    # 自己再查一次。
+    body_contents = [
+        {"type": "text", "text": f"需求：{need_description}", "wrap": True},
+        {"type": "text", "text": f"地點：{address}", "wrap": True},
+    ]
+    if distance_km is not None:
+        body_contents.append({"type": "text", "text": f"距離約 {distance_km:.1f} 公里",
+                              "size": "sm", "color": "#888888"})
+    body_contents.append({"type": "text", "text": f"您可提供：{resource_name}",
+                          "wrap": True, "color": "#27ACB2"})
+    footer_contents = []
+    if dest_lat is not None and dest_lng is not None:
+        footer_contents.append({
+            "type": "button",
+            "style": "link",
+            "height": "sm",
+            "action": {
+                "type": "uri",
+                "label": "🗺 開啟地圖導航",
+                "uri": f"https://www.google.com/maps/dir/?api=1&destination={dest_lat},{dest_lng}",
+            },
+        })
     flex = {
         "type": "bubble",
         "header": {
@@ -247,39 +275,39 @@ def send_task_message(
             "type": "box",
             "layout": "vertical",
             "spacing": "sm",
-            "contents": [
-                {"type": "text", "text": f"需求：{need_description}", "wrap": True},
-                {"type": "text", "text": f"地點：{address}", "wrap": True},
-                {"type": "text", "text": f"您可提供：{resource_name}",
-                 "wrap": True, "color": "#27ACB2"},
-            ],
+            "contents": body_contents,
         },
         "footer": {
             "type": "box",
-            "layout": "horizontal",
+            "layout": "vertical",
             "spacing": "sm",
-            "contents": [
-                {
-                    "type": "button",
-                    "style": "primary",
-                    "color": "#27ACB2",
-                    "action": {
-                        "type": "postback",
-                        "label": "✅ 已送達",
-                        "data": f"action=task_delivered&need_id={need_id}",
-                        "displayText": "已完成送達！",
+            "contents": footer_contents + [{
+                "type": "box",
+                "layout": "horizontal",
+                "spacing": "sm",
+                "contents": [
+                    {
+                        "type": "button",
+                        "style": "primary",
+                        "color": "#27ACB2",
+                        "action": {
+                            "type": "postback",
+                            "label": "✅ 已送達",
+                            "data": f"action=task_delivered&need_id={need_id}",
+                            "displayText": "已完成送達！",
+                        },
                     },
-                },
-                {
-                    "type": "button",
-                    "style": "secondary",
-                    "action": {
-                        "type": "postback",
-                        "label": "❌ 無法前往",
-                        "data": f"action=task_decline&need_id={need_id}",
+                    {
+                        "type": "button",
+                        "style": "secondary",
+                        "action": {
+                            "type": "postback",
+                            "label": "❌ 無法前往",
+                            "data": f"action=task_decline&need_id={need_id}",
+                        },
                     },
-                },
-            ],
+                ],
+            }],
         },
     }
     _get_api().push_message(PushMessageRequest(

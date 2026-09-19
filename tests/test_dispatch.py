@@ -191,3 +191,47 @@ def test_auto_dispatch_skip_reason_distinguishes_missing_coordinates(db, monkeyp
     reasons = {d["need_id"]: d["reason"] for d in result["details"] if d["result"] == "skipped"}
     assert "缺少座標" in reasons[str(need_no_coords.id)]
     assert "缺少座標" not in reasons.get(str(need_far.id), "")
+
+
+def test_confirm_dispatch_passes_distance_and_destination_to_task_message(db, monkeypatch):
+    """任務卡之前只有地址文字，志工接單前完全不知道要跑多遠、也沒有
+    地圖連結——距離跟地圖用的目的地座標要在通知時一併算好傳過去。"""
+    need_id, res_id = _make_scenario(db)
+    db.close()
+
+    captured = {}
+    monkeypatch.setattr(dispatch, "send_task_message",
+                         lambda **kw: captured.update(kw))
+    dispatch.auto_dispatch()
+
+    db2 = SessionLocal()
+    dispatch.confirm_dispatch(need_id, db2)
+    db2.close()
+
+    assert captured.get("distance_km") is not None
+    assert captured["distance_km"] >= 0
+    assert captured.get("dest_lat") == 24.151
+    assert captured.get("dest_lng") == 120.681
+
+
+def test_send_task_message_without_coordinates_has_no_distance(db, monkeypatch):
+    """需求或物資缺座標時不該假造距離，維持 None 並讓卡片跳過那一行。"""
+    vol = User(name="志工無座標", roles=["volunteer"], line_uid="Uvolnc")
+    db.add(vol); db.commit()
+    res = CommunityResource(owner_id=vol.id, resource_type="water", name="水", is_available=True)
+    db.add(res); db.commit()
+    elder = User(name="長者無座標", roles=["elderly"])
+    db.add(elder); db.commit()
+    need = CommunityNeed(requester_id=elder.id, need_type="water", address="沒填座標", urgency=3,
+                          status="suggested", matched_resource_id=res.id)
+    db.add(need); db.commit()
+    need_id = str(need.id)
+    db.close()
+
+    captured = {}
+    monkeypatch.setattr(dispatch, "send_task_message", lambda **kw: captured.update(kw))
+    db2 = SessionLocal()
+    dispatch.confirm_dispatch(need_id, db2)
+    db2.close()
+
+    assert captured.get("distance_km") is None
