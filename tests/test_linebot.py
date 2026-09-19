@@ -127,7 +127,31 @@ def test_task_delivered_marks_fulfilled_and_logs_event(db, monkeypatch):
     db2.close()
 
 
-def test_sos_creates_dispatch_need(db, monkeypatch):
+def test_sos_keyword_only_asks_for_confirmation_first(db, monkeypatch):
+    """「需要幫忙」「救命」「緊急」在自由文字裡太容易誤觸（日常聊天講
+    到「這件事很緊急」就會觸發），文字關鍵字本身只能跳確認卡，不能
+    直接建立需求或發警報——真正觸發要靠 confirm_sos postback。"""
+    confirmations = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: None)
+    monkeypatch.setattr("app.services.line_notify.reply_sos_confirmation",
+                         lambda token: confirmations.append(token))
+
+    elder = User(name="陳阿嬤", roles=["elderly"], line_uid="Uelder1", address="測試地址")
+    db.add(elder); db.commit(); db.refresh(elder)
+    elder_id = str(elder.id)
+    db.close()
+
+    for phrase in ("需要幫忙", "救命", "這件事很緊急啦"):
+        lb.handle_text(_FakeEvent(phrase, "Uelder1"))
+
+    assert len(confirmations) == 3, "每次講到關鍵字都應該跳確認卡"
+    db2 = SessionLocal()
+    assert db2.query(CommunityNeed).filter(CommunityNeed.requester_id == elder_id).count() == 0, \
+        "文字關鍵字本身不該直接建立需求，只能先確認"
+    db2.close()
+
+
+def test_confirm_sos_postback_creates_dispatch_need(db, monkeypatch):
     monkeypatch.setattr(lb, "reply_text", lambda token, text: None)
 
     elder = User(name="陳阿嬤", roles=["elderly"], line_uid="Uelder1", address="測試地址")
@@ -135,20 +159,34 @@ def test_sos_creates_dispatch_need(db, monkeypatch):
     elder_id = str(elder.id)
     db.close()
 
-    lb.handle_text(_FakeEvent("需要幫忙", "Uelder1"))
+    lb.handle_postback(_FakePostbackEvent("action=confirm_sos", "Uelder1"))
 
     db2 = SessionLocal()
     need = db2.query(CommunityNeed).filter(
         CommunityNeed.requester_id == elder_id,
         CommunityNeed.description == "LINE 一鍵求助（需要幫忙）",
     ).first()
-    assert need is not None, "SOS 應該自動建立 CommunityNeed，進入派遣佇列"
+    assert need is not None, "確認後應該建立 CommunityNeed，進入派遣佇列"
     assert need.urgency == 5
     assert need.status == "open"
     db2.close()
 
 
-def test_sos_does_not_duplicate_need_on_repeat(db, monkeypatch):
+def test_dismiss_sos_postback_creates_nothing(db, monkeypatch):
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: None)
+    elder = User(name="陳阿伯", roles=["elderly"], line_uid="Uelder2", address="測試地址")
+    db.add(elder); db.commit(); db.refresh(elder)
+    elder_id = str(elder.id)
+    db.close()
+
+    lb.handle_postback(_FakePostbackEvent("action=dismiss_sos", "Uelder2"))
+
+    db2 = SessionLocal()
+    assert db2.query(CommunityNeed).filter(CommunityNeed.requester_id == elder_id).count() == 0
+    db2.close()
+
+
+def test_confirm_sos_does_not_duplicate_need_on_repeat(db, monkeypatch):
     monkeypatch.setattr(lb, "reply_text", lambda token, text: None)
 
     elder = User(name="陳阿嬤", roles=["elderly"], line_uid="Uelder1", address="測試地址")
@@ -156,15 +194,15 @@ def test_sos_does_not_duplicate_need_on_repeat(db, monkeypatch):
     elder_id = str(elder.id)
     db.close()
 
-    lb.handle_text(_FakeEvent("需要幫忙", "Uelder1"))
-    lb.handle_text(_FakeEvent("救命", "Uelder1"))
+    lb.handle_postback(_FakePostbackEvent("action=confirm_sos", "Uelder1"))
+    lb.handle_postback(_FakePostbackEvent("action=confirm_sos", "Uelder1"))
 
     db2 = SessionLocal()
     count = db2.query(CommunityNeed).filter(
         CommunityNeed.requester_id == elder_id,
         CommunityNeed.description == "LINE 一鍵求助（需要幫忙）",
     ).count()
-    assert count == 1, "重複求助不應該產生重複的派遣需求"
+    assert count == 1, "重複確認不應該產生重複的派遣需求"
     db2.close()
 
 
@@ -215,3 +253,43 @@ def test_elderly_cannot_register_others(db, monkeypatch):
     leaked = db2.query(User).filter(User.name == "測試長者").first()
     db2.close()
     assert leaked is None, "一般長者角色不應該能代辦新增長者"
+
+
+def test_duplicate_need_reply_is_honest_not_a_repeat_of_success(db, monkeypatch):
+    """曾經無論是否已有同類型待處理需求，回覆文字都一樣「已登記您的
+    需求」，使用者完全分不出這次有沒有真的送出新的一筆。"""
+    replies = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    elder = User(name="林阿姨", roles=["elderly"], line_uid="Uelder3", address="測試地址")
+    db.add(elder); db.commit(); db.refresh(elder)
+    elder_id = str(elder.id)
+    db.close()
+
+    lb.handle_text(_FakeEvent("需要水", "Uelder3"))
+    assert "已登記您的需求" in replies[-1]
+
+    lb.handle_text(_FakeEvent("缺水啦", "Uelder3"))
+    assert "已登記您的需求" not in replies[-1], "第二次應該誠實告知已經在處理，不是重新送出一筆"
+    assert "稍早已提出" in replies[-1]
+
+    db2 = SessionLocal()
+    count = db2.query(CommunityNeed).filter(
+        CommunityNeed.requester_id == elder_id, CommunityNeed.need_type == "water",
+    ).count()
+    assert count == 1, "第二次不應該真的建立第二筆需求"
+    db2.close()
+
+
+def test_my_needs_command_shows_status(db, monkeypatch):
+    replies = []
+    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    elder = User(name="周伯伯", roles=["elderly"], line_uid="Uelder4", address="測試地址")
+    db.add(elder); db.commit(); db.refresh(elder)
+    db.close()
+
+    lb.handle_text(_FakeEvent("我的需求", "Uelder4"))
+    assert "沒有提出過的需求" in replies[-1]
+
+    lb.handle_text(_FakeEvent("需要食物", "Uelder4"))
+    lb.handle_text(_FakeEvent("我的需求", "Uelder4"))
+    assert "食物" in replies[-1] and "待媒合" in replies[-1]

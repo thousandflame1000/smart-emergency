@@ -102,6 +102,52 @@ async def simulate_checkin(elderly_name: str):
         db.close()
 
 
+def _trigger_sos(user, db) -> None:
+    """真的觸發緊急求助：更新今日打卡、通知照護聯絡人、建立高緊急度需求。
+
+    只從「使用者在確認卡上按了『對，我需要立即救援』」這個 postback 呼叫
+    （見 handle_postback 的 confirm_sos 分支），不會從自由文字直接觸發。
+    """
+    from app.models.checkin import DailyCheckin
+    from datetime import date, datetime
+    today_checkin = (
+        db.query(DailyCheckin)
+        .filter(
+            DailyCheckin.elderly_id == user.id,
+            DailyCheckin.date == date.today(),
+        )
+        .first()
+    )
+    if today_checkin:
+        today_checkin.status = "help_needed"
+        today_checkin.responded_at = datetime.now()
+        db.commit()
+        try:
+            from app.services.alert import send_alerts_for_checkin
+            send_alerts_for_checkin(today_checkin.id, "help_needed", db)
+        except Exception:
+            pass
+
+    from app.models.need import CommunityNeed
+    existing_sos = db.query(CommunityNeed).filter(
+        CommunityNeed.requester_id == user.id,
+        CommunityNeed.status.in_(["open", "suggested"]),
+        CommunityNeed.description == "LINE 一鍵求助（需要幫忙）",
+    ).first()
+    if not existing_sos:
+        sos_need = CommunityNeed(
+            requester_id=user.id,
+            need_type="other",
+            description="LINE 一鍵求助（需要幫忙）",
+            address=user.address,
+            lat=user.lat,
+            lng=user.lng,
+            urgency=5,
+        )
+        db.add(sos_need)
+        db.commit()
+
+
 # ──────────────────────────────────────────────
 # 文字訊息
 # ──────────────────────────────────────────────
@@ -162,12 +208,14 @@ def handle_text(event: MessageEvent):
             "・「我的物資」— 查看已登記項目\n"
             "・「新增長者 [姓名] [地址]」— 幫家中長者代辦註冊\n"
             "・直接輸入問題 — AI 急救 / 照護知識查詢 🤖"
-        ) if is_vol else ""
+        ) if is_vol else "\n\n🙋 想幫忙嗎？\n・「志工申請 [姓名] [電話] [服務區域]」— 申請成為志工"
         reply_text(event.reply_token,
                    "📖 可用指令：\n"
                    "・「我很好」— 回覆今日打卡\n"
                    "・「狀態」— 查看系統模式\n"
-                   f"・「需要幫忙」— 觸發緊急通知{vol_extra}")
+                   "・「需要水／需要食物／需要藥」— 提出物資需求\n"
+                   "・「我的需求」— 查看求助進度\n"
+                   f"・「需要幫忙」— 觸發緊急求助（會先跟您確認一次）{vol_extra}")
         return
 
     # ── 志工物資登記 ────────────────────────────
@@ -374,72 +422,65 @@ def handle_text(event: MessageEvent):
             CommunityNeed.status == "open",
             CommunityNeed.need_type == detected_need,
         ).first()
-        if not existing:
-            need = CommunityNeed(
-                requester_id=user.id,
-                need_type=detected_need,
-                description=text,
-                address=user.address,
-                lat=user.lat,
-                lng=user.lng,
-                urgency=3,
-            )
-            db.add(need)
-            db.commit()
         NEED_ZH = {"water":"💧飲用水","food":"🍱食物","first_aid":"🩹急救用品",
                    "shelter":"🏠庇護所","vehicle":"🚗交通工具"}
+        # 曾經不管有沒有已存在同類型需求，回覆文字都長一樣（「已登記您的
+        # 需求」），使用者完全分不出這次是不是真的新送出一筆——這裡分開
+        # 誠實回覆，不吃掉這個差異。
+        if existing:
+            reply_text(event.reply_token,
+                       f"您稍早已提出同樣的求助（{NEED_ZH.get(detected_need, detected_need)}），"
+                       f"志工正在處理中，還不用重新提出。\n\n"
+                       f"傳「我的需求」可以查看目前進度。")
+            return
+        need = CommunityNeed(
+            requester_id=user.id,
+            need_type=detected_need,
+            description=text,
+            address=user.address,
+            lat=user.lat,
+            lng=user.lng,
+            urgency=3,
+        )
+        db.add(need)
+        db.commit()
         reply_text(event.reply_token,
                    f"📋 已登記您的需求：{NEED_ZH.get(detected_need, detected_need)}\n\n"
                    f"系統正在協調物資，\n"
                    f"志工確認後會盡快送達。\n\n"
-                   f"如情況緊急請傳「需要幫忙」。")
+                   f"傳「我的需求」可以查看目前進度；如情況緊急請傳「需要幫忙」。")
+        return
+
+    if text in ["我的需求", "進度", "求助進度"]:
+        from app.models.need import CommunityNeed
+        my_needs = (
+            db.query(CommunityNeed)
+            .filter(CommunityNeed.requester_id == user.id)
+            .order_by(CommunityNeed.created_at.desc())
+            .limit(5)
+            .all()
+        )
+        if not my_needs:
+            reply_text(event.reply_token, "您目前沒有提出過的需求。\n傳「需要水」「需要食物」等可以求助。")
+            return
+        NEED_ZH = {"water":"💧飲用水","food":"🍱食物","first_aid":"🩹急救用品",
+                   "shelter":"🏠庇護所","vehicle":"🚗交通工具","other":"🆘 緊急求助"}
+        STATUS_ZH = {"open":"⏳ 待媒合", "suggested":"🔎 系統已建議，等待管理員核准",
+                     "matched":"🚚 已派遣，志工正在處理", "fulfilled":"✅ 已完成",
+                     "cancelled":"取消"}
+        lines = ["📋 您最近的需求（最多顯示 5 筆）：\n"]
+        for n in my_needs:
+            lines.append(f"・{NEED_ZH.get(n.need_type, n.need_type)} — {STATUS_ZH.get(n.status, n.status)}")
+        reply_text(event.reply_token, "\n".join(lines))
         return
 
     if "需要幫忙" in text or "救命" in text or "緊急" in text:
-        # 更新今日打卡狀態並觸發警報
-        from app.models.checkin import DailyCheckin
-        from datetime import date, datetime
-        today_checkin = (
-            db.query(DailyCheckin)
-            .filter(
-                DailyCheckin.elderly_id == user.id,
-                DailyCheckin.date == date.today(),
-            )
-            .first()
-        )
-        if today_checkin:
-            today_checkin.status = "help_needed"
-            today_checkin.responded_at = datetime.now()
-            db.commit()
-            # 通知照護聯絡人（家屬 / 志工）
-            try:
-                from app.services.alert import send_alerts_for_checkin
-                send_alerts_for_checkin(today_checkin.id, "help_needed", db)
-            except Exception:
-                pass
-
-        # 自動建立緊急需求，進入物資派遣排程（避免求助只停留在通知，物資調度接不上）
-        from app.models.need import CommunityNeed
-        existing_sos = db.query(CommunityNeed).filter(
-            CommunityNeed.requester_id == user.id,
-            CommunityNeed.status.in_(["open", "suggested"]),
-            CommunityNeed.description == "LINE 一鍵求助（需要幫忙）",
-        ).first()
-        if not existing_sos:
-            sos_need = CommunityNeed(
-                requester_id=user.id,
-                need_type="other",
-                description="LINE 一鍵求助（需要幫忙）",
-                address=user.address,
-                lat=user.lat,
-                lng=user.lng,
-                urgency=5,
-            )
-            db.add(sos_need)
-            db.commit()
-
-        reply_text(event.reply_token,
-                   "🆘 已收到您的求助！\n正在通知家屬和志工，請稍候。")
+        # 這幾個詞在自由文字比對下太寬鬆（日常聊天講到「這件事很緊急」
+        # 就會誤觸最高等級警報），先跳二次確認卡，真的按「對」
+        # （action=confirm_sos，見 handle_postback）才觸發，這裡不寫入
+        # 任何資料。
+        from app.services.line_notify import reply_sos_confirmation
+        reply_sos_confirmation(event.reply_token)
         return
 
     # 志工 / 家屬 → 問題導向 RAG 查詢
@@ -503,6 +544,14 @@ def handle_postback(event: PostbackEvent):
         if checkin_id:
             checkin_svc.mark_checkin(checkin_id, "ok", db)
         reply_text(event.reply_token, "✅ 太好了！今天也要照顧好自己 🌟")
+
+    elif action == "confirm_sos":
+        _trigger_sos(user, db)
+        reply_text(event.reply_token,
+                   "🆘 已收到您的求助！\n正在通知家屬和志工，請稍候。")
+
+    elif action == "dismiss_sos":
+        reply_text(event.reply_token, "好的，沒事就好 😊")
 
     elif action == "help":
         if checkin_id:

@@ -28,6 +28,68 @@ def reply_flex_message(reply_token: str, alt_text: str, contents: dict) -> None:
 
 
 # ──────────────────────────────────────────────
+# 緊急求助二次確認
+# ──────────────────────────────────────────────
+# 「需要幫忙」「救命」「緊急」這幾個詞在自由文字比對下太寬鬆——日常
+# 聊天講到「這件事很緊急」也會誤觸最高等級警報＋自動建立需求。改成
+# 先跳這張卡二次確認，真的按下「對」才觸發，按鈕本身就帶著確認結果
+# （postback），不需要額外的對話狀態追蹤。
+def reply_sos_confirmation(reply_token: str) -> None:
+    flex = {
+        "type": "bubble",
+        "header": {
+            "type": "box",
+            "layout": "vertical",
+            "backgroundColor": "#DC2626",
+            "contents": [
+                {"type": "text", "text": "鄰里守望 · 緊急求助確認", "color": "#ffffff",
+                 "size": "sm", "weight": "bold"},
+            ],
+        },
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "md",
+            "contents": [
+                {"type": "text", "text": "您是說需要立即救援嗎？", "size": "xl",
+                 "weight": "bold", "wrap": True},
+                {"type": "text", "text": "如果只是聊天講到這幾個字，請按「沒事」，不會通知任何人。",
+                 "size": "sm", "color": "#555555", "wrap": True},
+            ],
+        },
+        "footer": {
+            "type": "box",
+            "layout": "vertical",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#DC2626",
+                    "action": {
+                        "type": "postback",
+                        "label": "🆘 對，我需要立即救援",
+                        "data": "action=confirm_sos",
+                        "displayText": "對，我需要立即救援",
+                    },
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "action": {
+                        "type": "postback",
+                        "label": "沒事，我在聊別的",
+                        "data": "action=dismiss_sos",
+                        "displayText": "沒事，我在聊別的",
+                    },
+                },
+            ],
+        },
+    }
+    reply_flex_message(reply_token, "緊急求助確認", flex)
+
+
+# ──────────────────────────────────────────────
 # 打卡訊息
 # ──────────────────────────────────────────────
 def send_checkin_message(line_uid: str, checkin_id: str) -> None:
