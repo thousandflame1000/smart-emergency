@@ -385,7 +385,7 @@ body {
   <a class="nav-item" href="/workspace" style="text-decoration:none">
     <span class="icon">圖</span> 開放資料工作區
   </a>
-  <div class="nav-item" onclick="showPage('dispatch-page')">
+  <div class="nav-item" onclick="window.location='/admin#needs'">
     <span class="icon">🚨</span> 緊急調度
   </div>
   <div class="nav-item" onclick="showPage('analytics-page')">
@@ -1137,7 +1137,8 @@ async function dspSelectNeed(needId) {
   panel.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">評分候選中…</div>';
 
   try {
-    const cands = await fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json());
+    const found = await fetch(`/api/resources/needs/${needId}/candidates`).then(r => r.json());
+    const cands = Array.isArray(found) ? found : (found.candidates || []);
     if (!cands.length) {
       panel.innerHTML = '<div style="padding:8px;color:var(--muted);font-size:12px">⚠️ 無符合條件的物資或資源點</div>';
       return;
