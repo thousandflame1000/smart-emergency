@@ -633,7 +633,7 @@ def test_rich_menu_layout_covers_canvas_and_uses_known_commands():
     assert set(rm.MENUS) == {rm.RESIDENT_NAME, rm.STAFF_NAME, rm.FAMILY_NAME, rm.ADMIN_NAME}
     for name, spec in rm.MENUS.items():
         cells = rm.layout(spec["rows"])
-        assert len(cells) == 8
+        assert 11 <= len(cells) <= 20, "LINE 選單最多 20 格"
         assert sum(w * h for _, _, w, h, _ in cells) == rm.W * rm.H
         for *_, cell in cells:
             text = cell[4]
