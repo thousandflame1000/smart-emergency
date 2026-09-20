@@ -135,11 +135,27 @@ body {
 .badge-red    { background: rgba(245,69,92,.1);   color: var(--danger);  border-color: rgba(245,69,92,.3); }
 .badge-amber  { background: rgba(244,183,64,.1);  color: var(--warning); border-color: rgba(244,183,64,.3); }
 .is-hidden { display: none !important; }
-.dispatch-grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr); gap:16px; align-items:start; }
-.dispatch-main, .dispatch-side { min-width:0; }
-.dispatch-side .stat-strip { grid-template-columns:repeat(2,1fr); }
-.dispatch-side .card { overflow-x:auto; margin-bottom:16px; }
-@media (max-width:1180px) { .dispatch-grid { grid-template-columns:minmax(0,1fr); } }
+.console { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(340px,1fr);
+           grid-template-areas:"ov ov" "main side" "help help"; gap:16px; align-items:start; }
+.panel-wide { grid-area:ov; background:var(--surface, transparent); border:1px solid var(--border); border-radius:var(--radius); }
+.console-main { grid-area:main; min-width:0; }
+.console-side { grid-area:side; min-width:0; display:flex; flex-direction:column; gap:16px; }
+.console-help { grid-area:help; display:grid; gap:16px; }
+.console .card { margin-bottom:0; }
+.panel > .panel-h { padding:10px 14px; border-bottom:1px solid var(--border); }
+.overview-body { display:grid; grid-template-columns:minmax(0,1.9fr) minmax(0,1fr) minmax(0,1.1fr); gap:16px; padding:14px; }
+.ov-label { font-size:11px; font-weight:700; color:var(--text-dim); margin-bottom:6px; letter-spacing:.06em; }
+.ov-group .stat-strip { margin:0; grid-template-columns:repeat(auto-fit, minmax(66px,1fr)); }
+.panel > .panel-b { max-height:min(62vh, 680px); overflow:auto; }
+.panel-wide > .panel-b { max-height:none; overflow:visible; }
+.panel.collapsed > .panel-b { display:none; }
+.panel > .card-header { align-items:center; }
+.panel-toggle { background:none; border:0; color:var(--text-dim); cursor:pointer; font-size:14px; padding:4px 8px; margin-left:6px; }
+.panel-toggle:hover { color:var(--text); }
+@media (max-width:1180px) {
+  .console { grid-template-columns:minmax(0,1fr); grid-template-areas:"ov" "main" "side" "help"; }
+  .overview-body { grid-template-columns:minmax(0,1fr); }
+}
 .badge-gray   { background: rgba(255,255,255,.04); color: var(--text-dim); border-color: var(--border); }
 .badge-blue   { background: rgba(34,211,238,.1);  color: var(--primary); border-color: rgba(34,211,238,.3); }
 .badge-purple { background: rgba(196,140,255,.1); color: #c48cff; border-color: rgba(196,140,255,.3); }
@@ -758,36 +774,17 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 緊急需求                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-needs">
-      <div class="dispatch-grid">
-        <div class="dispatch-main">
-      <div class="stat-strip" id="needs-stats"></div>
-
-      <!-- 資料來源說明 -->
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
-        <div style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.3);border-radius:3px;padding:12px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:4px">📱 LINE 傳訊</div>
-          <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
-            居民傳：<strong style="color:var(--text)">「需要水」「需要食物」「需要藥」</strong><br>
-            系統自動建立需求單，緊急度預設 3
+      <div class="console">
+        <section class="panel panel-wide" data-panel="overview">
+          <div class="panel-h"><span class="card-title">概況</span></div>
+          <div class="panel-b overview-body">
+            <div class="ov-group"><div class="ov-label">需求</div><div class="stat-strip" id="needs-stats"></div></div>
+            <div class="ov-group"><div class="ov-label">個人物資</div><div class="stat-strip" id="resources-stats"></div></div>
+            <div class="ov-group"><div class="ov-label">資源點</div><div class="stat-strip" id="points-stats"></div></div>
           </div>
-        </div>
-        <div style="background:rgba(45,212,167,.06);border:1px solid rgba(45,212,167,.3);border-radius:3px;padding:12px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--success);margin-bottom:4px">🆘 緊急按鈕</div>
-          <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
-            居民按「需要幫忙」或傳「救命」<br>
-            同時觸發警報 + 建立需求，緊急度 5
-          </div>
-        </div>
-        <div style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:3px;padding:12px 14px">
-          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">⚙️ 管理員手動</div>
-          <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
-            點右上「＋ 新增需求」<br>
-            選類型、填地址、設緊急度
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
+        </section>
+        <div class="console-main">
+          <div class="card panel" data-panel="needs">
         <div class="card-header">
           <div>
             <div class="card-title">物資需求清單</div>
@@ -836,9 +833,109 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </table>
         </div>
       </div>
-
-      <!-- 媒合演算法說明 -->
-      <div class="card">
+        </div>
+        <div class="console-side">
+          <div class="card panel" data-panel="resources">
+        <div class="card-header">
+          <div>
+            <div class="card-title">社區物資清單</div>
+            <div class="card-subtitle">點擊「可用 / 不可用」快速切換狀態</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-danger btn-sm" onclick="runDispatch(this)" id="dispatch-btn">
+              🚨 立即自動媒合
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>類型</th>
+                <th>數量</th>
+                <th>地址</th>
+                <th>登記人</th>
+                <th>狀態</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="resources-tbody">
+              <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+          <div class="card panel" data-panel="points">
+        <div class="card-header">
+          <div>
+            <div class="card-title">社區固定資源點</div>
+            <div class="card-subtitle">避難收容所、消防分隊、衛生所、活動中心、物資分發點</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="seedPoints()">📥 從政府資料匯入</button>
+            <button class="btn btn-primary btn-sm" onclick="openPointModal()">＋ 手動新增</button>
+          </div>
+        </div>
+        <!-- 分類篩選器 -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">
+          <button class="filter-btn active" data-type="" onclick="filterPoints(this,'')">全部</button>
+          <button class="filter-btn" data-type="shelter" onclick="filterPoints(this,'shelter')">🏠 避難所</button>
+          <button class="filter-btn" data-type="fire_station" onclick="filterPoints(this,'fire_station')">🚒 消防</button>
+          <button class="filter-btn" data-type="hospital" onclick="filterPoints(this,'hospital')">🏥 醫院</button>
+          <button class="filter-btn" data-type="clinic" onclick="filterPoints(this,'clinic')">💊 衛生所</button>
+          <button class="filter-btn" data-type="community" onclick="filterPoints(this,'community')">🏘️ 活動中心</button>
+          <button class="filter-btn" data-type="store" onclick="filterPoints(this,'store')">🛒 分發點</button>
+          <button class="filter-btn" data-type="warehouse" onclick="filterPoints(this,'warehouse')">📦 倉庫</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>類型</th>
+                <th>地址</th>
+                <th>目前使用 / 容量</th>
+                <th>可提供物資</th>
+                <th>電話</th>
+                <th>來源</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="points-tbody">
+              <tr><td colspan="8"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+          <div id="seed-notice" style="display:none;margin-top:0"></div>
+        </div>
+        <div class="console-help">
+          <div class="card panel" data-panel="sources" data-collapsed="true"><div class="card-header"><div><div class="card-title">需求從哪裡來</div><div class="card-subtitle">LINE 傳訊、緊急按鈕、管理員手動新增</div></div></div><div style="padding:14px"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+        <div style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.3);border-radius:3px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:var(--primary);margin-bottom:4px">📱 LINE 傳訊</div>
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
+            居民傳：<strong style="color:var(--text)">「需要水」「需要食物」「需要藥」</strong><br>
+            系統自動建立需求單，緊急度預設 3
+          </div>
+        </div>
+        <div style="background:rgba(45,212,167,.06);border:1px solid rgba(45,212,167,.3);border-radius:3px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:var(--success);margin-bottom:4px">🆘 緊急按鈕</div>
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
+            居民按「需要幫忙」或傳「救命」<br>
+            同時觸發警報 + 建立需求，緊急度 5
+          </div>
+        </div>
+        <div style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:3px;padding:12px 14px">
+          <div style="font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px">⚙️ 管理員手動</div>
+          <div style="font-size:12px;color:var(--text-dim);line-height:1.6">
+            點右上「＋ 新增需求」<br>
+            選類型、填地址、設緊急度
+          </div>
+        </div>
+      </div></div></div>
+          <div class="card panel" data-panel="algorithm" data-collapsed="true">
         <div class="card-header">
           <div>
             <div class="card-title">📐 系統怎麼決定優先派給誰？</div>
@@ -906,93 +1003,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </details>
         </div>
       </div>
-    </div>
-        <div class="dispatch-side">
-      <div class="stat-strip" id="resources-stats"></div>
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">社區物資清單</div>
-            <div class="card-subtitle">點擊「可用 / 不可用」快速切換狀態</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-danger btn-sm" onclick="runDispatch(this)" id="dispatch-btn">
-              🚨 立即自動媒合
-            </button>
-            <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
-          </div>
         </div>
-        <div class="table-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>名稱</th>
-                <th>類型</th>
-                <th>數量</th>
-                <th>地址</th>
-                <th>登記人</th>
-                <th>狀態</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="resources-tbody">
-              <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    
-
-      <div class="stat-strip" id="points-stats"></div>
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">社區固定資源點</div>
-            <div class="card-subtitle">避難收容所、消防分隊、衛生所、活動中心、物資分發點</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-ghost btn-sm" onclick="seedPoints()">📥 從政府資料匯入</button>
-            <button class="btn btn-primary btn-sm" onclick="openPointModal()">＋ 手動新增</button>
-          </div>
-        </div>
-        <!-- 分類篩選器 -->
-        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">
-          <button class="filter-btn active" data-type="" onclick="filterPoints(this,'')">全部</button>
-          <button class="filter-btn" data-type="shelter" onclick="filterPoints(this,'shelter')">🏠 避難所</button>
-          <button class="filter-btn" data-type="fire_station" onclick="filterPoints(this,'fire_station')">🚒 消防</button>
-          <button class="filter-btn" data-type="hospital" onclick="filterPoints(this,'hospital')">🏥 醫院</button>
-          <button class="filter-btn" data-type="clinic" onclick="filterPoints(this,'clinic')">💊 衛生所</button>
-          <button class="filter-btn" data-type="community" onclick="filterPoints(this,'community')">🏘️ 活動中心</button>
-          <button class="filter-btn" data-type="store" onclick="filterPoints(this,'store')">🛒 分發點</button>
-          <button class="filter-btn" data-type="warehouse" onclick="filterPoints(this,'warehouse')">📦 倉庫</button>
-        </div>
-        <div class="table-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>名稱</th>
-                <th>類型</th>
-                <th>地址</th>
-                <th>目前使用 / 容量</th>
-                <th>可提供物資</th>
-                <th>電話</th>
-                <th>來源</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="points-tbody">
-              <tr><td colspan="8"><div class="empty"><div class="spinner"></div></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div id="seed-notice" style="display:none;margin-top:0"></div>
-    </div>
       </div>
     </div>
 
-    <!-- ══════════════════════════════════════════════ -->
-    <!-- 情境模擬（決賽展演用）                          -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-ontology">
       <div class="stat-strip" id="ontology-stats"></div>
@@ -3625,6 +3639,38 @@ loadAll();
 loadVolunteerApplications();
 loadMode();
 loadSecurityBanner();
+function initPanels() {
+  document.querySelectorAll('.panel').forEach(panel => {
+    if (panel.dataset.ready) return;
+    panel.dataset.ready = '1';
+    const head = panel.querySelector(':scope > .card-header, :scope > .panel-h');
+    if (!head) return;
+    if (!panel.querySelector(':scope > .panel-b')) {
+      const body = document.createElement('div');
+      body.className = 'panel-b';
+      while (head.nextSibling) body.appendChild(head.nextSibling);
+      panel.appendChild(body);
+    }
+    if (panel.classList.contains('panel-wide')) return;
+    const key = 'panel:' + panel.dataset.panel;
+    let saved = null;
+    try { saved = localStorage.getItem(key); } catch (e) { /* private mode */ }
+    panel.classList.toggle('collapsed', saved === null ? panel.dataset.collapsed === 'true' : saved === '1');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'panel-toggle';
+    btn.setAttribute('aria-label', '收合或展開');
+    const sync = () => { btn.textContent = panel.classList.contains('collapsed') ? '▸' : '▾'; };
+    btn.addEventListener('click', () => {
+      panel.classList.toggle('collapsed');
+      sync();
+      try { localStorage.setItem(key, panel.classList.contains('collapsed') ? '1' : '0'); } catch (e) { /* ignore */ }
+    });
+    sync();
+    head.appendChild(btn);
+  });
+}
+initPanels();
 if (typeof location !== 'undefined' && location.hash === '#needs') showPage('page-needs');
 </script>
 </body>
