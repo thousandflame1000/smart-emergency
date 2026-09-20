@@ -381,8 +381,11 @@ def _handle_apply(event, db, user, text) -> bool:
         return True
     rest = text[len(prefix):].strip()
     if not rest:
-        conversation.start(db, user.line_uid, "volunteer_apply", "name")
-        _say(event, "太棒了，謝謝您願意幫忙！我會一題一題問您，隨時傳「取消」可以中止。\n\n請問您的姓名？")
+        from app.services.form_token import form_url
+        from app.services.line_forms import LINK_TITLES, link_card
+        from app.services.line_notify import reply_flex_message
+        reply_flex_message(event.reply_token, LINK_TITLES["apply"],
+                           link_card("apply", form_url("apply", user.line_uid)))
         return True
     parts = rest.split()
     phone = parts[1] if len(parts) > 1 else None
@@ -499,10 +502,12 @@ def _register_resource(event, db, user, rest: str) -> None:
     parts = remain.split(None, 1)
     quantity = parts[0] if parts else None
     explicit_address = parts[1] if len(parts) > 1 else None
-    _save_resource(event, db, user, detected_type, quantity, explicit_address)
+    text, ask = save_resource(db, user, detected_type, quantity, explicit_address)
+    _say(event, text, ask_location=ask)
 
 
-def _save_resource(event, db, user, detected_type: str, quantity, explicit_address) -> None:
+def save_resource(db, user, detected_type: str, quantity, explicit_address, resource_name=None) -> tuple[str, bool]:
+    """Create or update this person's resource. Returns (reply text, whether to ask for a location)."""
     from app.models.resource import CommunityResource
     address = explicit_address or (user.address or None)
 
@@ -522,6 +527,8 @@ def _save_resource(event, db, user, detected_type: str, quantity, explicit_addre
             existing.quantity = quantity
         if address:
             existing.address = address
+        if resource_name:
+            existing.name = resource_name
         if lat is not None:
             existing.lat, existing.lng = lat, lng
         existing.last_updated = now_utc()
@@ -529,7 +536,7 @@ def _save_resource(event, db, user, detected_type: str, quantity, explicit_addre
     else:
         db.add(CommunityResource(
             owner_id=user.id, resource_type=detected_type,
-            name=f"{user.name}提供的{label}", quantity=quantity, address=address,
+            name=resource_name or f"{user.name}提供的{label}", quantity=quantity, address=address,
             lat=lat, lng=lng, is_available=True,
         ))
         verb = "登記成功"
@@ -540,10 +547,8 @@ def _save_resource(event, db, user, detected_type: str, quantity, explicit_addre
             "緊急模式啟動後系統會自動媒合，或管理員手動指派給您。\n"
             "傳「我的物資」查看已登記項目，傳「取消物資」可以撤回。")
     if lat is None:
-        _say(event, text + "\n\n⚠️ 我們還不知道這份物資在哪裡，在您分享位置之前它不會被媒合。請點下面按鈕分享位置。",
-             ask_location=True)
-    else:
-        _say(event, text)
+        return text + "\n\n⚠️ 我們還不知道這份物資在哪裡，在您分享位置之前它不會被媒合。請點下面按鈕分享位置。", True
+    return text, False
 
 
 # ──────────────────────────────────────────────
@@ -580,7 +585,8 @@ def _handle_needs(event, db, user, text, intent) -> bool:
         return True
 
     if intent["needs"]:
-        _submit_needs(event, db, user, intent["needs"], text)
+        reply, ask = submit_needs(db, user, intent["needs"], text)
+        _say(event, reply, ask_location=ask)
         return True
 
     if intent["negated"]:
@@ -589,11 +595,16 @@ def _handle_needs(event, db, user, text, intent) -> bool:
     return False
 
 
-def _submit_needs(event, db, user, ntypes, description, *, urgent=False) -> None:
+def submit_needs(db, user, ntypes, description, *, urgent=False, address=None) -> tuple[str, bool]:
+    """Create needs for this person. Returns (reply text, whether to ask for a location)."""
     from app.models.need import CommunityNeed
     existing_types = {n.need_type for n in db.query(CommunityNeed).filter(
         CommunityNeed.requester_id == user.id, CommunityNeed.status.in_(["open", "suggested", "matched"])).all()}
-    coords = _resolve_coordinates(user)
+    coords = _resolve_coordinates(user, address)
+    if address and coords and (user.lat is None or user.lng is None):
+        user.lat, user.lng = coords
+    if address and not user.address:
+        user.address = address
     created, duplicates = [], []
     for ntype in ntypes:
         if ntype in existing_types:
@@ -601,7 +612,7 @@ def _submit_needs(event, db, user, ntypes, description, *, urgent=False) -> None
             continue
         base = URGENCY_BY_TYPE.get(ntype, 3)
         db.add(CommunityNeed(
-            requester_id=user.id, need_type=ntype, description=description, address=user.address,
+            requester_id=user.id, need_type=ntype, description=description, address=address or user.address,
             lat=coords[0] if coords else None, lng=coords[1] if coords else None,
             urgency=max(base, 4) if urgent else base,
         ))
@@ -620,7 +631,7 @@ def _submit_needs(event, db, user, ntypes, description, *, urgent=False) -> None
         lines.append(EMERGENCY_TIP)
     if not coords:
         lines.append(LOCATION_HINT)
-    _say(event, "\n\n".join(lines), ask_location=not coords)
+    return "\n\n".join(lines), not coords
 
 
 # ──────────────────────────────────────────────
@@ -638,10 +649,14 @@ def _send_form(event, kind: str, data: dict) -> None:
 
 
 def _open_form(event, db, user, kind: str) -> None:
+    """Send the link to the web form (real text boxes) with a tap-only fallback underneath."""
     from app.services import line_forms
+    from app.services.form_token import form_url
+    from app.services.line_notify import reply_flex_message
     conversation.start(db, user.line_uid, f"form_{kind}", "edit",
                        {"types": [], "urgent": False} if kind == "need" else {}, ns=line_forms.FORM_NS)
-    _send_form(event, kind, conversation.get(db, user.line_uid, line_forms.FORM_NS)["data"])
+    reply_flex_message(event.reply_token, line_forms.LINK_TITLES[kind],
+                       line_forms.link_card(kind, form_url(kind, user.line_uid)))
 
 
 def _handle_form_text(event, db, user, text: str) -> bool:
@@ -674,9 +689,21 @@ def _handle_form_postback(event, db, user, data: dict) -> None:
 
     if op == "noop":
         return
+    if op == "wizard":
+        conversation.start(db, user.line_uid, "volunteer_apply", "name")
+        _say(event, "好的，我一題一題問您，隨時傳「取消」可以中止。\n\n請問您的姓名？")
+        return
     if op == "cancel":
         conversation.clear(db, user.line_uid, ns)
         _say(event, "好的，已取消表單。")
+        return
+    if op == "open" and kind in ("need", "res"):
+        if kind == "res" and not _is_staff(user):
+            _say(event, "此功能僅限志工使用。")
+            return
+        conversation.start(db, user.line_uid, f"form_{kind}", "edit",
+                           {"types": [], "urgent": False} if kind == "need" else {}, ns=ns)
+        _send_form(event, kind, conversation.get(db, user.line_uid, ns)["data"])
         return
     if not state or state.get("flow") != f"form_{kind}":
         _say(event, "這張表單已經失效了，請重新點選單的「申請物資」或傳「登記物資」。")
@@ -698,13 +725,15 @@ def _handle_form_postback(event, db, user, data: dict) -> None:
             if form.get("note"):
                 desc += f"｜補充：{form['note']}"
             conversation.clear(db, user.line_uid, ns)
-            _submit_needs(event, db, user, form["types"], desc, urgent=bool(form.get("urgent")))
+            reply, ask = submit_needs(db, user, form["types"], desc, urgent=bool(form.get("urgent")))
+            _say(event, reply, ask_location=ask)
         else:
             if not form.get("rtype") or not form.get("qty"):
                 _say(event, "請先選擇物資種類和數量。")
                 return
             conversation.clear(db, user.line_uid, ns)
-            _save_resource(event, db, user, form["rtype"], form["qty"], form.get("address"))
+            reply, ask = save_resource(db, user, form["rtype"], form["qty"], form.get("address"))
+            _say(event, reply, ask_location=ask)
         return
 
     if kind == "need":

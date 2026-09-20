@@ -26,7 +26,8 @@ from starlette.responses import Response
 
 from app.config import settings
 
-_EXEMPT_PREFIXES = ("/webhook", "/health")
+# /f/ 是機器人發給民眾與志工的網頁表單，身分由連結上的簽章保證，不能要求他們輸入展演密碼。
+_EXEMPT_PREFIXES = ("/webhook", "/health", "/f/")
 
 
 class DemoAuthMiddleware(BaseHTTPMiddleware):

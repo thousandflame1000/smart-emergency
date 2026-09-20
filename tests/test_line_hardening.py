@@ -542,10 +542,10 @@ def test_commands_break_out_of_the_guided_application_instead_of_being_swallowed
     """重跑端到端時抓到：進入「我要當志工」問卷後，接下來傳的「幫助」「登記物資」都被當成
     姓名／電話吞掉，30 分鐘內什麼指令都用不了。"""
     mk(db, "阿伯", ["elderly"], "Ua", lat=24.1, lng=120.6)
-    say("Ua", "我要當志工")
+    press("Ua", "action=form&f=apply&op=wizard")
     say("Ua", "幫助")
     assert "可用指令" in replies(line_outbox)[-1], "問卷中傳「幫助」要正常回覆指令說明"
-    say("Ua", "我要當志工")
+    press("Ua", "action=form&f=apply&op=wizard")
     say("Ua", "需要水")
     assert "已登記您的需求" in replies(line_outbox)[-1]
     say("Ua", "陳小美")
@@ -554,7 +554,7 @@ def test_commands_break_out_of_the_guided_application_instead_of_being_swallowed
 
 def test_one_shot_application_text_works_even_while_a_questionnaire_is_open(db, line_outbox):
     mk(db, "阿伯", ["elderly"], "Ua")
-    say("Ua", "我要當志工")
+    press("Ua", "action=form&f=apply&op=wizard")
     say("Ua", "志工申請 王小明 0912345678 台中市南區")
     assert "已收到您的志工申請" in replies(line_outbox)[-1]
 

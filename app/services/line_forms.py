@@ -32,6 +32,37 @@ def _text_field(prefix: str, label: str, value: str | None, hint: str) -> list[d
     }]
 
 
+LINK_TITLES = {"need": "申請物資", "res": "登記可提供物資", "apply": "志工申請"}
+_LINK_TEXT = {
+    "need": ("📋 申請物資", "#c0392b", "填姓名、地址、需要什麼，志工才找得到您。"),
+    "res": ("📦 登記可提供物資", "#148f77", "填物資種類、數量、放在哪裡。"),
+    "apply": ("🙋 志工申請", "#2471a3", "謝謝您願意幫忙！填好後管理員會審核並通知您。"),
+}
+
+
+def link_card(kind: str, url: str) -> dict:
+    """The card that opens the web form (real text boxes); tap-only fallback below it."""
+    title, color, desc = _LINK_TEXT[kind]
+    fallback = ({"type": "postback", "label": "⚡ 快速點選（不用打字）", "data": f"action=form&f={kind}&op=open"}
+                if kind in ("need", "res") else
+                {"type": "postback", "label": "💬 用聊天一題一題回答", "data": "action=form&f=apply&op=wizard"})
+    return {
+        "type": "bubble", "size": "mega",
+        "header": {"type": "box", "layout": "vertical", "backgroundColor": color,
+                   "contents": [{"type": "text", "text": title, "color": "#ffffff", "weight": "bold", "size": "lg"}]},
+        "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": [
+            {"type": "text", "text": desc, "wrap": True, "size": "md"},
+            {"type": "text", "text": "連結 3 小時內有效，只能用在您自己的帳號。", "wrap": True,
+             "size": "xs", "color": "#888888"},
+        ]},
+        "footer": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [
+            {"type": "button", "style": "primary", "color": "#27ae60", "height": "md",
+             "action": {"type": "uri", "label": "📝 開啟填寫表單", "uri": url}},
+            {"type": "button", "style": "secondary", "height": "sm", "action": fallback},
+        ]},
+    }
+
+
 def qty_options(rtype: str | None) -> list[str]:
     return RES_QTY.get(rtype, RES_QTY_DEFAULT)
 

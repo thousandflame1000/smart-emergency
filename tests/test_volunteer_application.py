@@ -54,18 +54,24 @@ def test_line_submit_creates_pending_application(db, monkeypatch):
     db2.close()
 
 
-def test_line_missing_name_shows_usage_and_creates_nothing(db, monkeypatch):
-    replies = []
-    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+def test_line_missing_name_sends_web_form_link_and_creates_nothing(db, line_outbox):
     resident = User(name="訪客", roles=["elderly"], line_uid="Uapply2")
     db.add(resident); db.commit(); db.close()
 
     lb.handle_text(_FakeEvent("志工申請", "Uapply2"))
-    assert "請問您的姓名" in replies[-1], "沒帶資料時改成一題一題問，不再要求使用者背格式"
+    card = str(line_outbox.sent[-1][2].contents.to_dict())
+    assert "/f/apply?t=" in card, "沒帶資料時給網頁表單連結（有真正的文字框），不再要求使用者背格式"
 
     db2 = SessionLocal()
     assert db2.query(VolunteerApplication).count() == 0
     db2.close()
+
+
+def _start_wizard(uid):
+    """「我要當志工」現在先給網頁表單連結；聊天問卷要從卡片上的「用聊天一題一題回答」進入。"""
+    event = _FakeEvent("", uid)
+    event.postback = type("PB", (), {"data": "action=form&f=apply&op=wizard"})()
+    lb.handle_postback(event)
 
 
 def test_guided_application_asks_one_question_at_a_time(db, monkeypatch):
@@ -74,7 +80,7 @@ def test_guided_application_asks_one_question_at_a_time(db, monkeypatch):
     resident = User(name="LINE暱稱", roles=["elderly"], line_uid="Uguide1")
     db.add(resident); db.commit(); db.close()
 
-    lb.handle_text(_FakeEvent("我要當志工", "Uguide1"))
+    _start_wizard("Uguide1")
     assert "姓名" in replies[-1]
     lb.handle_text(_FakeEvent("陳小美", "Uguide1"))
     assert "電話" in replies[-1]
@@ -99,13 +105,13 @@ def test_guided_application_can_be_cancelled_and_sos_takes_priority(db, monkeypa
     resident = User(name="LINE暱稱", roles=["elderly"], line_uid="Uguide2")
     db.add(resident); db.commit(); db.close()
 
-    lb.handle_text(_FakeEvent("我要當志工", "Uguide2"))
+    _start_wizard("Uguide2")
     lb.handle_text(_FakeEvent("取消", "Uguide2"))
     assert "已取消" in replies[-1]
     lb.handle_text(_FakeEvent("陳小美", "Uguide2"))  # 流程已結束，不該被當成姓名
     assert "請問聯絡電話" not in replies[-1]
 
-    lb.handle_text(_FakeEvent("我要當志工", "Uguide2"))
+    _start_wizard("Uguide2")
     lb.handle_text(_FakeEvent("救命", "Uguide2"))
     assert confirmations, "申請途中喊救命，必須優先進入求救確認，不能被當成姓名"
 
