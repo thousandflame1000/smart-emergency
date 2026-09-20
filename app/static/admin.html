@@ -1373,9 +1373,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <span class="form-hint" id="user-geocode-status"></span>
       </div>
       <div class="form-group">
-        <label class="form-label">LINE User ID</label>
-        <input type="text" class="form-control" id="user-line" placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
-        <span class="form-hint">綁定後才能收到 LINE 推播通知</span>
+        <label class="form-label">LINE 綁定</label>
+        <div id="user-bind-status" class="form-hint"></div>
+        <div id="user-bind-code" class="is-hidden" style="font-size:30px;font-weight:800;letter-spacing:3px;margin:8px 0"></div>
+        <div id="user-bind-note" class="form-hint is-hidden"></div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" class="btn btn-ghost btn-sm is-hidden" id="user-bind-btn" onclick="makeJoinCode()">產生綁定碼</button>
+          <button type="button" class="btn btn-ghost-danger btn-sm is-hidden" id="user-unbind-btn" onclick="unlinkLine()">解除綁定</button>
+        </div>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
@@ -1953,10 +1958,51 @@ function openUserModal(role, user = null) {
   document.getElementById('user-name').value    = user?.name || '';
   document.getElementById('user-phone').value   = user?.phone || '';
   document.getElementById('user-address').value = user?.address || '';
-  document.getElementById('user-line').value    = user?.line_uid || '';
   document.getElementById('user-lat').value     = user?.lat || '';
   document.getElementById('user-lng').value     = user?.lng || '';
+  renderBindState(user);
   openModal('modal-user');
+}
+
+function renderBindState(user) {
+  const status = document.getElementById('user-bind-status');
+  const bindBtn = document.getElementById('user-bind-btn');
+  const unbindBtn = document.getElementById('user-unbind-btn');
+  document.getElementById('user-bind-code').classList.add('is-hidden');
+  document.getElementById('user-bind-note').classList.add('is-hidden');
+  bindBtn.classList.add('is-hidden');
+  unbindBtn.classList.add('is-hidden');
+  if (!user) {
+    status.textContent = '儲存後會自動產生綁定碼，請對方在 LINE 傳「加入 綁定碼」。';
+  } else if (user.line_uid) {
+    status.textContent = '✅ 已綁定 LINE，可以收到推播通知。';
+    unbindBtn.classList.remove('is-hidden');
+  } else {
+    status.textContent = '尚未綁定 LINE，收不到通知。產生綁定碼後，請對方在 LINE 傳「加入 綁定碼」。';
+    bindBtn.classList.remove('is-hidden');
+  }
+}
+
+async function makeJoinCode(userId) {
+  const id = userId || document.getElementById('user-id').value;
+  const res = await fetch(`/api/dashboard/users/${encodeURIComponent(id)}/join_code`, { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert('產生失敗：' + (data.detail || data.error || res.status)); return; }
+  const codeEl = document.getElementById('user-bind-code');
+  codeEl.textContent = data.say;
+  codeEl.classList.remove('is-hidden');
+  const note = document.getElementById('user-bind-note');
+  note.textContent = `請對方把上面這句話傳給官方帳號，${data.expires_minutes >= 60 ? Math.round(data.expires_minutes / 60 / 24) + ' 天' : data.expires_minutes + ' 分鐘'}內有效，只能用一次。`;
+  note.classList.remove('is-hidden');
+  document.getElementById('user-bind-btn').classList.add('is-hidden');
+}
+
+async function unlinkLine() {
+  if (!confirm('確定解除這位成員的 LINE 綁定？他會收不到通知，選單也會收回。')) return;
+  const id = document.getElementById('user-id').value;
+  await fetch(`/api/dashboard/users/${encodeURIComponent(id)}/unlink_line`, { method: 'POST' });
+  renderBindState({ line_uid: null });
+  loadAll();
 }
 
 function editUser(u) { openUserModal(u.roles[0] || 'elderly', u); }
@@ -1967,7 +2013,6 @@ async function saveUser() {
   const name    = document.getElementById('user-name').value.trim();
   const phone   = document.getElementById('user-phone').value.trim();
   const address = document.getElementById('user-address').value.trim();
-  const lineUid = document.getElementById('user-line').value.trim();
   const lat     = document.getElementById('user-lat').value;
   const lng     = document.getElementById('user-lng').value;
 
@@ -1976,17 +2021,25 @@ async function saveUser() {
   const p = new URLSearchParams({ name });
   if (phone)   p.set('phone', phone);
   if (address) p.set('address', address);
-  if (lineUid) p.set('line_uid', lineUid);
   if (lat)     p.set('lat', lat);
   if (lng)     p.set('lng', lng);
 
   p.append('roles', role);
   if (id) {
-    await fetch(`/api/dashboard/users/${id}?${p}`, { method: 'PUT' });
-  } else {
-    await fetch(`/api/dashboard/users?${p}`, { method: 'POST' });
+    const res = await fetch(`/api/dashboard/users/${id}?${p}`, { method: 'PUT' });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert('儲存失敗：' + (d.detail || d.error || res.status)); return; }
+    closeModal('modal-user');
+    loadAll();
+    return;
   }
-  closeModal('modal-user');
+  const res = await fetch(`/api/dashboard/users?${p}`, { method: 'POST' });
+  const created = await res.json().catch(() => ({}));
+  if (!res.ok) { alert('新增失敗：' + (created.detail || created.error || res.status)); return; }
+  // 新增成員後留在視窗裡直接顯示綁定碼，不用另外找 LINE User ID。
+  document.getElementById('user-id').value = created.id;
+  document.getElementById('user-modal-title').textContent = '編輯使用者';
+  renderBindState({ line_uid: null });
+  await makeJoinCode(created.id);
   loadAll();
 }
 

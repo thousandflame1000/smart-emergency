@@ -359,6 +359,33 @@ def resolve_user_alerts(user_id: str, db: Session = Depends(get_db)):
     return {"message": f"已解決 {count} 筆警報", "resolved": count}
 
 
+@router.post("/users/{user_id}/join_code")
+def make_join_code(user_id: str, db: Session = Depends(get_db)):
+    """產生綁定碼：對方在 LINE 傳「加入 碼」就會綁定，不用貼 LINE User ID。"""
+    from app.services.line_ops import create_join_code
+    user = _get_user_or_404(db, user_id)
+    if user.line_uid:
+        raise ApiError(409, "這位成員已經綁定 LINE，要更換請先解除綁定。")
+    code, minutes = create_join_code(db, user)
+    return {"code": code, "expires_minutes": minutes, "say": f"加入 {code}"}
+
+
+@router.post("/users/{user_id}/unlink_line")
+def unlink_line(user_id: str, db: Session = Depends(get_db)):
+    """解除 LINE 綁定（換手機、綁錯人時用），選單一併收回。"""
+    user = _get_user_or_404(db, user_id)
+    old_uid = user.line_uid
+    user.line_uid = None
+    db.commit()
+    if old_uid:
+        try:
+            from app.services.rich_menu import _apis
+            _apis()[0].unlink_rich_menu_id_from_user(old_uid)
+        except Exception:
+            pass
+    return {"message": "已解除綁定"}
+
+
 @router.delete("/users/{user_id}")
 def delete_user(user_id: str, db: Session = Depends(get_db)):
     """刪除使用者，連同只屬於他的資料一起清乾淨。

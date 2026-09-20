@@ -871,7 +871,7 @@ FIXED_COMMANDS |= line_ops.COMMAND_WORDS | set(UNWELL_WORDS)
 def _is_known_command(text: str, intent: dict) -> bool:
     return (
         text in FIXED_COMMANDS or text in CANCEL_NEED_WORDS
-        or bool(intent["needs"]) or bool(line_ops.BIND_RE.match(text))
+        or bool(intent["needs"]) or bool(line_ops.BIND_RE.match(text)) or bool(line_ops.JOIN_RE.match(text))
         or any(text.startswith(p) for p in APPLY_PREFIXES + ["新增長者", "幫長者登記", "代辦長者", "登記長者", "我有"])
     )
 
@@ -974,10 +974,15 @@ def handle_text(event: MessageEvent):
     elif not user.is_active:
         _say(event, "您的帳號目前已停用，如有疑問請直接聯絡社區管理員。")
         return
+    placeholder_id = user.id
 
     handled = _process_text(event, db, user, text)
 
     if first_contact:
+        # 第一句話是「加入 碼」時，臨時居民帳號已經被換成管理員預先建好的成員，不需要再歡迎。
+        current = db.query(User).filter(User.line_uid == line_uid).first()
+        if current is None or current.id != placeholder_id:
+            return
         # 之前新用戶第一句話（哪怕是「救命」）只會得到歡迎詞，內容整個被吞掉。
         # 現在照常處理完，再補送歡迎與使用說明。
         if handled:

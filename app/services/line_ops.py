@@ -32,6 +32,11 @@ FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
 RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "我的紀錄", "刪除我的帳號", "刪除帳號"}
 COMMAND_WORDS = VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
 BIND_RE = re.compile(r"^綁定\s*(\d{6})$")
+JOIN_RE = re.compile(r"^加入\s*(\d{8})$")
+JOIN_TTL = timedelta(days=7)
+JOIN_TTL_ADMIN = timedelta(minutes=30)
+MAX_CODE_FAILURES = 5
+FAILURE_WINDOW = timedelta(hours=1)
 INVITE_TTL = timedelta(hours=24)
 CHECKIN_ZH = {"pending": "⏳ 還沒回覆", "ok": "✅ 已回報平安", "help_needed": "🆘 求助中", "no_response": "⚠️ 長時間未回應"}
 
@@ -280,6 +285,149 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
         _say(event, "✅ 已核准，對方已收到通知並換上志工選單。" if data.get("d") == "approve" else "已婉拒，對方已收到通知。")
 
 
+# ── 綁定碼共用：猜錯太多次就先擋住，避免有人亂猜綁到別人的紀錄 ─────────────────
+def _now_naive() -> datetime:
+    return now_utc().replace(tzinfo=None)
+
+
+def _attempt_key(line_uid: str) -> str:
+    return f"codefail:{line_uid}"
+
+
+def _too_many_failures(db: Session, line_uid: str) -> bool:
+    row = db.query(SystemConfig).filter(SystemConfig.key == _attempt_key(line_uid)).first()
+    if not row:
+        return False
+    try:
+        info = json.loads(row.value)
+        started = datetime.fromisoformat(info["since"])
+    except (ValueError, KeyError):
+        return False
+    if _now_naive() - started > FAILURE_WINDOW:
+        db.delete(row)
+        db.commit()
+        return False
+    return info.get("n", 0) >= MAX_CODE_FAILURES
+
+
+def _record_failure(db: Session, line_uid: str) -> None:
+    row = db.query(SystemConfig).filter(SystemConfig.key == _attempt_key(line_uid)).first()
+    info = {"n": 0, "since": _now_naive().isoformat()}
+    if row:
+        try:
+            info = json.loads(row.value)
+        except ValueError:
+            pass
+    info["n"] = info.get("n", 0) + 1
+    payload = json.dumps(info)
+    if row:
+        row.value = payload
+    else:
+        db.add(SystemConfig(key=_attempt_key(line_uid), value=payload))
+    db.commit()
+
+
+def _clear_failures(db: Session, line_uid: str) -> None:
+    db.query(SystemConfig).filter(SystemConfig.key == _attempt_key(line_uid)).delete(synchronize_session=False)
+    db.commit()
+
+
+LOCKED_MESSAGE = "嘗試錯誤次數太多，請一小時後再試，或請對方重新產生新的綁定碼。"
+
+
+# ── 管理員預先建立成員 → 對方傳「加入 碼」綁定自己的 LINE ─────────────────────
+def _join_key(code: str) -> str:
+    return f"join:{code}"
+
+
+def create_join_code(db: Session, member: User) -> tuple[str, int]:
+    """8-digit single-use code that binds a LINE account to this pre-created member.
+
+    Pasting a LINE User ID (33 random characters) into the console is not something people can
+    do, so the console makes a code instead and the person sends it to the bot. A code that would
+    hand out admin rights only lives 30 minutes."""
+    for row in db.query(SystemConfig).filter(SystemConfig.key.like("join:%")).all():
+        try:
+            info = json.loads(row.value)
+        except ValueError:
+            info = {}
+        expired = datetime.fromisoformat(info.get("exp", "1970-01-01")) < _now_naive()
+        if expired or info.get("user_id") == str(member.id):
+            db.delete(row)
+    ttl = JOIN_TTL_ADMIN if "admin" in (member.roles or []) else JOIN_TTL
+    code = f"{secrets.randbelow(90_000_000) + 10_000_000}"
+    db.add(SystemConfig(key=_join_key(code), value=json.dumps(
+        {"user_id": str(member.id), "exp": (_now_naive() + ttl).isoformat()})))
+    db.commit()
+    return code, int(ttl.total_seconds() // 60)
+
+
+def _is_blank_account(db: Session, user: User) -> bool:
+    """A resident account that was only just auto-created and has never been used."""
+    if (user.roles or []) != ["elderly"] or user.phone or user.address:
+        return False
+    uid = user.id
+    if db.query(CommunityNeed).filter(CommunityNeed.requester_id == uid).count():
+        return False
+    if db.query(CommunityResource).filter(CommunityResource.owner_id == uid).count():
+        return False
+    if db.query(CareRelation).filter((CareRelation.elderly_id == uid) | (CareRelation.contact_id == uid)).count():
+        return False
+    if db.query(DailyCheckin).filter(DailyCheckin.elderly_id == uid, DailyCheckin.status != "pending").count():
+        return False
+    return True
+
+
+def join_member(event, db: Session, user: User, code: str) -> None:
+    from app.services.user_deletion import UserDeletionBlocked, delete_user_data
+    line_uid = user.line_uid
+    if _too_many_failures(db, line_uid):
+        _say(event, LOCKED_MESSAGE)
+        return
+    row = db.query(SystemConfig).filter(SystemConfig.key == _join_key(code)).first()
+    info = {}
+    if row:
+        try:
+            info = json.loads(row.value)
+        except ValueError:
+            info = {}
+    if not info or datetime.fromisoformat(info["exp"]) < _now_naive():
+        if row:
+            db.delete(row)
+            db.commit()
+        _record_failure(db, line_uid)
+        _say(event, "這個綁定碼無效或已過期，請請管理員在後台重新產生。")
+        return
+    target = db.query(User).filter(User.id == info["user_id"]).first()
+    if target is None:
+        _say(event, "找不到這位成員，請請管理員重新產生綁定碼。")
+        return
+    if target.line_uid:
+        _say(event, "這位成員已經綁定過 LINE 了。")
+        return
+    if not _is_blank_account(db, user):
+        _say(event, "這個 LINE 帳號已經有使用紀錄，不能直接綁定。請先傳「刪除我的帳號」清掉舊帳號，再重新傳一次綁定碼。")
+        return
+    try:
+        delete_user_data(db, user)
+    except UserDeletionBlocked as exc:
+        _say(event, f"暫時無法綁定：{exc}")
+        return
+    target = db.query(User).filter(User.id == info["user_id"]).first()
+    target.line_uid = line_uid
+    db.query(SystemConfig).filter(SystemConfig.key == _join_key(code)).delete(synchronize_session=False)
+    db.commit()
+    _clear_failures(db, line_uid)
+    from app.services.rich_menu import sync_user_menu
+    sync_user_menu(target)
+    roles = target.roles or []
+    hint = ("傳「後台」取得後台登入連結。" if "admin" in roles else
+            "傳「接單」看可接的需求，或點選單「登記表單」登記物資。" if "volunteer" in roles else
+            "傳「長輩狀況」查看長輩今天平安嗎。" if "family" in roles else
+            "每天早上會收到打卡卡片，按「我很好」就可以。")
+    _say(event, f"✅ 已綁定為「{target.name}」。{hint}\n選單如果沒換，請重開聊天室。")
+
+
 # ── 家屬 ────────────────────────────────────────────────────────────────────
 def _invite_key(code: str) -> str:
     return f"invite:{code}"
@@ -309,6 +457,9 @@ def invite_family(event, db: Session, user: User) -> None:
 
 
 def bind_family(event, db: Session, user: User, code: str) -> None:
+    if _too_many_failures(db, user.line_uid):
+        _say(event, LOCKED_MESSAGE)
+        return
     row = db.query(SystemConfig).filter(SystemConfig.key == _invite_key(code)).first()
     info = {}
     if row:
@@ -320,6 +471,7 @@ def bind_family(event, db: Session, user: User, code: str) -> None:
         if row:
             db.delete(row)
             db.commit()
+        _record_failure(db, user.line_uid)
         _say(event, "這個綁定碼無效或已過期，請請對方重新傳「邀請家人」取得新的。")
         return
     elder = db.query(User).filter(User.id == info["elderly_id"]).first()
@@ -442,6 +594,10 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
     m = BIND_RE.match(text)
     if m:
         bind_family(event, db, user, m.group(1))
+        return True
+    m = JOIN_RE.match(text)
+    if m:
+        join_member(event, db, user, m.group(1))
         return True
     if text not in COMMAND_WORDS:
         return False

@@ -411,3 +411,124 @@ def test_console_delete_still_works_and_reports_blockers(db):
     assert blocked.status_code == 409 and "進行中的派遣" in blocked.text
     dispatch.cancel_need(str(need.id), db)
     assert c.delete(f"/api/dashboard/users/{vol.id}").status_code == 200
+
+
+# ═══════════════ 用綁定碼加入成員（不用貼 LINE User ID）═══════════════
+@pytest.fixture()
+def console():
+    from app.main import app
+    return TestClient(app)
+
+
+def _create_member(console, name, role):
+    r = console.post("/api/dashboard/users", params={"name": name, "roles": role})
+    assert r.status_code == 200, r.text
+    return r.json()["id"]
+
+
+def _join_code(console, member_id):
+    r = console.post(f"/api/dashboard/users/{member_id}/join_code")
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_console_makes_a_join_code_and_the_person_binds_by_sending_it(db, console, line_outbox, monkeypatch):
+    from app.services import rich_menu
+    synced = []
+    monkeypatch.setattr(rich_menu, "sync_user_menu", lambda u: synced.append((u.name, u.line_uid)))
+    member_id = _create_member(console, "管理員小張", "admin")
+    info = _join_code(console, member_id)
+    assert len(info["code"]) == 8 and info["say"] == f"加入 {info['code']}" and info["expires_minutes"] == 30
+
+    say("U-newbie", info["say"])                                  # 對方第一句話就是綁定碼
+    db.expire_all()
+    member = db.query(User).filter(User.id == member_id).one()
+    assert member.line_uid == "U-newbie" and member.roles == ["admin"]
+    assert db.query(User).filter(User.line_uid == "U-newbie").count() == 1, "臨時居民帳號要被換掉，不能留下兩個"
+    assert db.query(User).count() == 1
+    assert any("已綁定為「管理員小張」" in t and "後台" in t for t in replies(line_outbox))
+    assert not any("歡迎加入" in t for t in sent_to(line_outbox, "U-newbie")), "已綁定成員不需要再歡迎"
+    assert synced == [("管理員小張", "U-newbie")]
+    say("U-other", info["say"])
+    assert any("無效或已過期" in t for t in replies(line_outbox)), "綁定碼只能用一次"
+
+
+def test_volunteer_codes_last_a_week_and_admin_codes_half_an_hour(db, console):
+    assert _join_code(console, _create_member(console, "志工", "volunteer"))["expires_minutes"] == 7 * 24 * 60
+    assert _join_code(console, _create_member(console, "管理員", "admin"))["expires_minutes"] == 30
+
+
+def test_a_new_code_replaces_the_old_and_bound_members_cannot_get_one(db, console):
+    member_id = _create_member(console, "志工", "volunteer")
+    first = _join_code(console, member_id)["code"]
+    second = _join_code(console, member_id)["code"]
+    assert db.query(SystemConfig).filter(SystemConfig.key.like("join:%")).count() == 1
+    say("U-a", f"加入 {first}")
+    db.expire_all()
+    assert db.query(User).filter(User.id == member_id).one().line_uid is None, "被取代的舊碼不能用"
+    say("U-a", f"加入 {second}")
+    r = console.post(f"/api/dashboard/users/{member_id}/join_code")
+    assert r.status_code == 409
+
+
+def test_join_is_refused_for_an_account_that_already_has_history(db, console, line_outbox):
+    vol, req, adm, res, need = world(db)
+    member_id = _create_member(console, "新志工", "volunteer")
+    code = _join_code(console, member_id)["code"]
+    say("U-req", f"加入 {code}")                                   # 王奶奶有需求紀錄，不能被蓋掉
+    assert any("已經有使用紀錄" in t for t in replies(line_outbox))
+    db.expire_all()
+    assert db.query(User).filter(User.line_uid == "U-req").count() == 1
+    assert db.query(User).filter(User.id == member_id).one().line_uid is None
+
+
+def test_expired_code_is_rejected(db, console, line_outbox):
+    member_id = _create_member(console, "志工", "volunteer")
+    code = _join_code(console, member_id)["code"]
+    row = db.query(SystemConfig).filter(SystemConfig.key == f"join:{code}").one()
+    row.value = row.value.replace(row.value.split('"exp": "')[1][:4], "2001")
+    db.commit()
+    say("U-late", f"加入 {code}")
+    assert any("無效或已過期" in t for t in replies(line_outbox))
+
+
+def test_guessing_codes_is_rate_limited_even_for_the_right_code(db, console, line_outbox):
+    member_id = _create_member(console, "管理員", "admin")
+    code = _join_code(console, member_id)["code"]
+    for i in range(5):
+        say("U-guess", f"加入 1000000{i}")
+    say("U-guess", f"加入 {code}")                                 # 猜錯 5 次後，連正確的也先擋住
+    assert any("次數太多" in t for t in replies(line_outbox))
+    db.expire_all()
+    assert db.query(User).filter(User.id == member_id).one().line_uid is None
+    say("U-real", f"加入 {code}")                                  # 不同的 LINE 帳號不受影響
+    db.expire_all()
+    assert db.query(User).filter(User.id == member_id).one().line_uid == "U-real"
+
+
+def test_family_codes_are_rate_limited_too(db, line_outbox):
+    vol, req, adm, res, need = world(db)
+    say("U-req", "邀請家人")
+    code = [t for t in replies(line_outbox) if "綁定" in t][-1].split("綁定 ")[1][:6]
+    for i in range(5):
+        say("U-vol", f"綁定 99999{i}")
+    say("U-vol", f"綁定 {code}")
+    assert any("次數太多" in t for t in replies(line_outbox))
+    assert db.query(CareRelation).count() == 0
+
+
+def test_unlinking_line_frees_the_member(db, console, monkeypatch):
+    from app.services import rich_menu
+    unlinked = []
+
+    class Api:
+        def unlink_rich_menu_id_from_user(self, uid):
+            unlinked.append(uid)
+
+    monkeypatch.setattr(rich_menu, "_apis", lambda: (Api(), None))
+    vol, req, adm, res, need = world(db)
+    assert console.post(f"/api/dashboard/users/{vol.id}/unlink_line").status_code == 200
+    db.expire_all()
+    assert db.query(User).filter(User.id == vol.id).one().line_uid is None
+    assert unlinked == ["U-vol"]
+    assert console.post(f"/api/dashboard/users/{vol.id}/join_code").status_code == 200
