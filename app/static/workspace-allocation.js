@@ -60,7 +60,20 @@ function renderAllocationResult(){
   html+='<section class="comparison-section"><h3>需求與缺口</h3>'+table(['需求位置','優先級','分配／需求','缺口原因'],after.demands.map(d=>`<tr><td>${escapeHtml(d.label)}</td><td>${d.priority}</td><td>${d.allocated} / ${d.requested} ${unit}</td><td>${d.reason?ALLOCATION_REASONS[d.reason]:'已滿足試算需求'}</td></tr>`).join(''))+'</section>';
   html+='<section class="comparison-section"><h3>供應餘額</h3>'+table(['供應位置','庫存／出貨上限','本次分配','預估餘額'],after.inventory.map(s=>`<tr><td>${escapeHtml(s.label)}</td><td>${s.stock} / ${s.dispatch_capacity}</td><td>${s.allocated}</td><td>${s.remaining}</td></tr>`).join(''))+'</section>';
   html+=`<details><summary>計算依據與限制</summary><ul>${r.assumptions.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul><p>缺座標而未納入路徑的連線：${after.ignored_edges.length}</p><p>${escapeHtml(r.solver)} · ${escapeHtml(r.model)}<br>${escapeHtml(r.generated_at)}</p><p>資料 SHA-256：${escapeHtml(after.fingerprint)}</p></details>`;
-  $('allocation-result').innerHTML=html;$('allocation-result').querySelectorAll('[data-allocation-route]').forEach(b=>b.onclick=()=>showAllocationRoute(+b.dataset.allocationRoute));icons();
+  const dbCount=after.assignments.filter(a=>a.supply_id.startsWith('db:')&&a.demand_id.startsWith('db:')).length;
+  if(dbCount)html=`<section class="comparison-section"><h3>送到調度</h3><p class="muted">其中 ${dbCount} 筆來自平台資料庫。送出後會在後台「調度」出現為「待確認」建議、並保留該份物資；不會通知志工，須管理員確認才會派遣。</p><button id="send-allocation" class="primary"><i data-lucide="send"></i>送到調度（待確認）</button><div id="send-allocation-result" role="status"></div></section>`+html;
+  $('allocation-result').innerHTML=html;$('allocation-result').querySelectorAll('[data-allocation-route]').forEach(b=>b.onclick=()=>showAllocationRoute(+b.dataset.allocationRoute));if($('send-allocation'))$('send-allocation').onclick=sendAllocationToDispatch;icons();
+}
+async function sendAllocationToDispatch(){
+  const result=$('send-allocation-result'),button=$('send-allocation');
+  const assignments=state.allocation.after.assignments.map(a=>({supply_id:a.supply_id,demand_id:a.demand_id,quantity:a.quantity}));
+  button.disabled=true;
+  try{
+    const out=await api('/apply-allocation',{assignments});
+    const skipped=out.skipped.map(s=>`<li>${escapeHtml(s.reason)}</li>`).join('');
+    result.innerHTML=`<p><strong>已建立 ${out.proposed.length} 筆派遣建議</strong>，請到後台「調度」的「待確認」逐筆確認。</p>${skipped?`<p>略過 ${out.skipped.length} 筆：</p><ul>${skipped}</ul>`:''}`;
+    if(out.proposed.length)button.textContent='已送出';else button.disabled=false;
+  }catch(e){result.textContent=e.message;result.classList.add('error');button.disabled=false;}
 }
 function showAllocationRoute(index){
   const a=state.allocation?.after.assignments[index];if(!a)return;$('allocation-dialog').close();$('mode').value='select';

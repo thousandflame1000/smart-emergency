@@ -15,6 +15,7 @@ from app.services.workspace import ComparisonBaseline, GraphDocument, ImportRequ
 from app.services.workspace_comparison import compare
 from app.services.workspace_allocation import AllocationRequest, plan_allocation
 from app.services.places import search_places
+from app.services.workspace_bridge import is_db_id, merge_database
 
 router = APIRouter()
 
@@ -40,6 +41,20 @@ class AnalysisRequest(BaseModel):
 
 class ComparisonRequest(AnalysisRequest):
     baseline: GraphDocument
+
+
+class DatabaseMergeRequest(BaseModel):
+    graph: GraphDocument = Field(default_factory=GraphDocument)
+
+
+class AssignmentIn(BaseModel):
+    supply_id: str = Field(max_length=200)
+    demand_id: str = Field(max_length=200)
+    quantity: int = Field(default=1, ge=0)
+
+
+class ApplyAllocationRequest(BaseModel):
+    assignments: list[AssignmentIn] = Field(max_length=500)
 
 
 class BoundsRequest(BaseModel):
@@ -157,6 +172,47 @@ def allocate_graph(body: AllocationRequest):
         return plan_allocation(body)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/database-merge")
+def database_merge(body: DatabaseMergeRequest, db: Session = Depends(get_db)):
+    """把平台資料庫的長者、需求、志工物資、資源點併入傳來的圖資料（不儲存）。"""
+    try:
+        graph, counts = merge_database(body.graph, db)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"graph": graph.model_dump(), "counts": counts}
+
+
+@router.post("/apply-allocation")
+def apply_allocation(body: ApplyAllocationRequest, db: Session = Depends(get_db)):
+    """把分配試算的結果寫成派遣建議（待確認）。不通知志工、不扣庫存，仍須在調度畫面確認。"""
+    from app.services.admin_session import current_admin
+    from app.services.dispatch import propose_manual
+    admin = current_admin.get()
+    proposed, skipped, used_needs = [], [], set()
+    for a in sorted(body.assignments, key=lambda x: -x.quantity):
+        if not (is_db_id(a.supply_id) and is_db_id(a.demand_id)):
+            skipped.append({"supply_id": a.supply_id, "demand_id": a.demand_id, "reason": "這筆不是資料庫來源的供應或需求"})
+            continue
+        try:
+            resource_id = a.supply_id.split("db:res:", 1)[1]
+            need_id = a.demand_id.split("db:need:", 1)[1]
+        except IndexError:
+            skipped.append({"supply_id": a.supply_id, "demand_id": a.demand_id, "reason": "識別碼格式不正確"})
+            continue
+        if need_id in used_needs:
+            skipped.append({"supply_id": a.supply_id, "demand_id": a.demand_id,
+                            "reason": "同一筆需求已由另一份物資建議，系統一筆需求對應一份物資"})
+            continue
+        result = propose_manual(need_id, resource_id, db, actor_id=admin["id"] if admin else None,
+                                actor_label=f"admin:{admin['name']}" if admin else "workspace:分配試算")
+        if result.get("error"):
+            skipped.append({"supply_id": a.supply_id, "demand_id": a.demand_id, "reason": result["error"]})
+        else:
+            used_needs.add(need_id)
+            proposed.append({"need_id": need_id, "resource_id": resource_id})
+    return {"proposed": proposed, "skipped": skipped}
 
 
 @router.get("/{workspace_id}")

@@ -157,6 +157,18 @@ async function analyze(route=false){const version=state.editVersion;message('正
   const names=report.unreachable_people.slice(0,30).map(id=>`<button data-focus="${escapeHtml(id)}">${escapeHtml(nodeById(id)?.label||id)}</button>`).join('');
   $('analysis-result').innerHTML=`<strong>物資不可達人員 ${report.metrics.unreachable_people} 位</strong><div>${names}</div><p>關鍵道路 ${report.critical_edges.length} 段 · 割點 ${report.articulation_nodes.length} 個</p>${report.ignored_edges.length?`<p>有 ${report.ignored_edges.length} 條連線缺少座標，未納入路徑。</p>`:''}<details><summary>分析假設</summary><ul>${report.assumptions.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></details>`;
   $('analysis-result').querySelectorAll('[data-focus]').forEach(b=>b.onclick=()=>select('node',b.dataset.focus));message('分析完成 · 紫色路段為關鍵瓶頸');}
+async function syncDatabase(){
+  const before=state.graph.nodes.length;
+  const result=await api('/database-merge',{graph:state.graph});
+  const c=result.counts;
+  mutate(()=>{state.graph=result.graph;});
+  let linked='';
+  const hasRoads=state.graph.nodes.some(n=>n.kind==='road_node'&&n.lat!==null);
+  if(hasRoads){const edgesBefore=state.graph.edges.length;try{connectAccess();}catch(e){}linked=`，新增 ${state.graph.edges.length-edgesBefore} 條估計接駁`;}
+  const located=state.graph.nodes.filter(n=>n.id.startsWith('db:')&&n.lat!==null);
+  if(located.length&&map)map.fitBounds(located.map(n=>[n.lat,n.lng]),{padding:[40,40],maxZoom:16});
+  message(`資料庫已同步：長者 ${c.elders}、需求 ${c.demands}、志工物資 ${c.supplies}、資源點 ${c.points}（新增 ${c.added}、更新 ${c.updated}、移除 ${c.removed}）${linked}${hasRoads?'':'；尚未載入道路，請先載入地區才能連上路網與試算'}`);
+}
 function connectAccess(){const radius=+$('access-radius').value;if(!(radius>0&&radius<=5000))throw Error('接駁上限須介於 1 至 5000 公尺');
   const roads=state.graph.nodes.filter(n=>n.kind==='road_node'&&n.lat!==null&&n.available);if(!roads.length)throw Error('目前沒有可連接的道路節點');
   const existing=new Set(state.graph.edges.filter(e=>e.kind==='access').flatMap(e=>[e.source,e.target]));const added=[];
@@ -241,7 +253,7 @@ async function init(){
   run('save',()=>save());run('duplicate',()=>save(true));run('new',()=>{if(discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');openRegion();}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());
-  run('region',openRegion);run('empty-region',openRegion);run('layer-region',openRegion);run('close-region',closeRegion);run('region-file',()=>{closeRegion();openImport();});$('region-load').onclick=loadRegion;
+  run('sync-db',syncDatabase);run('layer-db',syncDatabase);run('region',openRegion);run('empty-region',openRegion);run('layer-region',openRegion);run('close-region',closeRegion);run('region-file',()=>{closeRegion();openImport();});$('region-load').onclick=loadRegion;
   $('region-search-form').onsubmit=searchRegion;$('region-radius').onchange=()=>{regionRequestVersion++;previewRegion();};
   $('region-query').oninput=()=>{regionRequestVersion++;regionPlace=null;$('region-load').disabled=true;$('region-results').replaceChildren();previewRegion();regionMessage('');};
   $('region-dialog').addEventListener('cancel',event=>{event.preventDefault();closeRegion();});

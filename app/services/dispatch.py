@@ -1141,6 +1141,35 @@ def claim_need(need_id: str, user, db: Session) -> dict:
     return {"message": "claimed", "need_id": need_id, "resource_name": resource.name}
 
 
+def propose_manual(need_id: str, resource_id: str, db: Session, *, actor_id: str | None = None,
+                   actor_label: str = "workspace") -> dict:
+    """Turn a planning result into a dispatch *suggestion*: it waits in 待確認 until an admin confirms,
+    reserves the resource so it cannot be promised twice, and notifies nobody."""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    resource = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
+    if not need or not resource:
+        return {"error": "找不到對應的需求或物資（可能已被刪除）。"}
+    if need.need_type == "sos":
+        return {"error": "緊急求助不是物資需求，不能建立派遣建議。"}
+    if need.status != "open":
+        return {"error": f"需求目前狀態為「{need.status}」，只有待媒合的需求可以建立建議。"}
+    if resource.owner_id == need.requester_id:
+        return {"error": "不能把需求者自己的物資指派給自己的需求。"}
+    if not resource.is_available:
+        return {"error": "這份物資已經被其他需求保留。"}
+    previous_status = need.status
+    need.matched_resource_id = resource.id
+    need.status = "suggested"
+    resource.is_available = False
+    _log_dispatch_event(
+        db, "propose_dispatch", need=need, resource=resource, actor_id=actor_id, actor_label=actor_label,
+        previous_status=previous_status, new_status=need.status, outcome="suggested",
+        details={"source": "workspace_allocation", "resource_name": resource.name},
+    )
+    db.commit()
+    return {"message": "suggested", "need_id": need_id, "resource_id": resource_id}
+
+
 def list_my_tasks(user, db: Session) -> list[dict]:
     """Tasks currently assigned to this volunteer (their resource is reserved for a matched need)."""
     rows = (db.query(CommunityNeed, CommunityResource)

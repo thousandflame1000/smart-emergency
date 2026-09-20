@@ -42,6 +42,7 @@
     <button id="fit" title="顯示全部物件" aria-label="顯示全部物件"><i data-lucide="scan"></i></button>
     <button id="layout" title="重新排列關係圖" aria-label="重新排列關係圖"><i data-lucide="workflow"></i></button>
     <span class="spacer"></span>
+    <button id="sync-db" title="把平台資料庫的長者、需求、志工物資與資源點放上地圖，可重複同步"><i data-lucide="database"></i>同步資料庫</button>
     <button id="region"><i data-lucide="map-pin"></i>選擇地區</button>
     <button id="import"><i data-lucide="upload"></i>匯入資料</button>
     <button id="osm"><i data-lucide="route"></i>載入範圍道路</button>
@@ -53,6 +54,7 @@
   <main>
     <aside class="catalog">
       <button id="layer-region" class="primary wide"><i data-lucide="map-pin"></i>載入地區資料</button>
+      <button id="layer-db" class="wide" title="長者、需求單、志工物資、社區資源點"><i data-lucide="database"></i>同步平台資料庫</button>
       <h2>資料圖層</h2><div id="layers"></div>
       <div class="catalog-heading"><h2>物件</h2><span id="object-count"></span></div>
       <input id="search" type="search" placeholder="搜尋名稱、識別碼" aria-label="搜尋物件">
