@@ -66,13 +66,16 @@ function renderAllocationResult(){
 }
 async function sendAllocationToDispatch(){
   const result=$('send-allocation-result'),button=$('send-allocation');
-  const assignments=state.allocation.after.assignments.map(a=>({supply_id:a.supply_id,demand_id:a.demand_id,quantity:a.quantity}));
+  const assignments=state.allocation.after.assignments.map(a=>({supply_id:a.supply_id,demand_id:a.demand_id,quantity:a.quantity,
+    supply_version:state.allocationInputs.graph.nodes.find(n=>n.id===a.source)?.properties.version,
+    demand_version:state.allocationInputs.graph.nodes.find(n=>n.id===a.target)?.properties.version}));
   button.disabled=true;
   try{
     const out=await api('/apply-allocation',{assignments});
     const skipped=out.skipped.map(s=>`<li>${escapeHtml(s.reason)}</li>`).join('');
-    result.innerHTML=`<p><strong>已建立 ${out.proposed.length} 筆派遣建議</strong>，請到後台「調度」的「待確認」逐筆確認。</p>${skipped?`<p>略過 ${out.skipped.length} 筆：</p><ul>${skipped}</ul>`:''}`;
+    result.innerHTML=`<p><strong>已建立 ${out.proposed.length} 筆派遣建議</strong></p>${skipped?`<p>略過 ${out.skipped.length} 筆：</p><ul>${skipped}</ul>`:''}<button id="review-dispatch"><i data-lucide="list-checks"></i>查看待核准</button>`;
     if(out.proposed.length)button.textContent='已送出';else button.disabled=false;
+    $('review-dispatch').onclick=async()=>{$('allocation-dialog').close();try{await refreshOperations();operationStage='suggested';setCatalog('tasks');renderOperations();}catch(e){message(e.message,true);}};icons();
   }catch(e){result.textContent=e.message;result.classList.add('error');button.disabled=false;}
 }
 function showAllocationRoute(index){

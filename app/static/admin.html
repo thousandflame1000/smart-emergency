@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>鄰里守望 — 管理後台</title>
+<script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
+<style>.embed .sidebar { display: none !important; }</style>
 <style>
 /* ══════════════════════════════════════════════════════════
    鄰里守望管理後台 — command-console 視覺系統
@@ -1700,7 +1702,7 @@ async function loadSecurityBanner() {
       el.classList.remove('is-hidden');
     } else if (s.admin) {
       el.className = 'notice';
-      el.innerHTML = '🔐 已用 LINE 登入：<strong>' + esc(s.admin) + '</strong>　<a href="/admin/logout">登出</a>';
+      el.innerHTML = '🔐 已用 LINE 登入：<strong>' + esc(s.admin) + '</strong>　<a href="/admin/logout" target="_top">登出</a>';
       el.classList.remove('is-hidden');
     }
   } catch (e) { /* ignore */ }
@@ -3671,7 +3673,14 @@ function initPanels() {
   });
 }
 initPanels();
-if (typeof location !== 'undefined' && location.hash === '#needs') showPage('page-needs');
+(function embeddedNavigation() {
+  if (typeof window === 'undefined' || !window.addEventListener || typeof location === 'undefined') return;
+  const go = id => { const el = id && document.getElementById(id); if (el && el.classList.contains('page')) showPage(id); };
+  window.addEventListener('message', e => {
+    if (e.origin === location.origin && e.data && e.data.navigate) go(e.data.navigate);
+  });
+  go(location.hash.slice(1));
+})();
 </script>
 </body>
 </html>

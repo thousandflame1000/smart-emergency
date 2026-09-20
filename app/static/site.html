@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鄰里守望</title>
+<script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; letter-spacing:0 !important; }
+:root {
+  --bg:#f3f6f3; --sidebar:#181d1b; --border:#343e38; --primary:#77d6b5; --success:#77d6b5;
+  --danger:#f5455c; --muted:#5b6878; --text:#dce4ee; --text-dim:#8b98a9;
+  --mono:'JetBrains Mono','SF Mono',Consolas,monospace;
+  --sans:'Inter',-apple-system,'Segoe UI','Noto Sans TC','Microsoft JhengHei',sans-serif;
+}
+html { color-scheme: dark; }
+body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:13.5px; display:flex; height:100vh; overflow:hidden; }
+.sidebar { width:220px; flex-shrink:0; background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; overflow-y:auto; }
+.logo { padding:20px 20px 16px; border-bottom:1px solid var(--border); }
+.logo h1 { font-size:14px; font-weight:700; letter-spacing:.04em; }
+.logo span { display:block; margin-top:3px; font-size:10.5px; color:var(--muted); font-family:var(--mono); letter-spacing:.06em; }
+.sec { padding:18px 16px 6px; font-size:9.5px; font-weight:700; color:var(--muted); letter-spacing:.14em; font-family:var(--mono); }
+.nav { display:flex; align-items:center; gap:10px; width:100%; padding:8px 16px; border:0; border-left:2px solid transparent; background:none;
+       color:var(--text-dim); cursor:pointer; font:500 12.5px var(--sans); text-align:left; }
+.nav:hover { background:rgba(255,255,255,.03); color:var(--text); }
+.nav.active { background:rgba(34,211,238,.08); color:var(--primary); border-left-color:var(--primary); }
+.nav .icon { width:18px; text-align:center; flex-shrink:0; }
+.bottom { margin-top:auto; padding:12px; border-top:1px solid var(--border); }
+#mode { display:flex; align-items:center; justify-content:center; gap:7px; width:100%; padding:9px; border-radius:3px; cursor:pointer;
+        font:700 11px var(--mono); letter-spacing:.06em; background:rgba(45,212,167,.08); color:var(--success); border:1px solid rgba(45,212,167,.3); }
+#mode.emergency { background:rgba(245,69,92,.12); color:var(--danger); border-color:rgba(245,69,92,.45); }
+.views { flex:1; min-width:0; height:100dvh; }
+.views iframe { border:0; width:100%; height:100%; background:var(--bg); }
+[hidden] { display:none !important; }
+.nav svg { width:17px; height:17px; }
+@media (max-width:900px) {
+  .sidebar { width:56px; }
+  .logo span, .sec, .nav .label, #mode .text { display:none; }
+  .nav { padding:10px 0; justify-content:center; border-left-width:0; border-bottom:0; }
+  .logo { padding:14px 0; text-align:center; } .logo h1 { font-size:0; } .logo h1::before { content:'鄰'; font-size:20px; }
+}
+</style>
+</head>
+<body>
+<aside class="sidebar">
+  <div class="logo"><h1>鄰里守望</h1><span>社區照護與應變</span></div>
+  <nav id="nav"></nav>
+  <div class="bottom"><button id="mode" type="button"><span id="mode-dot">🟢</span><span class="text" id="mode-text">日常模式</span></button></div>
+</aside>
+<div class="views" id="views"><iframe id="view" title="內容"></iframe></div>
+
+<script>
+(function () {
+  var DASH = '/view/dashboard', CONSOLE = '/view/console';
+  var NAV = [
+    { sec: '營運' },
+    { id: 'workspace', label: '營運工作區', icon: 'network', view: '/workspace', page: null },
+    { sec: '總覽' },
+    { id: 'overview', label: '總覽', icon: '📊', view: DASH, page: 'overview' },
+    { id: 'elders', label: '長者狀態', icon: '👴', view: DASH, page: 'elderly' },
+    { id: 'map', label: '社區地圖', icon: '🗺️', view: DASH, page: 'map-page' },
+    { id: 'trends', label: '趨勢分析', icon: '📈', view: DASH, page: 'analytics-page' },
+    { sec: '成員' },
+    { id: 'members', label: '長者管理', icon: '🧓', view: CONSOLE, page: 'page-elderly' },
+    { id: 'volunteers', label: '志工 / 家屬', icon: '🙋', view: CONSOLE, page: 'page-volunteers' },
+    { id: 'relations', label: '照護關係', icon: '🔗', view: CONSOLE, page: 'page-relations' },
+    { sec: '調度' },
+    { id: 'dispatch', label: '調度（需求・物資）', icon: '🆘', view: CONSOLE, page: 'page-needs' },
+    { id: 'scenario', label: '情境模擬', icon: '🎬', view: CONSOLE, page: 'page-scenario' },
+    { id: 'sandbox', label: '路網沙盤', icon: '🛣️', view: CONSOLE, page: 'page-road-sandbox' },
+    { sec: '知識' },
+    { id: 'ai', label: 'AI 助手', icon: '🤖', view: DASH, page: 'ai-page' },
+    { id: 'kb', label: '知識庫', icon: '🧠', view: CONSOLE, page: 'page-kb' }
+  ];
+  var frame = document.getElementById('view'), nav = document.getElementById('nav'), buttons = {}, frames = {}, currentId = null;
+  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',map:'map',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',dispatch:'package',workspace:'network',scenario:'flask-conical',sandbox:'route',ai:'messages-square',kb:'book-open'};
+
+  NAV.forEach(function (item) {
+    if (item.sec) {
+      var s = document.createElement('div'); s.className = 'sec'; s.textContent = item.sec; nav.appendChild(s); return;
+    }
+    var b = document.createElement('button');
+    b.type = 'button'; b.className = 'nav'; b.title = item.label;
+    var icon = document.createElement('i'); icon.setAttribute('data-lucide',iconNames[item.id]);
+    var label = document.createElement('span'); label.className = 'label'; label.textContent = item.label;
+    b.appendChild(icon); b.appendChild(label);
+    b.addEventListener('click', function () { go(item.id); });
+    buttons[item.id] = { el: b, item: item };
+    nav.appendChild(b);
+  });
+
+  function go(id) {
+    var entry = buttons[id] || buttons.workspace;
+    var item = entry.item;
+    Object.keys(buttons).forEach(function (k) { buttons[k].el.classList.toggle('active', k === item.id); });
+    if(!frames[item.view]){
+      var next=Object.keys(frames).length?document.createElement('iframe'):frame;
+      next.title=item.label;next.setAttribute('data-view',item.view);
+      next.src=item.view+'?embed=1'+(item.page?'#'+item.page:'');
+      next.addEventListener('load',function(){if(currentId&&buttons[currentId].item.view===item.view)activate(next,buttons[currentId].item);});
+      frames[item.view]=next;if(next!==frame)document.getElementById('views').appendChild(next);
+    }
+    Object.keys(frames).forEach(function(key){frames[key].hidden=key!==item.view;});
+    frame=frames[item.view];currentId=item.id;activate(frame,item);
+    try { history.replaceState(null, '', '#' + item.id); } catch (e) { /* ignore */ }
+    document.title = item.label + ' · 鄰里守望';
+  }
+  function activate(target,item){if(target.contentWindow)target.contentWindow.postMessage(item.page?{navigate:item.page}:{workspaceVisible:true},location.origin);}
+  window.addEventListener('hashchange',function(){go(location.hash.slice(1));});
+  window.addEventListener('message',function(e){if(e.origin!==location.origin||!Object.keys(frames).some(function(k){return frames[k].contentWindow===e.source;}))return;if(e.data&&buttons[e.data.navigate])go(e.data.navigate);});
+  window.addEventListener('DOMContentLoaded',function(){if(window.lucide)lucide.createIcons();});
+
+  var pill = document.getElementById('mode');
+  function loadMode() {
+    fetch('/api/dashboard/summary').then(function (r) { return r.json(); }).then(function (s) {
+      var emergency = s.mode === 'emergency';
+      pill.classList.toggle('emergency', emergency);
+      document.getElementById('mode-dot').textContent = emergency ? '🔴' : '🟢';
+      document.getElementById('mode-text').textContent = emergency ? '緊急模式' : '日常模式';
+    }).catch(function () { /* ignore */ });
+  }
+  pill.addEventListener('click', function () {
+    var next = pill.classList.contains('emergency') ? 'normal' : 'emergency';
+    var text = next === 'emergency' ? '確定切換為緊急模式？\n\n系統將廣播通知所有 LINE 用戶' : '確定解除緊急模式？';
+    if (!confirm(text)) return;
+    fetch('/api/dashboard/mode?mode=' + next, { method: 'POST' }).then(loadMode);
+  });
+  loadMode();
+  setInterval(loadMode, 30000);
+
+  go(location.hash.slice(1) || 'workspace');
+})();
+</script>
+</body>
+</html>

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
-"""每個角色在 LINE 上能做的事：志工的「我的任務」、管理員的總覽／待派／待審／求救單、
-家屬的綁定與長輩狀況、居民的需求卡片。
+"""三個角色入口與其 LINE 操作：居民求助、志工執行、決策者處置。
+
+家屬不是第四個主選單，而是居民入口內依照照護關係展開的功能。
 
 指令文字由 handle_text 接手，按鈕由 handle_postback 接手；兩者都回傳 True 代表已處理。
 """
@@ -27,10 +28,13 @@ from app.timeutil import now_utc, today_tw
 logger = logging.getLogger(__name__)
 
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
-ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "更新選單"}
+ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
 RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "我的紀錄", "刪除我的帳號", "刪除帳號"}
-COMMAND_WORDS = VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
+ROLE_CENTER_COMMANDS = {"居民中心", "志工中心", "決策中心"}
+MAINTENANCE_COMMANDS = {"更新選單"}
+COMMAND_WORDS = (VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
+                 | ROLE_CENTER_COMMANDS | MAINTENANCE_COMMANDS)
 BIND_RE = re.compile(r"^綁定\s*(\d{6})$")
 JOIN_RE = re.compile(r"^加入\s*(\d{8})$")
 JOIN_TTL = timedelta(days=7)
@@ -43,10 +47,11 @@ CHECKIN_ZH = {"pending": "⏳ 還沒回覆", "ok": "✅ 已回報平安", "help_
 
 # ── 共用卡片元件 ─────────────────────────────────────────────────────────────
 def bubble(title: str, color: str, lines: list[str], buttons: list[dict] | None = None) -> dict:
-    """buttons: {"label", "data"} 為 postback，{"label", "uri"} 為連結；第一顆是主要按鈕。"""
+    """buttons: {"label", "data"} postback、{"label", "uri"} 連結、{"label", "text"} 訊息。"""
     footer = []
     for i, b in enumerate(buttons or []):
         action = ({"type": "uri", "label": b["label"][:20], "uri": b["uri"]} if "uri" in b else
+                  {"type": "message", "label": b["label"][:20], "text": b["text"]} if "text" in b else
                   {"type": "postback", "label": b["label"][:20], "data": b["data"]})
         footer.append({"type": "button", "height": "sm", "style": "primary" if i == 0 else "secondary",
                        **({"color": b.get("color", "#27ae60")} if i == 0 else {}), "action": action})
@@ -109,6 +114,57 @@ def my_tasks(event, db: Session, user: User) -> None:
     _flex(event, f"您有 {len(tasks)} 個進行中的任務", carousel(bubbles))
 
 
+def resident_center(event, db: Session, user: User) -> None:
+    """Keep the resident's main menu small while making secondary paths discoverable."""
+    cards = [bubble(
+        "居民服務", "#2471a3",
+        ["先處理眼前需要；不確定需求類型時，選「申請需求」即可一次填寫。"],
+        [{"label": "申請需求", "text": "申請物資"},
+         {"label": "查看進度", "text": "我的需求"},
+         {"label": "我的紀錄", "text": "我的紀錄"}],
+    )]
+    if "family" in (user.roles or []):
+        cards.append(bubble(
+            "家庭照護", "#148f77",
+            ["您是照護聯絡人，可查看已綁定長輩的每日狀況並確認平安。"],
+            [{"label": "長輩狀況", "text": "長輩狀況"},
+             {"label": "志工申請", "text": "我要當志工"},
+             {"label": "操作說明", "text": "幫助"}],
+        ))
+    else:
+        cards.append(bubble(
+            "家庭與加入", "#7f8c8d",
+            ["家人可在緊急或未回覆時收到通知；也可申請加入志工。"],
+            [{"label": "邀請家人", "text": "邀請家人"},
+             {"label": "志工申請", "text": "我要當志工"},
+             {"label": "操作說明", "text": "幫助"}],
+        ))
+    _flex(event, "居民服務", carousel(cards))
+
+
+def volunteer_center(event, db: Session, user: User) -> None:
+    if not is_volunteer(user):
+        _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
+        return
+    _flex(event, "志工中心", carousel([
+        bubble(
+            "任務執行", "#2471a3",
+            ["接單後，任務卡會保留接單、送達與回報的完整流程。"],
+            [{"label": "接單", "text": "接單"},
+             {"label": "我的任務", "text": "我的任務"},
+             {"label": "登記物資", "text": "登記物資"}],
+        ),
+        bubble(
+            "資源與位置", "#148f77",
+            ["物資以您的帳號與類型更新，避免同一資源重複登記。"],
+            [{"label": "我的物資", "text": "我的物資"},
+             {"label": "取消物資", "text": "取消物資"},
+             {"label": "分享位置", "text": "分享位置"},
+             {"label": "操作說明", "text": "幫助"}],
+        ),
+    ]))
+
+
 # ── 管理員 ───────────────────────────────────────────────────────────────────
 def _require_admin(event, user: User) -> bool:
     if not is_admin(user):
@@ -117,7 +173,7 @@ def _require_admin(event, user: User) -> bool:
     return True
 
 
-def admin_overview(event, db: Session, user: User) -> None:
+def _admin_snapshot(db: Session) -> dict:
     from app.models.volunteer_application import VolunteerApplication
     from app.routers.linebot import _get_mode
     needs = db.query(CommunityNeed).filter(CommunityNeed.status.in_(["open", "suggested", "matched"])).all()
@@ -133,16 +189,54 @@ def admin_overview(event, db: Session, user: User) -> None:
                                             DailyCheckin.status == "help_needed").count()
     unwell = db.query(DailyCheckin).filter(DailyCheckin.date == today_tw(),
                                            DailyCheckin.status == "unwell").count()
-    mode = "🚨 緊急模式" if _get_mode(db) == "emergency" else "🟢 日常模式"
+    return {
+        "mode": "🚨 緊急模式" if _get_mode(db) == "emergency" else "🟢 日常模式",
+        "open": open_n,
+        "sos": sos_n,
+        "suggested": suggested,
+        "matched": len(matched),
+        "accepted": len(accepted),
+        "apps": apps,
+        "unanswered": unanswered,
+        "helping": helping,
+        "unwell": unwell,
+    }
+
+
+def admin_overview(event, db: Session, user: User) -> None:
+    stats = _admin_snapshot(db)
     _say(event, "\n".join([
-        f"📊 目前狀況　{mode}",
-        f"🆘 待處理求救單：{sos_n}",
-        f"📦 待派遣需求：{open_n}（另有 {suggested} 筆系統建議待您確認）",
-        f"🚚 進行中任務：{len(matched)}（志工已確認 {len(accepted)}）",
-        f"🙋 待審志工申請：{apps}",
-        f"👴 今日長者：求助 {helping}、不舒服 {unwell}、未回覆 {unanswered}",
+        f"📊 目前狀況　{stats['mode']}",
+        f"🆘 待處理求救單：{stats['sos']}",
+        f"📦 待派遣需求：{stats['open']}（另有 {stats['suggested']} 筆系統建議待您確認）",
+        f"🚚 進行中任務：{stats['matched']}（志工已確認 {stats['accepted']}）",
+        f"🙋 待審志工申請：{stats['apps']}",
+        f"👴 今日長者：求助 {stats['helping']}、不舒服 {stats['unwell']}、未回覆 {stats['unanswered']}",
         "",
         "指令：待派、待審、求救單、後台",
+    ]))
+
+
+def decision_center(event, db: Session, user: User) -> None:
+    stats = _admin_snapshot(db)
+    _flex(event, "決策中心", carousel([
+        bubble(
+            "決策中心", "#2471a3",
+            [stats["mode"],
+             f"緊急求救 {stats['sos']}｜待派 {stats['open']}｜建議待確認 {stats['suggested']}",
+             f"進行中 {stats['matched']}｜志工待審 {stats['apps']}"],
+            [{"label": "緊急求救", "text": "求救單"},
+             {"label": "待派需求", "text": "待派"},
+             {"label": "完整總覽", "text": "總覽"}],
+        ),
+        bubble(
+            "核准與全貌", "#148f77",
+            [f"長者：求助 {stats['helping']}｜不舒服 {stats['unwell']}｜未回覆 {stats['unanswered']}",
+             "高風險個案先由緊急求救與待派需求進入處置。"],
+            [{"label": "待審志工", "text": "待審"},
+             {"label": "開啟後台", "text": "後台"},
+             {"label": "操作說明", "text": "幫助"}],
+        ),
     ]))
 
 
@@ -421,10 +515,10 @@ def join_member(event, db: Session, user: User, code: str) -> None:
     from app.services.rich_menu import sync_user_menu
     sync_user_menu(target)
     roles = target.roles or []
-    hint = ("傳「後台」取得後台登入連結。" if "admin" in roles else
-            "傳「接單」看可接的需求，或點選單「登記表單」登記物資。" if "volunteer" in roles else
-            "傳「長輩狀況」查看長輩今天平安嗎。" if "family" in roles else
-            "每天早上會收到打卡卡片，按「我很好」就可以。")
+    hint = ("點選單「決策中心」先看待處理狀況，或傳「後台」取得登入連結。" if "admin" in roles else
+            "點選單「志工中心」處理接單、任務與物資。" if "volunteer" in roles else
+            "點選單「居民中心」中的「長輩狀況」查看照護對象。" if "family" in roles else
+            "選單有「緊急求助、申請需求、查看進度」；每天早上按「我很好」回報平安。")
     _say(event, f"✅ 已綁定為「{target.name}」。{hint}\n選單如果沒換，請重開聊天室。")
 
 
@@ -501,7 +595,7 @@ def bind_family(event, db: Session, user: User, code: str) -> None:
     from app.services.rich_menu import sync_user_menu
     sync_user_menu(user)
     _say(event, f"✅ 已綁定為 {elder.name} 的家屬。他如果沒回報平安或按了求助，您會第一時間收到通知。\n"
-                "傳「長輩狀況」可以隨時查看他今天的狀況。")
+                "點選單的「居民中心」可找到「長輩狀況」，隨時查看他今天的狀況。")
     if elder.line_uid:
         try:
             from app.services.line_notify import send_text
@@ -539,7 +633,7 @@ def my_needs(event, db: Session, user: User) -> None:
     needs = (db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id)
              .order_by(CommunityNeed.created_at.desc()).limit(5).all())
     if not needs:
-        _say(event, "您目前沒有提出過的需求。點選單的「申請表單」可以求助。")
+        _say(event, "您目前沒有提出過的需求。點選單的「申請需求」可以求助。")
         return
     lines = [f"{_need_label(n.need_type)}　{_status_label(n.status)}" for n in needs]
     active = [n for n in needs if n.status in ("open", "suggested", "matched")]
@@ -582,7 +676,7 @@ def cancel_my_needs(event, db: Session, user: User) -> None:
                                             CommunityNeed.status.in_(["open", "suggested", "matched"])).all()
     for n in active:
         dispatch.cancel_need(str(n.id), db)
-    _say(event, f"已幫您取消 {len(active)} 筆進行中的需求。之後有需要再點選單「申請表單」就可以。"
+    _say(event, f"已幫您取消 {len(active)} 筆進行中的需求。之後有需要再點選單「申請需求」就可以。"
          if active else "您目前沒有進行中的需求。")
 
 
@@ -605,7 +699,18 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
         return True
     if text not in COMMAND_WORDS:
         return False
-    if text in VOLUNTEER_COMMANDS:
+    if text == "居民中心":
+        resident_center(event, db, user)
+    elif text == "志工中心":
+        volunteer_center(event, db, user)
+    elif text == "決策中心":
+        if _require_admin(event, user):
+            decision_center(event, db, user)
+    elif text == "更新選單":
+        if _require_admin(event, user):
+            _say(event, "Rich Menu 重建已移出 LINE 日常操作，以避免刪除、建立與圖片上傳被重複觸發。"
+                        "請依受控維運流程單次執行。")
+    elif text in VOLUNTEER_COMMANDS:
         my_tasks(event, db, user)
     elif text in ADMIN_COMMANDS:
         if not _require_admin(event, user):
@@ -618,14 +723,6 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
             admin_pending_apps(event, db, user)
         elif text == "求救單":
             admin_sos_list(event, db, user)
-        elif text == "更新選單":
-            from app.services.rich_menu import install_menus
-            try:
-                result = install_menus(db)
-                _say(event, f"✅ 已重建 {len(result['menus'])} 張選單，並綁定 {result['staff_linked']} 位使用者。"
-                            "若畫面沒更新，請重開聊天室。")
-            except Exception as exc:
-                _say(event, f"⚠️ 更新選單失敗：{exc}")
         else:
             admin_login_link(event, user)
     elif text == "邀請家人":

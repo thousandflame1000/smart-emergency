@@ -524,6 +524,33 @@ def _assign_resources_optimally(
     return assignment
 
 
+def _reserve_for_need(need: CommunityNeed, resource: CommunityResource, db: Session, status: str) -> bool:
+    """Claim a resource and its need together across automatic, manual and workspace entry points."""
+    from app.services.record_version import row_predicates
+    if need.status not in ("open", "suggested"):
+        return False
+    if not resource.is_available and str(resource.id) != str(need.matched_resource_id or ""):
+        return False
+    if db.query(CommunityNeed.id).filter(CommunityNeed.matched_resource_id == resource.id,
+                                         CommunityNeed.status.in_(("suggested", "matched")),
+                                         CommunityNeed.id != need.id).first():
+        return False
+    previous = {"is_available": resource.is_available, "last_updated": resource.last_updated}
+    reserved = db.query(CommunityResource).filter(*row_predicates(resource)).update(
+        {"is_available": False, "last_updated": _utcnow_naive()}, synchronize_session=False)
+    if reserved != 1:
+        return False
+    claimed = db.query(CommunityNeed).filter(*row_predicates(need)).update(
+        {"status": status, "matched_resource_id": resource.id}, synchronize_session=False)
+    if claimed != 1:
+        # This transaction still holds the resource write lock; release only its own tentative claim.
+        db.query(CommunityResource).filter(CommunityResource.id == resource.id).update(previous, synchronize_session=False)
+        return False
+    db.refresh(need)
+    db.refresh(resource)
+    return True
+
+
 def auto_dispatch() -> dict:
     """
     緊急模式下每 30 分鐘執行一次。
@@ -600,13 +627,13 @@ def auto_dispatch() -> dict:
                 # 計畫書明文承諾「所有建議仍須管理員確認後才會執行」，
                 # 真正發 LINE 通知要等管理員按下確認（見 confirm_dispatch）。
                 previous_status = need.status
-                need.status = "suggested"
-                need.matched_resource_id = best.resource_id
                 res_obj = db.query(CommunityResource).filter(
                     CommunityResource.id == best.resource_id
                 ).first()
-                if res_obj:
-                    res_obj.is_available = False
+                if not res_obj or not _reserve_for_need(need, res_obj, db, "suggested"):
+                    skipped += 1
+                    details.append({"need_id": str(need.id), "result": "skipped", "reason": "需求或物資已由另一個操作處理"})
+                    continue
                 proposal = None
                 decision_details = {
                     "source": best.source,
@@ -657,6 +684,15 @@ def auto_dispatch() -> dict:
                 # 只是把「有哪個資源點可用」標記出來給管理員手動協調，
                 # 不牽涉「自動指派志工」，維持直接標記完成。
                 previous_status = need.status
+                from app.services.record_version import row_predicates
+                next_status = "suggested" if proposal_service else "matched"
+                changed = db.query(CommunityNeed).filter(*row_predicates(need)).update(
+                    {"status": next_status}, synchronize_session=False)
+                if changed != 1:
+                    skipped += 1
+                    details.append({"need_id": str(need.id), "result": "skipped", "reason": "需求已由另一個操作處理"})
+                    continue
+                db.refresh(need)
                 decision_details = {
                     "source": best.source,
                     "point_id": best.point_id,
@@ -668,7 +704,6 @@ def auto_dispatch() -> dict:
                 }
                 proposal = None
                 if proposal_service:
-                    need.status = "suggested"
                     proposal = proposal_service.create_from_dispatch_suggestion(
                         need=need,
                         algorithm="legacy-dispatch-facility",
@@ -677,8 +712,6 @@ def auto_dispatch() -> dict:
                         explanation_json=decision_details,
                         candidate_facility_id=best.point_id,
                     )
-                else:
-                    need.status = "matched"
                 _log_dispatch_event(
                     db,
                     "propose_dispatch" if proposal_service else "auto_match_facility",
@@ -758,13 +791,15 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
         return {"error": "這份物資已經被其他需求保留，不能重複指派。"}
 
     previous_status = need.status
-    if need.matched_resource_id and str(need.matched_resource_id) != str(resource.id):
-        old = db.query(CommunityResource).filter(CommunityResource.id == need.matched_resource_id).first()
+    old_resource_id = need.matched_resource_id
+    if not _reserve_for_need(need, resource, db, "matched"):
+        db.rollback()
+        return {"error": "需求或物資已由另一個操作處理，請重新載入。"}
+    if old_resource_id and str(old_resource_id) != str(resource.id):
+        old = db.query(CommunityResource).filter(CommunityResource.id == old_resource_id).first()
         if old:
             old.is_available = True  # 放掉原本建議的那份，不要讓它永遠卡在保留狀態
-    need.matched_resource_id = resource.id
-    need.status  = "matched"
-    resource.is_available = False
+            old.last_updated = _utcnow_naive()
     db.commit()
 
     notified = False
@@ -816,7 +851,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
 # ──────────────────────────────────────────────────────────
 # 確認 / 否決 自動媒合建議（管理員確認關卡）
 # ──────────────────────────────────────────────────────────
-def confirm_dispatch(need_id: str, db: Session) -> dict:
+def confirm_dispatch(need_id: str, db: Session, expected_version: str | None = None) -> dict:
     """
     管理員確認一筆 auto_dispatch 產生的建議 —— 這一步才會真正發
     LINE 通知志工。對應計畫書「所有建議仍須管理員確認後才會執行」。
@@ -824,6 +859,10 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need or need.status != "suggested":
         return {"error": "此需求目前沒有待確認的媒合建議"}
+
+    from app.services.record_version import row_predicates, row_version
+    if expected_version and expected_version != row_version(need):
+        return {"error": "需求已有新版本，請更新現況後重新核准"}
 
     resource = db.query(CommunityResource).filter(
         CommunityResource.id == need.matched_resource_id
@@ -845,6 +884,18 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
         db.commit()
         return {"error": "候選物資已不存在，需求已退回待媒合"}
 
+    previous_status = need.status
+    predicates = row_predicates(need)
+    claimed = db.query(CommunityNeed).filter(*predicates).update({"status": "matched"}, synchronize_session=False)
+    if claimed != 1:
+        db.rollback()
+        return {"error": "此建議已由另一個操作處理，請更新現況"}
+    db.refresh(need)
+    event = _log_dispatch_event(db, "confirm_dispatch", need=need, resource=resource, actor_label="manager",
+                                previous_status=previous_status, new_status="matched", outcome="matched",
+                                details={"resource_name": resource.name, "volunteer_notified": False})
+    # Commit the unique state transition before side effects; duplicate approvals cannot send again.
+    db.commit()
     notified = False
     owner = resource.owner
     if owner and owner.line_uid:
@@ -863,24 +914,8 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
         except Exception:
             pass
 
-    previous_status = need.status
-    need.status = "matched"
-    db.commit()
     _announce_match_to_requester(need, resource)
-    _log_dispatch_event(
-        db,
-        "confirm_dispatch",
-        need=need,
-        resource=resource,
-        actor_label="manager",
-        previous_status=previous_status,
-        new_status=need.status,
-        outcome="matched",
-        details={
-            "resource_name": resource.name,
-            "volunteer_notified": notified,
-        },
-    )
+    event.details_json = json.dumps({"resource_name": resource.name, "volunteer_notified": notified}, ensure_ascii=False)
     db.commit()
 
     return {
@@ -891,7 +926,7 @@ def confirm_dispatch(need_id: str, db: Session) -> dict:
     }
 
 
-def decline_suggestion(need_id: str, db: Session) -> dict:
+def decline_suggestion(need_id: str, db: Session, expected_version: str | None = None) -> dict:
     """管理員否決一筆自動媒合建議 —— 釋放物資、需求退回待媒合佇列。"""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need or need.status != "suggested":
@@ -899,15 +934,18 @@ def decline_suggestion(need_id: str, db: Session) -> dict:
 
     previous_status = need.status
     previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
-    if need.matched_resource_id:
-        resource = db.query(CommunityResource).filter(
-            CommunityResource.id == need.matched_resource_id
-        ).first()
-        if resource:
-            resource.is_available = True
-
-    need.status = "open"
-    need.matched_resource_id = None
+    from app.services.record_version import row_predicates, row_version
+    if expected_version and expected_version != row_version(need):
+        return {"error": "需求已有新版本，請更新現況後重新處理"}
+    changed = db.query(CommunityNeed).filter(*row_predicates(need)).update(
+        {"status": "open", "matched_resource_id": None}, synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        return {"error": "此建議已由另一個操作處理，請更新現況"}
+    if previous_resource_id:
+        db.query(CommunityResource).filter(CommunityResource.id == previous_resource_id).update(
+            {"is_available": True, "last_updated": _utcnow_naive()}, synchronize_session=False)
+    db.refresh(need)
     _log_dispatch_event(
         db,
         "decline_suggestion",
@@ -1158,9 +1196,9 @@ def propose_manual(need_id: str, resource_id: str, db: Session, *, actor_id: str
     if not resource.is_available:
         return {"error": "這份物資已經被其他需求保留。"}
     previous_status = need.status
-    need.matched_resource_id = resource.id
-    need.status = "suggested"
-    resource.is_available = False
+    if not _reserve_for_need(need, resource, db, "suggested"):
+        db.rollback()
+        return {"error": "需求或物資已由另一個操作修改，請重新同步。"}
     _log_dispatch_event(
         db, "propose_dispatch", need=need, resource=resource, actor_id=actor_id, actor_label=actor_label,
         previous_status=previous_status, new_status=need.status, outcome="suggested",

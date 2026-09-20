@@ -324,7 +324,7 @@ def _road_risks(db: Session, findings: list[dict[str, Any]]) -> None:
             recommended_action={
                 "action_id": "mutate_road_topology",
                 "label": "檢查路網沙盒並重新試算派遣",
-                "endpoint": "/admin#Road%20Sandbox",
+                "endpoint": "/#sandbox",
                 "reason": "Road edits change candidate distances and can invalidate previous assignments.",
             },
         )

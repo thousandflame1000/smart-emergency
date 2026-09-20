@@ -15,8 +15,15 @@ from app.models.need import CommunityNeed
 from app.models.user import User
 from app.models.resource_point import ResourcePoint, POINT_TYPES, POINT_SUPPLY_TYPES
 from app.models.dispatch_event import DispatchEvent
+from app.services.record_version import row_predicates
 
 router = APIRouter()
+
+
+def _unreserved(resource, db):
+    if db.query(CommunityNeed.id).filter(CommunityNeed.matched_resource_id == resource.id,
+                                         CommunityNeed.status.in_(("suggested", "matched"))).first():
+        raise ApiError(409, "物資已被待核准或執行中的任務保留，請先處理任務")
 
 
 # ──────────────────────────────────────────────
@@ -112,18 +119,18 @@ def update_resource(
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
         raise ApiError(404, "找不到這筆物資。")
+    _unreserved(r, db)
     if lat is not None or lng is not None:
         check_coords(lat if lat is not None else r.lat, lng if lng is not None else r.lng)
     if name is not None:
         name = check_name(name, what="物資名稱")
-    if name         is not None: r.name         = name
-    if quantity     is not None: r.quantity      = quantity
-    if address      is not None: r.address       = address
-    if note         is not None: r.note          = note
-    if lat          is not None: r.lat           = lat
-    if lng          is not None: r.lng           = lng
-    if is_available is not None: r.is_available  = is_available
-    r.last_updated = now_utc()
+    values = {key: value for key, value in {"name": name, "quantity": quantity, "address": address,
+              "note": note, "lat": lat, "lng": lng, "is_available": is_available}.items() if value is not None}
+    changed = db.query(CommunityResource).filter(*row_predicates(r)).update(
+        {**values, "last_updated": now_utc()}, synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        raise ApiError(409, "物資已由另一個操作修改，請重新載入")
     db.commit()
     return {"message": "更新成功"}
 
@@ -134,7 +141,11 @@ def delete_resource(resource_id: str, db: Session = Depends(get_db)):
     if not r:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
-    db.delete(r)
+    _unreserved(r, db)
+    changed = db.query(CommunityResource).filter(*row_predicates(r)).delete(synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        raise ApiError(409, "物資已由另一個操作修改，請重新載入")
     db.commit()
     return {"message": "刪除成功"}
 
@@ -144,10 +155,15 @@ def toggle_availability(resource_id: str, db: Session = Depends(get_db)):
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
         raise ApiError(404, "找不到這筆物資。")
-    r.is_available = not r.is_available
-    r.last_updated = now_utc()
+    _unreserved(r, db)
+    available = not r.is_available
+    changed = db.query(CommunityResource).filter(*row_predicates(r)).update(
+        {"is_available": available, "last_updated": now_utc()}, synchronize_session=False)
+    if changed != 1:
+        db.rollback()
+        raise ApiError(409, "物資已由另一個操作修改，請重新載入")
     db.commit()
-    return {"id": resource_id, "is_available": r.is_available}
+    return {"id": resource_id, "is_available": available}
 
 
 # ──────────────────────────────────────────────
@@ -355,17 +371,17 @@ def run_dispatch():
 
 
 @router.post("/needs/{need_id}/confirm_dispatch")
-def confirm_dispatch(need_id: str, db: Session = Depends(get_db)):
+def confirm_dispatch(need_id: str, expected_version: str | None = None, db: Session = Depends(get_db)):
     """管理員確認自動媒合建議，此時才真正 LINE 通知志工"""
     from app.services.dispatch import confirm_dispatch as _confirm_dispatch
-    return raise_if_error(_confirm_dispatch(need_id, db))
+    return raise_if_error(_confirm_dispatch(need_id, db, expected_version=expected_version))
 
 
 @router.post("/needs/{need_id}/decline_suggestion")
-def decline_suggestion(need_id: str, db: Session = Depends(get_db)):
+def decline_suggestion(need_id: str, expected_version: str | None = None, db: Session = Depends(get_db)):
     """管理員否決自動媒合建議，物資恢復可用、需求退回待媒合"""
     from app.services.dispatch import decline_suggestion as _decline_suggestion
-    return raise_if_error(_decline_suggestion(need_id, db))
+    return raise_if_error(_decline_suggestion(need_id, db, expected_version=expected_version))
 
 
 @router.get("/needs/{need_id}/candidates")

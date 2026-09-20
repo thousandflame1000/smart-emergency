@@ -1,4 +1,4 @@
-"""LINE Rich Menu：一般民眾一張、志工／家屬／管理員一張。
+"""LINE Rich Menu：居民、志工、決策者各一張。
 
 版面資料是單一來源，`make_rich_menus.py` 拿同一份資料畫圖，這裡拿去建選單，
 按鈕文字一定對得上機器人聽得懂的指令。圖檔事先畫好放在 static/richmenu，
@@ -9,7 +9,7 @@ import os
 
 from linebot.v3.messaging import (
     ApiClient, Configuration, MessageAction, MessagingApi, MessagingApiBlob,
-    RichMenuArea, RichMenuBounds, RichMenuRequest, RichMenuSize,
+    RichMenuArea, RichMenuBounds, RichMenuBulkLinkRequest, RichMenuRequest, RichMenuSize,
 )
 
 from app.config import settings
@@ -20,76 +20,42 @@ W, H = 2500, 1686
 MENU_NAME_PREFIX = "鄰里守望"
 RESIDENT_NAME = "鄰里守望-一般"
 STAFF_NAME = "鄰里守望-志工"
-FAMILY_NAME = "鄰里守望-家屬"
 ADMIN_NAME = "鄰里守望-管理員"
 IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "richmenu")
 
 GREEN, RED, BLUE, ORANGE, GREY, TEAL = "#27ae60", "#e74c3c", "#2471a3", "#e67e22", "#7f8c8d", "#148f77"
 
 # 每格：(標籤, 副標, 底色, 圖示, 送出的文字)。一列一個 list，格子平分該列寬度。
-PURPLE = "#8e44ad"
-
-# 每張選單都放齊該角色能用的所有功能：最重要的（平安、求救）在最上面、佔最大的格子。
+# 主選單只放角色在當下最常做的第一步；延伸資訊在「中心」卡片中依情境展開。
+# 家屬是居民照護關係的一種，不再維護第四張固定選單，避免分流與重複操作。
 RESIDENT_ROWS = [
-    [("我很好", "回報今日平安", GREEN, "✅", "我很好"),
-     ("需要幫忙", "緊急求助", RED, "🆘", "需要幫忙")],
-    [("需要水", "飲用水", BLUE, "💧", "需要水"),
-     ("需要食物", "糧食", ORANGE, "🍱", "需要食物"),
-     ("需要藥品", "藥品／急救", TEAL, "🩹", "需要藥")],
-    [("申請表單", "多項物資一次填", RED, "📝", "申請物資"),
-     ("我的需求", "看處理進度", GREY, "📋", "我的需求"),
-     ("分享位置", "讓志工找到您", GREY, "📍", "分享位置")],
-    [("邀請家人", "家人收到通知", PURPLE, "👪", "邀請家人"),
-     ("我要當志工", "一起幫忙", BLUE, "🙋", "我要當志工"),
-     ("全部功能", "所有指令說明", GREY, "❓", "幫助")],
+    [("緊急求助", "危險時先選這裡", RED, "🆘", "需要幫忙"),
+     ("申請需求", "一次填好所需項目", ORANGE, "📝", "申請物資"),
+     ("查看進度", "追蹤目前處理狀況", BLUE, "📋", "我的需求")],
+    [("回報平安", "今天狀況良好", GREEN, "✅", "我很好"),
+     ("分享位置", "讓協助者找到您", TEAL, "📍", "分享位置"),
+     ("居民中心", "家屬、紀錄與說明", GREY, "📁", "居民中心")],
 ]
 STAFF_ROWS = [
-    [("我很好", "回報今日平安", GREEN, "✅", "我很好"),
-     ("需要幫忙", "緊急求助", RED, "🆘", "需要幫忙")],
-    [("接單", "看附近的需求", ORANGE, "🙋", "接單"),
-     ("我的任務", "進行中的任務", BLUE, "🚚", "我的任務"),
-     ("登記表單", "我能提供什麼", TEAL, "📦", "登記物資")],
-    [("我的物資", "已登記項目", TEAL, "🧾", "我的物資"),
-     ("取消物資", "撤回未派出的", GREY, "↩️", "取消物資"),
-     ("分享位置", "更新我的位置", GREY, "📍", "分享位置")],
-    [("我的需求", "看處理進度", GREY, "📋", "我的需求"),
-     ("邀請家人", "家人收到通知", PURPLE, "👪", "邀請家人"),
-     ("全部功能", "所有指令說明", GREY, "❓", "幫助")],
-]
-FAMILY_ROWS = [
-    [("長輩狀況", "今天平安嗎", TEAL, "👴", "長輩狀況"),
-     ("需要幫忙", "緊急求助", RED, "🆘", "需要幫忙")],
-    [("我很好", "回報今日平安", GREEN, "✅", "我很好"),
-     ("申請表單", "多項物資一次填", ORANGE, "📝", "申請物資"),
-     ("我的需求", "看處理進度", GREY, "📋", "我的需求")],
-    [("分享位置", "更新我的位置", GREY, "📍", "分享位置"),
-     ("邀請家人", "家人收到通知", PURPLE, "👪", "邀請家人"),
-     ("我要當志工", "一起幫忙", BLUE, "🙋", "我要當志工")],
-    [("我的紀錄", "需求與家人", GREY, "📁", "我的紀錄"),
-     ("需要水", "飲用水", BLUE, "💧", "需要水"),
-     ("全部功能", "所有指令說明", GREY, "❓", "幫助")],
+    [("接單", "查看附近待協助事項", ORANGE, "🙋", "接單"),
+     ("我的任務", "回報進行中的任務", BLUE, "🚚", "我的任務"),
+     ("登記物資", "登記可提供的資源", TEAL, "📦", "登記物資")],
+    [("志工中心", "物資、位置與操作說明", GREY, "📁", "志工中心"),
+     ("分享位置", "更新服務位置", TEAL, "📍", "分享位置"),
+     ("需要幫忙", "志工自身緊急求助", RED, "🆘", "需要幫忙")],
 ]
 ADMIN_ROWS = [
-    [("總覽", "目前整體狀況", BLUE, "📊", "總覽"),
-     ("求救單", "待處理的求救", RED, "🆘", "求救單")],
-    [("待派需求", "一鍵派給志工", ORANGE, "📦", "待派"),
-     ("待審志工", "核准或婉拒", TEAL, "🙋", "待審"),
-     ("開啟後台", "登入管理後台", GREY, "🔐", "後台")],
-    [("接單", "看附近的需求", ORANGE, "🚚", "接單"),
-     ("我的任務", "進行中的任務", BLUE, "📌", "我的任務"),
-     ("登記表單", "我能提供什麼", TEAL, "📦", "登記物資")],
-    [("我的物資", "已登記項目", TEAL, "🧾", "我的物資"),
-     ("分享位置", "更新我的位置", GREY, "📍", "分享位置"),
-     ("更新選單", "重建 LINE 選單", PURPLE, "🔄", "更新選單")],
-    [("我很好", "回報今日平安", GREEN, "✅", "我很好"),
-     ("我的需求", "看處理進度", GREY, "📋", "我的需求"),
-     ("全部功能", "所有指令說明", GREY, "❓", "幫助")],
+    [("決策中心", "先看全局與待處理量", BLUE, "📊", "決策中心"),
+     ("緊急求救", "立即聯繫與處理", RED, "🆘", "求救單"),
+     ("待派需求", "媒合志工與物資", ORANGE, "📦", "待派")],
+    [("待審志工", "核准或婉拒申請", TEAL, "🙋", "待審"),
+     ("開啟後台", "查看完整營運資料", GREY, "🔐", "後台"),
+     ("操作說明", "查詢完整指令與規則", GREY, "?", "幫助")],
 ]
 MENUS = {
-    RESIDENT_NAME: {"rows": RESIDENT_ROWS, "image": "resident.png", "chat_bar": "📋 需要什麼？點我"},
-    STAFF_NAME: {"rows": STAFF_ROWS, "image": "staff.png", "chat_bar": "📋 志工選單"},
-    FAMILY_NAME: {"rows": FAMILY_ROWS, "image": "family.png", "chat_bar": "📋 家屬選單"},
-    ADMIN_NAME: {"rows": ADMIN_ROWS, "image": "admin.png", "chat_bar": "📋 管理選單"},
+    RESIDENT_NAME: {"rows": RESIDENT_ROWS, "image": "resident.png", "chat_bar": "居民服務"},
+    STAFF_NAME: {"rows": STAFF_ROWS, "image": "staff.png", "chat_bar": "志工中心"},
+    ADMIN_NAME: {"rows": ADMIN_ROWS, "image": "admin.png", "chat_bar": "決策中心"},
 }
 
 
@@ -137,27 +103,27 @@ def _menu_id(api: MessagingApi, name: str) -> str | None:
 
 
 def menu_name_for(roles) -> str | None:
-    """Which menu a person should see: admin over volunteer over family; everyone else gets the default."""
+    """Which primary menu a person should see: decision maker over volunteer over resident."""
     roles = roles or []
     if "admin" in roles:
         return ADMIN_NAME
     if "volunteer" in roles:
         return STAFF_NAME
-    if "family" in roles:
-        return FAMILY_NAME
     return None
 
 
 def install_menus(db) -> dict:
-    """刪掉舊的鄰里守望選單，重建四張、一般版設為預設，志工／家屬／管理員版依角色綁給現有使用者。"""
+    """建立三張新選單並完成切換後才移除舊選單。
+
+    角色綁定失敗時保留舊選單，讓維運人員可安全重試，不會先清空正式入口。
+    """
     from app.models.user import User
 
     api, blob = _apis()
-    removed = 0
-    for m in api.get_rich_menu_list().richmenus or []:
-        if (m.name or "").startswith(MENU_NAME_PREFIX):
-            api.delete_rich_menu(m.rich_menu_id)
-            removed += 1
+    old_menus = [
+        m for m in api.get_rich_menu_list().richmenus or []
+        if (m.name or "").startswith(MENU_NAME_PREFIX)
+    ]
 
     ids = {}
     for name, spec in MENUS.items():
@@ -168,18 +134,38 @@ def install_menus(db) -> dict:
         ids[name] = menu_id
     api.set_default_rich_menu(ids[RESIDENT_NAME])
 
-    linked, failed = 0, 0
+    users_by_menu = {STAFF_NAME: [], ADMIN_NAME: []}
     for user in db.query(User).filter(User.line_uid.isnot(None), User.is_active == True).all():  # noqa: E712
         name = menu_name_for(user.roles)
-        if not name:
-            continue
-        try:
-            api.link_rich_menu_id_to_user(user.line_uid, ids[name])
-            linked += 1
-        except Exception:
-            log.warning("link menu failed for %s", user.id, exc_info=True)
-            failed += 1
-    return {"removed_old": removed, "menus": ids, "staff_linked": linked, "staff_link_failed": failed}
+        if name:
+            users_by_menu[name].append(user.line_uid)
+
+    linked, failed = 0, 0
+    for name, user_ids in users_by_menu.items():
+        for start in range(0, len(user_ids), 500):
+            batch = user_ids[start:start + 500]
+            try:
+                api.link_rich_menu_id_to_users(
+                    RichMenuBulkLinkRequest(rich_menu_id=ids[name], user_ids=batch)
+                )
+                linked += len(batch)
+            except Exception:
+                log.warning("bulk link menu failed for %s users", len(batch), exc_info=True)
+                failed += len(batch)
+
+    removed = 0
+    if failed == 0:
+        for menu in old_menus:
+            try:
+                api.delete_rich_menu(menu.rich_menu_id)
+                removed += 1
+            except Exception:
+                log.warning("delete old menu failed for %s", menu.rich_menu_id, exc_info=True)
+
+    return {"removed_old": removed, "menus": ids, "role_linked": linked, "role_link_failed": failed,
+            "cutover_complete": failed == 0,
+            # Kept for callers from the previous release.
+            "staff_linked": linked, "staff_link_failed": failed}
 
 
 def sync_user_menu(user) -> None:

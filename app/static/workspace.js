@@ -31,8 +31,10 @@ function mutate(fn) { checkpoint(); fn(); changed(); render(); }
 function updateHistory() { $('undo').disabled=!state.undo.length; $('redo').disabled=!state.redo.length; }
 function undo(redo=false) { const from=redo?state.redo:state.undo, to=redo?state.undo:state.redo; if(!from.length)return;
   to.push(historySnapshot()); const previous=from.pop();state.graph=previous.graph;state.baseline=previous.baseline;state.selected=null; changed(); render(); }
-function discardConfirmed() { return !state.dirty || confirm('目前有未儲存變更，確定離開這個工作區？'); }
+function discardConfirmed() { return (!state.dirty && !inventoryDrafts.size) || confirm('目前有未儲存或待寫回變更，確定離開這個工作區？'); }
 function loadDocument(data) {
+  inventoryDrafts.clear();updateInventoryCount();
+  operationEvents.clear();
   state.documentVersion++;
   if(cy){cy.destroy();cy=null;}
   state.id=data.id; state.revision=data.revision; state.graph=data.graph; state.selected=null; state.report=null;
@@ -41,7 +43,7 @@ function loadDocument(data) {
   state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateComparison();invalidateAllocation();
   $('save-state').textContent=data.id?`已儲存 · 版本 ${data.revision}`:'尚未儲存';
   $('analysis-result').textContent='';$('route-result').textContent='';render();fit();
-  history.replaceState(null,'',data.id?'?id='+encodeURIComponent(data.id):location.pathname);
+  workspaceUrl(data.id);
   rememberWorkspace(data.id);
 }
 async function listWorkspaces() {
@@ -55,7 +57,7 @@ async function save(copy=false) {
   const data=await api(id?'/'+id:'',{name,graph,baseline:state.baseline||null,revision:state.revision},id?'PUT':'POST');
   if(documentVersion!==state.documentVersion){await listWorkspaces();message('先前工作區已儲存');return;}
   state.id=data.id;state.revision=data.revision;
-  history.replaceState(null,'','?id='+data.id);
+  workspaceUrl(data.id);
   rememberWorkspace(data.id);
   if(version===state.editVersion){state.dirty=false;$('save-state').textContent=`已儲存 · 版本 ${data.revision}`;}
   await listWorkspaces();message(copy?'已另存副本':'工作區已儲存');
@@ -71,7 +73,7 @@ function render() {
   $('layers').querySelectorAll('input').forEach(input=>input.onchange=()=>{input.checked?state.hidden.delete(input.dataset.kind):state.hidden.add(input.dataset.kind);render();});
   const m=state.report?.metrics||{};
   $('metrics').innerHTML=[['物件',state.graph.nodes.length],['連線',state.graph.edges.length],['人員',counts.person||0],['可用物資點',state.graph.nodes.filter(nodeHasSupply).length],['路網分區',m.road_components??'—'],['關鍵道路',m.critical_roads??'—'],['物資不可達人員',m.unreachable_people??'—']].map(([label,value],i)=>`<div class="metric ${i===6&&value>0?'alert':''}"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
-  renderObjects();renderSelection();renderCanvas();updateHistory();
+  renderObjects();renderSelection();renderCanvas();updateHistory();renderOperations();
   for(const id of ['route-start','route-end']) { const val=$(id).value;$(id).innerHTML=nodeOptions(val,id==='route-start'?'選擇起點':'選擇終點'); }
   $('empty').hidden=state.graph.nodes.length>0;
   $('connect-state').hidden=$('mode').value!=='connect';
@@ -83,6 +85,7 @@ function renderObjects() {
   $('object-count').textContent=`${nodes.length} 筆`;
   $('objects').innerHTML=nodes.slice(0,150).map(n=>`<button data-node="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''}" title="${escapeHtml(n.label)}"><span class="swatch" style="background:${COLORS[n.kind]}"></span><span class="object-label">${escapeHtml(n.label)}</span>${n.lat===null?'<small>無座標</small>':''}</button>`).join('')+(nodes.length>150?'<div class="muted">顯示前 150 筆</div>':'');
   $('objects').querySelectorAll('[data-node]').forEach(btn=>btn.onclick=()=>{select('node',btn.dataset.node);const n=nodeById(btn.dataset.node);if(n.lat!==null)map.panTo([n.lat,n.lng]);if(cy){const el=cy.getElementById('node:'+n.id);cy.center(el);}});
+  renderOperationTasks();
 }
 function select(type,id) {
   if(type==='node'&&$('mode').value==='connect') {
@@ -97,6 +100,7 @@ function renderSelection() {
   const item=selected?(selected.type==='node'?nodeById(selected.id):state.graph.edges.find(e=>e.id===selected.id)):null;
   if(!item){el.innerHTML='尚未選取';return;}
   const isNode=selected.type==='node';
+  if(item.id.startsWith('db:')){renderOperationalSelection(item,isNode);return;}
   el.innerHTML=`<form id="edit-form"><label>名稱<input id="edit-label" value="${escapeHtml(item.label)}" maxlength="300" required></label>
     <label>類型<select id="edit-kind">${options(isNode?TYPES:RELATIONS,item.kind)}</select></label>
     ${isNode?`<div class="form-grid"><label>緯度<input id="edit-lat" type="number" step="any" min="-90" max="90" value="${item.lat??''}"></label><label>經度<input id="edit-lng" type="number" step="any" min="-180" max="180" value="${item.lng??''}"></label></div><label>${item.kind==='facility'?'已確認可用容量':'數量'}<input id="edit-quantity" type="number" step="any" min="0" max="1000000000" value="${item.quantity}" required></label><label class="checkbox-label"><input id="edit-available" type="checkbox" ${item.available?'checked':''}>納入分析</label>`:
@@ -109,6 +113,7 @@ function renderSelection() {
     else {Object.assign(patch,{source:$('edit-source').value,target:$('edit-target').value,status:$('edit-status').value,speed_kph:+$('edit-speed').value,multiplier:+$('edit-multiplier').value,directed:$('edit-directed').checked});if(patch.source===patch.target){message('起點與終點不能相同',true);return;}}
     mutate(()=>Object.assign(item,patch));message('已更新，分析結果待重算');};
   $('delete-selected').onclick=()=>mutate(()=>{if(isNode){state.graph.nodes=state.graph.nodes.filter(n=>n.id!==item.id);state.graph.edges=state.graph.edges.filter(e=>e.source!==item.id&&e.target!==item.id);}else state.graph.edges=state.graph.edges.filter(e=>e.id!==item.id);state.selected=null;});
+  if(isNode&&item.kind==='supply'){const button=document.createElement('button');button.type='button';button.textContent='登記到物資資料庫';button.onclick=()=>editInventory(item);el.append(button);}
 }
 function renderCanvas() {
   if(!map)return;
@@ -122,7 +127,7 @@ function renderCanvas() {
       line.bindTooltip(document.createTextNode(`${e.label} · ${STATUS[e.status]}${e.directed?' · 單向':''}`));line.on('click',event=>{L.DomEvent.stopPropagation(event);select('edge',e.id);});
     }
     for(const n of nodes.values()){if(n.lat===null)continue;const size=n.kind==='road_node'?9:17;
-      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select',icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}"></div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(mapLayers);
+      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}"></div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(mapLayers);
       marker.bindTooltip(document.createTextNode(`${n.label} · ${TYPES[n.kind]}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});
     }
@@ -146,8 +151,8 @@ function renderGraph(nodes,critical,route) {
     arrangeGraph();
   }
 }
-function arrangeGraph(){cy.layout({name:cy.nodes().length>600?'grid':'breadthfirst',animate:false,directed:false,spacingFactor:1.5,avoidOverlap:true,nodeDimensionsIncludeLabels:true}).run();fit();}
-function fit(){if(state.view==='map'){const nodes=state.graph.nodes.filter(n=>visible(n)&&n.lat!==null);if(nodes.length)map.fitBounds(nodes.map(n=>[n.lat,n.lng]),{padding:[35,35],maxZoom:16});}else if(cy){cy.resize();cy.fit(undefined,45);if(cy.zoom()>1.3){cy.zoom(1.3);cy.center();}}}
+function arrangeGraph(){cy.layout({name:cy.nodes().length>600?'grid':'cose',animate:false,randomize:false,nodeRepulsion:8000,idealEdgeLength:95,avoidOverlap:true,nodeDimensionsIncludeLabels:true}).run();fit();}
+function fit(){if(state.view==='map'){const nodes=state.graph.nodes.filter(n=>visible(n)&&n.lat!==null);if(nodes.length)map.fitBounds(nodes.map(n=>[n.lat,n.lng]),{padding:[35,35],maxZoom:16,animate:false});}else if(cy){cy.resize();cy.fit(undefined,45);if(cy.zoom()>1.3){cy.zoom(1.3);cy.center();}}}
 function setView(view){state.view=view;$('map').hidden=view!=='map';$('graph').hidden=view!=='graph';$('locate').hidden=view!=='map';$('osm').disabled=view!=='map';
   for(const v of ['map','graph']){$('view-'+v).classList.toggle('active',v===view);$('view-'+v).setAttribute('aria-pressed',String(v===view));}renderCanvas();if(view==='map')map.invalidateSize();fit();}
 function addNode(latlng,position){const kind=$('mode').value;if(!(kind in TYPES))return;const id=crypto.randomUUID();mutate(()=>{state.graph.nodes.push({id,label:`${TYPES[kind]} ${state.graph.nodes.filter(n=>n.kind===kind).length+1}`,kind,lat:latlng?+latlng.lat.toFixed(7):null,lng:latlng?+latlng.lng.toFixed(7):null,quantity:1,available:true,source:'手動建立',properties:position?{_layout:position}:{}});state.selected={type:'node',id};});}
@@ -158,16 +163,7 @@ async function analyze(route=false){const version=state.editVersion;message('正
   $('analysis-result').innerHTML=`<strong>物資不可達人員 ${report.metrics.unreachable_people} 位</strong><div>${names}</div><p>關鍵道路 ${report.critical_edges.length} 段 · 割點 ${report.articulation_nodes.length} 個</p>${report.ignored_edges.length?`<p>有 ${report.ignored_edges.length} 條連線缺少座標，未納入路徑。</p>`:''}<details><summary>分析假設</summary><ul>${report.assumptions.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul></details>`;
   $('analysis-result').querySelectorAll('[data-focus]').forEach(b=>b.onclick=()=>select('node',b.dataset.focus));message('分析完成 · 紫色路段為關鍵瓶頸');}
 async function syncDatabase(){
-  const before=state.graph.nodes.length;
-  const result=await api('/database-merge',{graph:state.graph});
-  const c=result.counts;
-  mutate(()=>{state.graph=result.graph;});
-  let linked='';
-  const hasRoads=state.graph.nodes.some(n=>n.kind==='road_node'&&n.lat!==null);
-  if(hasRoads){const edgesBefore=state.graph.edges.length;try{connectAccess();}catch(e){}linked=`，新增 ${state.graph.edges.length-edgesBefore} 條估計接駁`;}
-  const located=state.graph.nodes.filter(n=>n.id.startsWith('db:')&&n.lat!==null);
-  if(located.length&&map)map.fitBounds(located.map(n=>[n.lat,n.lng]),{padding:[40,40],maxZoom:16});
-  message(`資料庫已同步：長者 ${c.elders}、需求 ${c.demands}、志工物資 ${c.supplies}、資源點 ${c.points}（新增 ${c.added}、更新 ${c.updated}、移除 ${c.removed}）${linked}${hasRoads?'':'；尚未載入道路，請先載入地區才能連上路網與試算'}`);
+  return refreshOperations();
 }
 function connectAccess(){const radius=+$('access-radius').value;if(!(radius>0&&radius<=5000))throw Error('接駁上限須介於 1 至 5000 公尺');
   const roads=state.graph.nodes.filter(n=>n.kind==='road_node'&&n.lat!==null&&n.available);if(!roads.length)throw Error('目前沒有可連接的道路節點');
@@ -250,6 +246,7 @@ async function init(){
   mapLayers=L.layerGroup().addTo(map);map.on('click',e=>addNode(e.latlng));
   initComparison();
   initAllocation();
+  initOperations();
   run('save',()=>save());run('duplicate',()=>save(true));run('new',()=>{if(discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');openRegion();}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());
@@ -266,8 +263,8 @@ async function init(){
     const text=await file.text();$('import-content').value=text;$('import-source').value=file.name;
     if(file.name.toLowerCase().endsWith('.csv'))$('import-format').value='csv';else{try{const d=JSON.parse(text);$('import-format').value=d.graph||d.nodes?'json':d.elements?'osm':'geojson';}catch(e){$('import-format').value='geojson';}}mappingFields();};
   run('apply-import',()=>{if(!state.preview)return;if(state.previewVersion!==state.editVersion)throw Error('工作區已變更，請重新預覽');const result=state.preview;mutate(()=>{state.graph=result.graph;state.selected=null;if($('import-replace').checked&&result.baseline)state.baseline=structuredClone(result.baseline);});$('import-dialog').close();fit();message(`已加入 ${result.added_nodes} 個物件、${result.added_edges} 條連線`);state.preview=null;});
-  window.addEventListener('beforeunload',event=>{if(state.dirty){event.preventDefault();event.returnValue='';}});
+  window.addEventListener('beforeunload',event=>{if(state.dirty||inventoryDrafts.size){event.preventDefault();event.returnValue='';}});
   let resizeTimer;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{map.invalidateSize();fit();},150);});
-  render();try{const items=await listWorkspaces();const explicit=new URLSearchParams(location.search).get('id');const remembered=lastWorkspace();const id=explicit||(items.some(w=>w.id===remembered)?remembered:null);if(id){loadDocument(await api('/'+encodeURIComponent(id)));message('已回到上次儲存的工作區');}else{rememberWorkspace(null);openRegion();}}catch(e){message(e.message,true);}
+  render();try{const items=await listWorkspaces();const explicit=new URLSearchParams(location.search).get('id');const remembered=lastWorkspace();const id=explicit||(items.some(w=>w.id===remembered)?remembered:items[0]?.id||null);if(id){loadDocument(await api('/'+encodeURIComponent(id)));message('已回到工作區快照；更新現況可讀取最新營運資料');}else{rememberWorkspace(null);await refreshOperations();if(state.graph.nodes.length)fit();else openRegion();}}catch(e){message(e.message,true);}
 }
 init();

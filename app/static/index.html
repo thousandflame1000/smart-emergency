@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>鄰里守望</title>
+<script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
+<style>.embed .sidebar { display: none !important; }</style>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
@@ -385,7 +387,7 @@ body {
   <a class="nav-item" href="/workspace" style="text-decoration:none">
     <span class="icon">圖</span> 開放資料工作區
   </a>
-  <div class="nav-item" onclick="window.location='/admin#needs'">
+  <div class="nav-item" onclick="window.top.location='/#dispatch'">
     <span class="icon">🚨</span> 緊急調度
   </div>
   <div class="nav-item" onclick="showPage('analytics-page')">
@@ -393,9 +395,6 @@ body {
   </div>
   <div class="nav-item" onclick="showPage('ai-page')">
     <span class="icon">🤖</span> AI 助手
-  </div>
-  <div class="nav-item" onclick="window.location='/admin'">
-    <span class="icon">⚙️</span> 管理後台
   </div>
 
   <div class="sidebar-bottom">
@@ -1386,6 +1385,16 @@ async function loadTrends() {
 initMap();
 loadAll();
 setInterval(loadAll, 30000);
+
+// 內嵌在單一網站的外殼裡時，由外殼的側邊欄切換頁面（訊息或網址錨點）。
+(function embeddedNavigation() {
+  if (typeof window === 'undefined' || !window.addEventListener || typeof location === 'undefined') return;
+  const go = id => { if (id && document.getElementById('page-' + id)) showPage(id); };
+  window.addEventListener('message', e => {
+    if (e.origin === location.origin && e.data && e.data.navigate) go(e.data.navigate);
+  });
+  go(location.hash.slice(1));
+})();
 </script>
 </body>
 </html>

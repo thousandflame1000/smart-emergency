@@ -619,6 +619,8 @@ class _FakeMenuApi:
 
     def set_default_rich_menu(self, mid): self.calls.append(("default", mid))
     def link_rich_menu_id_to_user(self, uid, mid): self.calls.append(("link", uid, mid))
+    def link_rich_menu_id_to_users(self, request):
+        self.calls.append(("bulk_link", tuple(request.user_ids), request.rich_menu_id))
     def unlink_rich_menu_id_from_user(self, uid): self.calls.append(("unlink", uid))
 
 
@@ -630,18 +632,19 @@ class _FakeBlob:
 def test_rich_menu_layout_covers_canvas_and_uses_known_commands():
     from app.routers.linebot import APPLY_PREFIXES, FIXED_COMMANDS, parse_intent
     from app.services import rich_menu as rm
-    assert set(rm.MENUS) == {rm.RESIDENT_NAME, rm.STAFF_NAME, rm.FAMILY_NAME, rm.ADMIN_NAME}
+    assert set(rm.MENUS) == {rm.RESIDENT_NAME, rm.STAFF_NAME, rm.ADMIN_NAME}
     for name, spec in rm.MENUS.items():
         cells = rm.layout(spec["rows"])
-        assert 11 <= len(cells) <= 20, "LINE 選單最多 20 格"
+        assert len(cells) == 6, "每個角色入口只保留六個第一步"
         assert sum(w * h for _, _, w, h, _ in cells) == rm.W * rm.H
         for *_, cell in cells:
             text = cell[4]
             assert (text in FIXED_COMMANDS or parse_intent(text)["needs"] or parse_intent(text)["sos"]
                     or any(text.startswith(p) for p in APPLY_PREFIXES)), (name, text)
+    assert rm.menu_name_for(["family"]) is None, "家屬使用居民主選單中的情境照護入口"
 
 
-def test_install_menus_creates_four_and_links_each_role(db, monkeypatch):
+def test_install_menus_creates_three_and_links_primary_roles(db, monkeypatch):
     from app.models.user import User
     from app.services import rich_menu as rm
     api, blob = _FakeMenuApi(), _FakeBlob()
@@ -652,14 +655,15 @@ def test_install_menus_creates_four_and_links_each_role(db, monkeypatch):
                 User(name="長者", roles=["elderly"], line_uid="U-eld", is_active=True)])
     db.commit()
     result = rm.install_menus(db)
-    assert len([c for c in api.calls if c[0] == "create"]) == 4
-    assert len(blob.images) == 4 and all(size > 1000 for _, size, _ in blob.images)
+    assert len([c for c in api.calls if c[0] == "create"]) == 3
+    assert len(blob.images) == 3 and all(size > 1000 for _, size, _ in blob.images)
     assert ("default", result["menus"][rm.RESIDENT_NAME]) in api.calls
-    assert ("link", "U-vol", result["menus"][rm.STAFF_NAME]) in api.calls
-    assert ("link", "U-fam", result["menus"][rm.FAMILY_NAME]) in api.calls
-    assert ("link", "U-adm", result["menus"][rm.ADMIN_NAME]) in api.calls, "管理員同時是志工時看管理員選單"
-    assert not [c for c in api.calls if c[0] == "link" and c[1] == "U-eld"]
-    assert result["staff_linked"] == 3
+    assert ("bulk_link", ("U-vol",), result["menus"][rm.STAFF_NAME]) in api.calls
+    assert ("bulk_link", ("U-adm",), result["menus"][rm.ADMIN_NAME]) in api.calls, "管理員同時是志工時看管理員選單"
+    linked_users = {uid for c in api.calls if c[0] == "bulk_link" for uid in c[1]}
+    assert "U-fam" not in linked_users and "U-eld" not in linked_users
+    assert result["role_linked"] == 2
+    assert result["cutover_complete"] is True
 
 
 def test_install_menus_removes_old_menus(db, monkeypatch):
@@ -671,6 +675,29 @@ def test_install_menus_removes_old_menus(db, monkeypatch):
     result = rm.install_menus(db)
     assert ("delete", "old-1") in api.calls and ("delete", "other") not in api.calls
     assert result["removed_old"] == 1
+
+
+def test_install_menus_keeps_old_menus_when_role_linking_fails(db, monkeypatch):
+    from app.models.user import User
+    from app.services import rich_menu as rm
+
+    class M:
+        def __init__(self, i, n): self.rich_menu_id, self.name = i, n
+
+    class FailingApi(_FakeMenuApi):
+        def link_rich_menu_id_to_users(self, request):
+            raise RuntimeError("LINE unavailable")
+
+    api = FailingApi(existing=[M("old-1", "鄰里守望-志工")])
+    monkeypatch.setattr(rm, "_apis", lambda: (api, _FakeBlob()))
+    db.add(User(name="志工", roles=["volunteer"], line_uid="U-vol", is_active=True))
+    db.commit()
+
+    result = rm.install_menus(db)
+
+    assert ("delete", "old-1") not in api.calls
+    assert result["role_link_failed"] == 1
+    assert result["cutover_complete"] is False
 
 
 def test_sync_user_menu_is_best_effort(monkeypatch):

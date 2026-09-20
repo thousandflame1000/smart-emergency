@@ -264,7 +264,7 @@ def _restore_roads_course(baseline: dict[str, Any]) -> dict[str, Any] | None:
             "過早解除封路可能高估派遣可行性。",
         ],
         "operator_actions": [
-            {"action_id": "mutate_road_topology", "endpoint": "/admin#Road%20Sandbox", "label": "檢查路網沙盒"},
+            {"action_id": "mutate_road_topology", "endpoint": "/#sandbox", "label": "檢查路網沙盒"},
             {"action_id": "propose_dispatch", "endpoint": "/api/resources/dispatch", "label": "查核道路後重新試算派遣"},
         ],
     }

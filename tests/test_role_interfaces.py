@@ -64,6 +64,31 @@ def test_my_tasks_hides_accept_once_accepted_and_ignores_others_tasks(db, line_o
     assert any("僅限志工" in t for t in replies(line_outbox))
 
 
+def test_role_centers_keep_primary_menus_small_and_secondary_actions_available(db, line_outbox):
+    vol, req, adm, res, need = world(db)
+    say("U-req", "居民中心")
+    resident_card = card_text(line_outbox)
+    assert "申請物資" in resident_card and "我的需求" in resident_card and "邀請家人" in resident_card
+
+    fam = mk(db, "女兒", ["family"], "U-fam")
+    db.add(CareRelation(elderly_id=req.id, contact_id=fam.id, relation="family", notify_order=1))
+    db.commit()
+    say("U-fam", "居民中心")
+    assert "家庭照護" in card_text(line_outbox) and "長輩狀況" in card_text(line_outbox)
+
+    say("U-vol", "志工中心")
+    volunteer_card = card_text(line_outbox)
+    assert "接單" in volunteer_card and "我的任務" in volunteer_card and "取消物資" in volunteer_card
+    say("U-req", "志工中心")
+    assert any("僅限志工" in t for t in replies(line_outbox))
+
+    say("U-adm", "決策中心")
+    decision_card = card_text(line_outbox)
+    assert "緊急求救" in decision_card and "待派需求" in decision_card and "待審志工" in decision_card
+    say("U-vol", "決策中心")
+    assert any("僅限管理員" in t for t in replies(line_outbox))
+
+
 # ═══════════════ 管理員：在 LINE 上決策 ═══════════════
 def test_admin_commands_are_admin_only(db, line_outbox):
     world(db)
@@ -331,14 +356,19 @@ def test_dispatch_from_the_console_records_which_admin_did_it(db, enforced, webc
     assert ev.actor_label == "admin:管理員小張"
 
 
-def test_admin_can_rebuild_menus_from_line(db, line_outbox, monkeypatch):
-    from app.services import rich_menu
-    monkeypatch.setattr(rich_menu, "install_menus", lambda d: {"menus": {"a": 1, "b": 2}, "staff_linked": 3})
+def test_admin_cannot_rebuild_menus_from_line(db, line_outbox):
     world(db)
     say("U-adm", "更新選單")
-    assert any("已重建 2 張選單" in t and "3 位" in t for t in replies(line_outbox))
+    assert any("移出 LINE 日常操作" in t for t in replies(line_outbox))
     say("U-vol", "更新選單")
     assert any("僅限管理員" in t for t in replies(line_outbox))
+
+
+def test_rich_menu_rebuild_endpoint_is_disabled_by_default(webclient, monkeypatch):
+    monkeypatch.setattr(settings, "RICH_MENU_REBUILD_ENABLED", False)
+    response = webclient.post("/api/system/rich-menu/install")
+    assert response.status_code == 403
+    assert "受控維運流程" in response.json()["detail"]
 
 
 # ═══════════════ 刪除我的帳號 ═══════════════

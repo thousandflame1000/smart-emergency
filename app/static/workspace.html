@@ -3,7 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>開放資料工作區 | 鄰里守望</title>
+  <title>營運工作區 | 鄰里守望</title>
+<script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
+<style>.embed .back { display: none !important; }</style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="/static/workspace.css">
   <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -12,12 +14,13 @@
   <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
   <script defer src="/static/workspace-comparison.js"></script>
   <script defer src="/static/workspace-allocation.js"></script>
+  <script defer src="/static/workspace-operations.js"></script>
   <script defer src="/static/workspace.js"></script>
 </head>
 <body>
   <header>
-    <a class="back icon-button" href="/admin" title="返回管理中心" aria-label="返回管理中心"><i data-lucide="arrow-left"></i></a>
-    <h1>開放資料工作區</h1>
+    <a class="back icon-button" href="/" title="回到主畫面" aria-label="回到主畫面"><i data-lucide="arrow-left"></i></a>
+    <h1>營運工作區</h1>
     <select id="workspace-list" aria-label="已儲存的工作區"><option value="">未儲存工作區</option></select>
     <input id="workspace-name" aria-label="工作區名稱" value="未命名工作區" maxlength="120">
     <div class="header-actions">
@@ -32,6 +35,7 @@
       <button id="view-map" class="active" aria-pressed="true"><i data-lucide="map"></i>地圖</button>
       <button id="view-graph" aria-pressed="false"><i data-lucide="network"></i>關係圖</button>
     </div>
+    <button id="more-tools" title="更多工具" aria-label="更多工具" aria-expanded="false"><i data-lucide="ellipsis"></i></button>
     <select id="mode" aria-label="編輯工具">
       <option value="select">選取／拖曳</option><option value="road_node">新增道路節點</option>
       <option value="person">新增人員</option><option value="supply">新增物資</option>
@@ -42,7 +46,8 @@
     <button id="fit" title="顯示全部物件" aria-label="顯示全部物件"><i data-lucide="scan"></i></button>
     <button id="layout" title="重新排列關係圖" aria-label="重新排列關係圖"><i data-lucide="workflow"></i></button>
     <span class="spacer"></span>
-    <button id="sync-db" title="把平台資料庫的長者、需求、志工物資與資源點放上地圖，可重複同步"><i data-lucide="database"></i>同步資料庫</button>
+    <button id="sync-db" title="讀取人員、需求、物資、照護關係與任務現況"><i data-lucide="refresh-cw"></i>更新現況</button>
+    <button id="review-inventory" title="預覽待寫回資料庫的物資變更"><i data-lucide="git-pull-request"></i>待寫回 <span id="inventory-count">0</span></button>
     <button id="region"><i data-lucide="map-pin"></i>選擇地區</button>
     <button id="import"><i data-lucide="upload"></i>匯入資料</button>
     <button id="osm"><i data-lucide="route"></i>載入範圍道路</button>
@@ -51,14 +56,17 @@
     <button id="allocation"><i data-lucide="package-check"></i>物資分配</button>
   </div>
   <div id="metrics" class="metrics"></div>
+  <div class="operations-bar"><div id="operation-stages" class="segmented" aria-label="需求與任務狀態"></div><span id="observed-at" class="muted">尚未讀取平台現況</span></div>
   <main>
     <aside class="catalog">
       <button id="layer-region" class="primary wide"><i data-lucide="map-pin"></i>載入地區資料</button>
-      <button id="layer-db" class="wide" title="長者、需求單、志工物資、社區資源點"><i data-lucide="database"></i>同步平台資料庫</button>
-      <h2>資料圖層</h2><div id="layers"></div>
+      <button id="layer-db" class="wide" title="長者、需求單、志工物資、社區資源點"><i data-lucide="database"></i>讀取平台現況</button>
+      <details><summary>資料圖層</summary><div id="layers"></div></details>
+      <div class="segmented catalog-tabs"><button id="catalog-objects" class="active">物件</button><button id="catalog-tasks">需求與任務</button></div>
       <div class="catalog-heading"><h2>物件</h2><span id="object-count"></span></div>
       <input id="search" type="search" placeholder="搜尋名稱、識別碼" aria-label="搜尋物件">
       <div id="objects" class="object-list"></div>
+      <div id="operation-tasks" class="object-list" hidden></div>
     </aside>
     <section class="canvas-region" aria-label="拓樸畫布">
       <div id="map"></div><div id="graph" hidden></div>
@@ -85,6 +93,14 @@
     </aside>
   </main>
   <footer><span id="status" role="status">空白工作區</span><span id="save-state">尚未儲存</span></footer>
+  <dialog id="inventory-dialog" aria-labelledby="inventory-title">
+    <div class="dialog-heading"><h2 id="inventory-title">物資資料變更</h2><button id="close-inventory" aria-label="關閉物資變更"><i data-lucide="x"></i></button></div>
+    <form id="inventory-form"><div id="inventory-fields"></div><div class="dialog-actions"><button type="submit" class="primary"><i data-lucide="plus"></i>加入待寫回</button></div></form>
+  </dialog>
+  <dialog id="inventory-review-dialog" aria-labelledby="inventory-review-title">
+    <div class="dialog-heading"><h2 id="inventory-review-title">資料庫變更預覽</h2><button id="close-inventory-review" aria-label="關閉變更預覽"><i data-lucide="x"></i></button></div>
+    <div id="inventory-review-result" role="status"></div><div class="dialog-actions"><button id="discard-inventory" class="danger"><i data-lucide="trash-2"></i>捨棄待寫回</button><button id="apply-inventory" class="primary" disabled><i data-lucide="database"></i>確認寫回</button></div>
+  </dialog>
   <dialog id="allocation-dialog" aria-labelledby="allocation-title">
     <div class="dialog-heading"><h2 id="allocation-title">物資分配試算</h2><button id="close-allocation" aria-label="關閉物資分配"><i data-lucide="x"></i></button></div>
     <div class="allocation-heading"><h3>供應庫存</h3><button id="add-stock"><i data-lucide="plus"></i>新增供應</button></div><div id="allocation-stock"></div>

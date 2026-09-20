@@ -114,9 +114,21 @@ def workspace_page():
     return FileResponse(os.path.join(os.path.dirname(__file__), "static", "workspace.html"))
 
 
+@app.get("/view/console", include_in_schema=False)
+def console_view():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "admin.html"))
+
+
+@app.get("/view/dashboard", include_in_schema=False)
+def dashboard_view():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"))
+
+
 @app.get("/admin")
 def admin_page():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "admin.html"))
+    """刻意留白：之後放密碼管理。整個網站只有 `/` 一個入口，不再分前台與後台。"""
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>管理</title></head><body></body></html>')
 
 
 @app.get("/health")
@@ -126,12 +138,17 @@ def health():
 
 @app.get("/")
 def dashboard():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"))
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "site.html"))
 
 # 靜態資源
 @app.post("/api/system/rich-menu/install", tags=["System"])
 def install_rich_menu():
-    """用部署環境的 LINE token 重建兩張 Rich Menu（一般版設為預設、志工版綁給現有志工）。"""
+    """在受控維運期間，重建三張角色 Rich Menu。"""
+    if not settings.RICH_MENU_REBUILD_ENABLED:
+        raise HTTPException(
+            status_code=403,
+            detail="Rich Menu 重建預設關閉；請依受控維運流程暫時設定 RICH_MENU_REBUILD_ENABLED=true。",
+        )
     from app.database import SessionLocal
     from app.services.rich_menu import install_menus
     db = SessionLocal()
@@ -158,7 +175,7 @@ def admin_login(t: str = ""):
             return HTMLResponse("登入連結已過期或無效。請回 LINE 傳「後台」取得新的連結。", status_code=401)
     finally:
         db.close()
-    response = RedirectResponse("/admin", status_code=303)
+    response = RedirectResponse("/", status_code=303)
     response.set_cookie(admin_session.COOKIE_NAME, admin_session.make_session(uid),
                         max_age=admin_session.SESSION_TTL, httponly=True, samesite="lax",
                         secure=settings.APP_ENV == "production")
@@ -169,7 +186,7 @@ def admin_login(t: str = ""):
 def admin_logout():
     from fastapi.responses import RedirectResponse
     from app.services import admin_session
-    response = RedirectResponse("/admin", status_code=303)
+    response = RedirectResponse("/", status_code=303)
     response.delete_cookie(admin_session.COOKIE_NAME)
     return response
 

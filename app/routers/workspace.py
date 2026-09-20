@@ -15,7 +15,9 @@ from app.services.workspace import ComparisonBaseline, GraphDocument, ImportRequ
 from app.services.workspace_comparison import compare
 from app.services.workspace_allocation import AllocationRequest, plan_allocation
 from app.services.places import search_places
-from app.services.workspace_bridge import is_db_id, merge_database
+from app.services.workspace_bridge import is_db_id, merge_database, operational_snapshot, _item
+from app.services.workspace_inventory import (InventoryCommand, InventoryConflict, apply_inventory,
+                                             preview_inventory, quantity_parts, row_version)
 
 router = APIRouter()
 
@@ -50,7 +52,9 @@ class DatabaseMergeRequest(BaseModel):
 class AssignmentIn(BaseModel):
     supply_id: str = Field(max_length=200)
     demand_id: str = Field(max_length=200)
-    quantity: int = Field(default=1, ge=0)
+    quantity: int = Field(default=1, ge=1)
+    supply_version: str | None = None
+    demand_version: str | None = None
 
 
 class ApplyAllocationRequest(BaseModel):
@@ -184,11 +188,35 @@ def database_merge(body: DatabaseMergeRequest, db: Session = Depends(get_db)):
     return {"graph": graph.model_dump(), "counts": counts}
 
 
+@router.get("/operational-data")
+def get_operational_data(db: Session = Depends(get_db)):
+    """Read-only projection. No graph upload, persistence, notifications or stock mutations."""
+    return operational_snapshot(db)
+
+
+@router.post("/database-diff")
+def database_diff(body: InventoryCommand, db: Session = Depends(get_db)):
+    return preview_inventory(body, db)
+
+
+@router.post("/database-push")
+def database_push(body: InventoryCommand, db: Session = Depends(get_db)):
+    from app.services.admin_session import current_admin
+    try:
+        return apply_inventory(body, db, current_admin.get())
+    except InventoryConflict as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.post("/apply-allocation")
 def apply_allocation(body: ApplyAllocationRequest, db: Session = Depends(get_db)):
     """把分配試算的結果寫成派遣建議（待確認）。不通知志工、不扣庫存，仍須在調度畫面確認。"""
     from app.services.admin_session import current_admin
     from app.services.dispatch import propose_manual
+    from app.models.need import CommunityNeed
+    from app.models.resource import CommunityResource
     admin = current_admin.get()
     proposed, skipped, used_needs = [], [], set()
     for a in sorted(body.assignments, key=lambda x: -x.quantity):
@@ -204,6 +232,21 @@ def apply_allocation(body: ApplyAllocationRequest, db: Session = Depends(get_db)
         if need_id in used_needs:
             skipped.append({"supply_id": a.supply_id, "demand_id": a.demand_id,
                             "reason": "同一筆需求已由另一份物資建議，系統一筆需求對應一份物資"})
+            continue
+        need, resource = db.get(CommunityNeed, need_id), db.get(CommunityResource, resource_id)
+        reason = None
+        if not need or not resource:
+            reason = "找不到對應的需求或物資"
+        elif a.supply_version != row_version(resource) or a.demand_version != row_version(need):
+            reason = "資料已變動或缺少版本，請同步現況並重新試算"
+        else:
+            supply, demand = quantity_parts(resource.quantity), quantity_parts(need.quantity)
+            if not supply or not demand or supply[1] != demand[1] or _item(resource.resource_type) != _item(need.need_type):
+                reason = "登記品項、數量或單位不一致，不能建立派遣"
+            elif a.quantity != demand[0] or supply[0] < a.quantity:
+                reason = "目前派遣以整筆需求為單位，不接受部分供應或拆單；請先調整正式需求"
+        if reason:
+            skipped.append({"supply_id": a.supply_id, "demand_id": a.demand_id, "reason": reason})
             continue
         result = propose_manual(need_id, resource_id, db, actor_id=admin["id"] if admin else None,
                                 actor_label=f"admin:{admin['name']}" if admin else "workspace:分配試算")
