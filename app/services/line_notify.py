@@ -272,6 +272,11 @@ def send_task_message(
     if need_id:
         from app.services.form_token import form_url
         report_buttons.append({
+            "type": "button", "style": "primary", "color": "#e67e22", "height": "sm",
+            "action": {"type": "postback", "label": "🙋 確認接單，我會出發",
+                       "data": f"action=task_accept&need_id={need_id}"},
+        })
+        report_buttons.append({
             "type": "button", "style": "secondary", "height": "sm",
             "action": {"type": "uri", "label": "📝 回報現況（可打字說明）",
                        "uri": form_url("report", line_uid, need_id)},

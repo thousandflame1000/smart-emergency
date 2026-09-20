@@ -732,7 +732,8 @@ def _announce_match_to_requester(need: CommunityNeed, resource: CommunityResourc
     )
 
 
-def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
+def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
+                    actor_id: str | None = None, actor_label: str = "manager") -> dict:
     """手動指定媒合，立即 LINE 通知志工"""
     need     = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     resource = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
@@ -783,7 +784,8 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session) -> dict:
         "manual_dispatch",
         need=need,
         resource=resource,
-        actor_label="manager",
+        actor_id=actor_id,
+        actor_label=actor_label,
         previous_status=previous_status,
         new_status=need.status,
         outcome="matched",
@@ -1069,6 +1071,104 @@ def mark_task_delivered(
         "need_id": need_id,
         "resource_id": previous_resource_id,
     }
+
+
+# ── 接單：志工自己挑需求，或確認管理員派給他的任務 ─────────────────────────────
+def list_claimable(user, db: Session, limit: int = 5) -> dict:
+    """Open needs this volunteer could take right now: they own an available resource of the same type.
+
+    Returns {"items": [{need, resource, dist_km}], "open_total": n, "has_resources": bool}."""
+    mine = db.query(CommunityResource).filter(
+        CommunityResource.owner_id == user.id, CommunityResource.is_available == True,  # noqa: E712
+    ).all()
+    by_type: dict[str, CommunityResource] = {}
+    for r in mine:
+        by_type.setdefault(r.resource_type, r)
+    needs = db.query(CommunityNeed).filter(
+        CommunityNeed.status == "open", CommunityNeed.need_type != "sos",
+        CommunityNeed.requester_id != user.id,
+    ).all()
+    items = []
+    for n in needs:
+        r = by_type.get(n.need_type)
+        if r is None:
+            continue
+        d = _distance_km(n.lat, n.lng, r.lat, r.lng, db)
+        items.append({"need": n, "resource": r, "dist_km": None if math.isinf(d) else round(d, 1)})
+    items.sort(key=lambda i: (-(i["need"].urgency or 0), i["dist_km"] if i["dist_km"] is not None else 1e9))
+    return {"items": items[:limit], "open_total": len(needs), "has_resources": bool(mine)}
+
+
+def claim_need(need_id: str, user, db: Session) -> dict:
+    """A volunteer takes an open need with their own matching resource."""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "找不到這筆需求，可能已被取消或刪除。"}
+    if need.status != "open":
+        return {"error": "這筆需求已經有人接走或處理了，請重新傳「接單」看最新清單。"}
+    resource = db.query(CommunityResource).filter(
+        CommunityResource.owner_id == user.id, CommunityResource.resource_type == need.need_type,
+        CommunityResource.is_available == True,  # noqa: E712
+    ).first()
+    if not resource:
+        return {"error": "您沒有可提供的對應物資，請先傳「登記物資」。"}
+    result = manual_dispatch(need_id, str(resource.id), db, actor_id=str(user.id), actor_label="volunteer:claim")
+    if "error" in result:
+        return result
+    db.refresh(need)
+    _log_dispatch_event(
+        db, "task_accept", need=need, resource=resource, actor_id=str(user.id), actor_label="volunteer:claim",
+        previous_status="matched", new_status="matched", outcome="claimed", details={"claimed": True},
+    )
+    db.commit()
+    from app.services.alert import notify_admins
+    try:
+        notify_admins(db, f"🙋 志工「{user.name}」自行接單：{NEED_TYPE_ZH.get(need.need_type, need.need_type)}"
+                          f"（{need.address or '地址未填'}）")
+    except Exception:
+        pass
+    return {"message": "claimed", "need_id": need_id, "resource_name": resource.name}
+
+
+ASSIGNMENT_ACTIONS = ("manual_dispatch", "confirm_dispatch")
+
+
+def accepted_need_ids(db: Session, need_ids: list) -> set[str]:
+    """Needs whose current assignment the volunteer has confirmed: a task_accept event newer
+    than the most recent dispatch. (A re-dispatch after a decline starts unconfirmed again.)"""
+    if not need_ids:
+        return set()
+    events = (db.query(DispatchEvent)
+              .filter(DispatchEvent.need_id.in_(need_ids),
+                      DispatchEvent.action.in_(("task_accept",) + ASSIGNMENT_ACTIONS))
+              .order_by(DispatchEvent.created_at, DispatchEvent.id).all())
+    state: dict[str, bool] = {}
+    for e in events:
+        state[str(e.need_id)] = e.action == "task_accept"
+    return {k for k, v in state.items() if v}
+
+
+def accept_task(need_id: str, db: Session, *, actor_id: str | None = None,
+                actor_label: str = "volunteer:line") -> dict:
+    """Volunteer confirms they are going. Requester is told; admin sees the task as confirmed."""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "need not found"}
+    if need.status != "matched":
+        return {"error": "invalid task state", "need_id": need_id, "need_status": need.status}
+    if str(need.id) in accepted_need_ids(db, [need.id]):
+        return {"message": "already accepted", "need_id": need_id, "already_accepted": True}
+    _log_dispatch_event(
+        db, "task_accept", need=need, resource_id=str(need.matched_resource_id) if need.matched_resource_id else None,
+        actor_id=actor_id, actor_label=actor_label, previous_status="matched", new_status="matched",
+        outcome="accepted", details={},
+    )
+    db.commit()
+    notify_requester(
+        need,
+        f"🚚 志工已確認接下您的「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」需求，正在準備前往。",
+    )
+    return {"message": "accepted", "need_id": need_id}
 
 
 REPORT_OUTCOMES = {"delivered", "cannot_go", "issue"}

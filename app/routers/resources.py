@@ -161,6 +161,10 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
         .order_by(CommunityNeed.urgency, CommunityNeed.created_at)
         .all()
     )
+    accepted = set()
+    if needs and status == "matched":
+        from app.services.dispatch import accepted_need_ids
+        accepted = accepted_need_ids(db, [n.id for n in needs])
     reports = {}
     if needs:
         rows = (
@@ -184,6 +188,7 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
             "status":      n.status,
             "created_at":  str(n.created_at),
             "last_report": _fmt_report(reports.get(str(n.id))),
+            "accepted":    str(n.id) in accepted,
         }
         for n in needs
     ]

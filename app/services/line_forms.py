@@ -60,6 +60,31 @@ def link_card(kind: str, url: str) -> dict:
     }
 
 
+def claim_carousel(items: list[dict]) -> dict:
+    """items: [{need_id, type, urgency, address, distance_km, description}] -> carousel with a claim button each."""
+    bubbles = []
+    for it in items:
+        lines = [{"type": "text", "text": it["type"], "weight": "bold", "size": "lg"},
+                 {"type": "text", "text": f"地點：{it['address'] or '地址未填'}", "wrap": True, "size": "sm"}]
+        if it.get("distance_km") is not None:
+            lines.append({"type": "text", "text": f"距離約 {it['distance_km']} 公里", "size": "sm", "color": "#555555"})
+        if it.get("description"):
+            lines.append({"type": "text", "text": it["description"][:60], "wrap": True, "size": "xs", "color": "#888888"})
+        urgent = (it.get("urgency") or 0) >= 4
+        bubbles.append({
+            "type": "bubble", "size": "kilo",
+            "header": {"type": "box", "layout": "vertical", "backgroundColor": "#c0392b" if urgent else "#e67e22",
+                       "contents": [{"type": "text", "text": "🔥 緊急" if urgent else "待接單", "color": "#ffffff",
+                                     "weight": "bold"}]},
+            "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": lines},
+            "footer": {"type": "box", "layout": "vertical", "contents": [
+                {"type": "button", "style": "primary", "color": "#27ae60",
+                 "action": {"type": "postback", "label": "🙋 我來接",
+                            "data": f"action=claim&need_id={it['need_id']}"}}]},
+        })
+    return {"type": "carousel", "contents": bubbles}
+
+
 def qty_options(rtype: str | None) -> list[str]:
     return RES_QTY.get(rtype, RES_QTY_DEFAULT)
 

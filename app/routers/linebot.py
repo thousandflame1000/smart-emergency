@@ -408,6 +408,10 @@ def _handle_volunteer_commands(event, db, user, text) -> bool:
         _open_form(event, db, user, "res")
         return True
 
+    if text in ("接單", "可接任務", "找任務"):
+        _list_claimable(event, db, user)
+        return True
+
     if text in ["我的物資"]:
         my_res = db.query(CommunityResource).filter(
             CommunityResource.owner_id == user.id
@@ -486,6 +490,40 @@ RES_KEYWORDS = {
     "shelter":   ["空間", "房間", "庇護", "地方", "場地"],
     "tool":      ["工具", "電鋸", "發電機", "手電筒", "鏟子"],
 }
+
+
+def _list_claimable(event, db, user) -> None:
+    from app.services import dispatch, line_forms
+    from app.services.line_notify import reply_flex_message
+    if not _is_staff(user):
+        _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
+        return
+    found = dispatch.list_claimable(user, db)
+    if not found["items"]:
+        if not found["has_resources"]:
+            _say(event, "您目前沒有登記可提供的物資，所以沒有可接的單。請先點選單的「登記表單」登記物資。")
+        elif found["open_total"] == 0:
+            _say(event, "目前沒有待處理的需求，辛苦了 🙏 有新需求或管理員派單時會直接通知您。")
+        else:
+            _say(event, "目前待處理的需求都不是您登記的物資種類。管理員派單時會直接通知您。")
+        return
+    cards = [{"need_id": str(i["need"].id), "type": NEED_ZH.get(i["need"].need_type, i["need"].need_type),
+              "urgency": i["need"].urgency, "address": i["need"].address, "distance_km": i["dist_km"],
+              "description": i["need"].description} for i in found["items"]]
+    reply_flex_message(event.reply_token, "可接的任務", line_forms.claim_carousel(cards))
+
+
+def _handle_claim(event, db, user, need_id: str) -> None:
+    from app.services import dispatch
+    if not _is_staff(user):
+        _say(event, "此功能僅限志工使用。")
+        return
+    result = dispatch.claim_need(need_id, user, db)
+    if result.get("error"):
+        _say(event, result["error"])
+        return
+    _say(event, f"✅ 接單成功！已保留您的「{result['resource_name']}」，任務卡稍後會傳給您，"
+                "上面有地圖導航與回報按鈕。求助的人已收到通知。")
 
 
 def _register_resource(event, db, user, rest: str) -> None:
@@ -796,7 +834,7 @@ HELP_BASE = (
 FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "狀態", "status", "幫助", "help", "?", "？",
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
-                  "申請物資", "物資申請", "需要物資", "申請表單"}
+                  "申請物資", "物資申請", "需要物資", "申請表單", "接單", "可接任務", "找任務"}
 
 
 def _is_known_command(text: str, intent: dict) -> bool:
@@ -1006,6 +1044,16 @@ def _handle_task_button(event, db, user, action, need_id) -> None:
         _say(event, "您不是這筆任務的受派志工，無法操作。")
         return
 
+    if action == "task_accept":
+        result = dispatch.accept_task(need_id, db, actor_id=str(user.id))
+        if result.get("already_accepted"):
+            _say(event, "您已經確認接單了，路上小心。完成後請按「✅ 已送達」或用「📝 回報現況」。")
+        elif result.get("error"):
+            _say(event, "這筆任務已經不在您手上了，請以最新的任務訊息為準。")
+        else:
+            _say(event, "🙋 已確認接單，謝謝您！求助的人已收到通知。路上小心，完成後請回報。")
+        return
+
     if action == "task_delivered":
         result = dispatch.mark_task_delivered(need_id, db, actor_id=str(user.id))
         if result.get("already_fulfilled"):
@@ -1093,7 +1141,10 @@ def handle_postback(event: PostbackEvent):
         checkin_svc.confirm_safe(checkin_id, str(user.id), db)
         _say(event, "✅ 感謝您的確認，已更新紀錄。")
 
-    elif action in ("task_delivered", "task_decline"):
+    elif action == "claim":
+        _handle_claim(event, db, user, data.get("need_id", ""))
+
+    elif action in ("task_delivered", "task_decline", "task_accept"):
         _handle_task_button(event, db, user, action, data.get("need_id", ""))
 
 

@@ -839,3 +839,117 @@ def test_form_text_prefix_without_open_form_falls_through(db, line_outbox):
     mk(db, "長者", ["elderly"], uid="U-nf")
     say("U-nf", "補充：隨便")                                        # 沒有開表單就當一般訊息，不能吞掉也不能壞掉
     assert replies(line_outbox)
+
+
+# ── 接單 ─────────────────────────────────────────────────────────────────────
+def _claim_world(db):
+    vol = mk(db, "志工甲", ["volunteer"], "U-cv", lat=24.0, lng=120.6)
+    req = mk(db, "王奶奶", ["elderly"], "U-cr", lat=24.01, lng=120.61)
+    res = CommunityResource(owner_id=vol.id, resource_type="water", name="甲的水", quantity="10",
+                            lat=24.0, lng=120.6, is_available=True)
+    need = CommunityNeed(requester_id=req.id, need_type="water", description="要水", address="台中市南區",
+                         lat=24.01, lng=120.61, urgency=3, status="open")
+    db.add_all([res, need]); db.commit()
+    db.refresh(res); db.refresh(need)
+    return vol, req, res, need
+
+
+def test_claim_list_shows_only_needs_the_volunteer_can_serve(db, line_outbox):
+    vol, req, res, need = _claim_world(db)
+    db.add(CommunityNeed(requester_id=req.id, need_type="food", description="要食物", urgency=5, status="open"))
+    db.add(CommunityNeed(requester_id=req.id, need_type="sos", description="sos", urgency=5, status="open"))
+    db.commit()
+    say("U-cv", "接單")
+    card = str(line_outbox.sent[-1][2].contents.to_dict())
+    assert f"action=claim&need_id={need.id}" in card
+    assert card.count("action=claim") == 1, "沒有對應物資的需求和求救單都不能出現在可接清單"
+
+
+def test_claim_list_explains_why_it_is_empty(db, line_outbox):
+    mk(db, "志工乙", ["volunteer"], "U-empty")
+    say("U-empty", "接單")
+    assert any("沒有登記可提供的物資" in t for t in replies(line_outbox))
+    mk(db, "民眾", ["elderly"], "U-res")
+    say("U-res", "接單")
+    assert any("僅限志工" in t for t in replies(line_outbox))
+
+
+def test_claiming_matches_the_need_notifies_everyone_and_marks_it_accepted(db, line_outbox):
+    from app.models.dispatch_event import DispatchEvent
+    vol, req, res, need = _claim_world(db)
+    mk(db, "管理員", ["admin"], "U-adm")
+    press("U-cv", f"action=claim&need_id={need.id}")
+    db.expire_all()
+    n = db.query(CommunityNeed).filter(CommunityNeed.id == need.id).one()
+    assert n.status == "matched" and str(n.matched_resource_id) == str(res.id)
+    assert db.query(CommunityResource).filter(CommunityResource.id == res.id).one().is_available is False
+    assert any("接單成功" in t for t in replies(line_outbox))
+    assert any("志工" in t for t in sent_to(line_outbox, "U-cr")), "求助的人要知道有人接了"
+    assert any("自行接單" in t for t in sent_to(line_outbox, "U-adm"))
+    assert any("社區支援任務" in t or "任務" in t for t in sent_to(line_outbox, "U-cv")), "志工要收到帶回報按鈕的任務卡"
+    actions = [e.action for e in db.query(DispatchEvent).order_by(DispatchEvent.created_at).all()]
+    assert "manual_dispatch" in actions and "task_accept" in actions
+
+
+def test_two_volunteers_cannot_claim_the_same_need(db, line_outbox):
+    vol, req, res, need = _claim_world(db)
+    vol2 = mk(db, "志工丙", ["volunteer"], "U-cv2", lat=24.0, lng=120.6)
+    db.add(CommunityResource(owner_id=vol2.id, resource_type="water", name="丙的水", lat=24.0, lng=120.6,
+                             is_available=True)); db.commit()
+    press("U-cv", f"action=claim&need_id={need.id}")
+    press("U-cv2", f"action=claim&need_id={need.id}")
+    assert any("已經有人接走" in t for t in replies(line_outbox))
+    db.expire_all()
+    assert db.query(CommunityNeed).one().matched_resource_id == res.id
+
+
+def test_claim_is_refused_for_non_volunteers_and_missing_resource(db, line_outbox):
+    vol, req, res, need = _claim_world(db)
+    mk(db, "路人", ["elderly"], "U-nobody")
+    press("U-nobody", f"action=claim&need_id={need.id}")
+    assert any("僅限志工" in t for t in replies(line_outbox))
+    mk(db, "沒物資的志工", ["volunteer"], "U-noresource")
+    press("U-noresource", f"action=claim&need_id={need.id}")
+    assert any("沒有可提供的對應物資" in t for t in replies(line_outbox))
+    db.expire_all()
+    assert db.query(CommunityNeed).one().status == "open"
+
+
+def test_accepting_an_admin_dispatch_tells_the_requester_once(db, line_outbox):
+    vol, req, res, need = _claim_world(db)
+    assert "error" not in dispatch.manual_dispatch(str(need.id), str(res.id), db)
+    from app.routers.resources import list_needs
+    assert list_needs(status="matched", db=db)[0]["accepted"] is False
+    press("U-cv", f"action=task_accept&need_id={need.id}")
+    assert any("確認接下" in t for t in sent_to(line_outbox, "U-cr"))
+    press("U-cv", f"action=task_accept&need_id={need.id}")
+    assert sum("確認接下" in t for t in sent_to(line_outbox, "U-cr")) == 1
+    assert any("已經確認接單" in t for t in replies(line_outbox))
+    assert list_needs(status="matched", db=db)[0]["accepted"] is True
+
+
+def test_acceptance_resets_after_decline_and_redispatch(db, line_outbox):
+    from app.routers.resources import list_needs
+    vol, req, res, need = _claim_world(db)
+    dispatch.manual_dispatch(str(need.id), str(res.id), db)
+    press("U-cv", f"action=task_accept&need_id={need.id}")
+    press("U-cv", f"action=task_decline&need_id={need.id}")
+    dispatch.manual_dispatch(str(need.id), str(res.id), db)
+    assert list_needs(status="matched", db=db)[0]["accepted"] is False, "重新派遣後要重新確認"
+
+
+def test_accept_is_only_for_the_assignee_and_stale_cards_are_harmless(db, line_outbox):
+    vol, req, res, need = _claim_world(db)
+    other = mk(db, "別的志工", ["volunteer"], "U-oth")
+    dispatch.manual_dispatch(str(need.id), str(res.id), db)
+    press("U-oth", f"action=task_accept&need_id={need.id}")
+    assert any("不是這筆任務的受派志工" in t for t in replies(line_outbox))
+    dispatch.mark_task_delivered(str(need.id), db, actor_id=str(vol.id))
+    press("U-cv", f"action=task_accept&need_id={need.id}")
+    assert any("不在您手上" in t for t in replies(line_outbox))
+
+
+def test_task_card_has_accept_button(db, line_outbox):
+    from app.services.line_notify import send_task_message
+    send_task_message("U-cv", "要水", "台中市南區", "水", need_id="need-xyz-123")
+    assert "action=task_accept&need_id=need-xyz-123" in str(line_outbox.sent[-1][2].contents.to_dict())
