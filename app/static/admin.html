@@ -3620,7 +3620,7 @@ loadAll();
 loadVolunteerApplications();
 loadMode();
 loadSecurityBanner();
-if (location.hash === '#needs') showPage('page-needs');
+if (typeof location !== 'undefined' && location.hash === '#needs') showPage('page-needs');
 </script>
 </body>
 </html>
