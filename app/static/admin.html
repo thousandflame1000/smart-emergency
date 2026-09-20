@@ -135,6 +135,11 @@ body {
 .badge-red    { background: rgba(245,69,92,.1);   color: var(--danger);  border-color: rgba(245,69,92,.3); }
 .badge-amber  { background: rgba(244,183,64,.1);  color: var(--warning); border-color: rgba(244,183,64,.3); }
 .is-hidden { display: none !important; }
+.dispatch-grid { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(320px,1fr); gap:16px; align-items:start; }
+.dispatch-main, .dispatch-side { min-width:0; }
+.dispatch-side .stat-strip { grid-template-columns:repeat(2,1fr); }
+.dispatch-side .card { overflow-x:auto; margin-bottom:16px; }
+@media (max-width:1180px) { .dispatch-grid { grid-template-columns:minmax(0,1fr); } }
 .badge-gray   { background: rgba(255,255,255,.04); color: var(--text-dim); border-color: var(--border); }
 .badge-blue   { background: rgba(34,211,238,.1);  color: var(--primary); border-color: rgba(34,211,238,.3); }
 .badge-purple { background: rgba(196,140,255,.1); color: #c48cff; border-color: rgba(196,140,255,.3); }
@@ -492,14 +497,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   </div>
 
   <div class="nav-section">資源管理</div>
-  <div class="nav-item" onclick="showPage('page-resources')" data-page="page-resources">
-    <span class="icon">📦</span> 個人物資
-  </div>
-  <div class="nav-item" onclick="showPage('page-points')" data-page="page-points">
-    <span class="icon">📍</span> 社區資源點
-  </div>
   <div class="nav-item" onclick="showPage('page-needs')" data-page="page-needs">
-    <span class="icon">🆘</span> 緊急需求
+    <span class="icon">🆘</span> 調度（需求・物資）
   </div>
   <div class="nav-item" onclick="showPage('page-kb')" data-page="page-kb">
     <span class="icon">🧠</span> 知識庫
@@ -656,41 +655,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- ══════════════════════════════════════════════ -->
     <!-- 物資管理                                        -->
     <!-- ══════════════════════════════════════════════ -->
-    <div class="page" id="page-resources">
-      <div class="stat-strip" id="resources-stats"></div>
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">社區物資清單</div>
-            <div class="card-subtitle">點擊「可用 / 不可用」快速切換狀態</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-danger btn-sm" onclick="runDispatch(this)" id="dispatch-btn">
-              🚨 立即自動媒合
-            </button>
-            <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>名稱</th>
-                <th>類型</th>
-                <th>數量</th>
-                <th>地址</th>
-                <th>登記人</th>
-                <th>狀態</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="resources-tbody">
-              <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+    
 
     <!-- ══════════════════════════════════════════════ -->
     <!-- 知識庫                                          -->
@@ -787,57 +752,14 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- ══════════════════════════════════════════════ -->
     <!-- 社區資源點                                      -->
     <!-- ══════════════════════════════════════════════ -->
-    <div class="page" id="page-points">
-      <div class="stat-strip" id="points-stats"></div>
-      <div class="card">
-        <div class="card-header">
-          <div>
-            <div class="card-title">社區固定資源點</div>
-            <div class="card-subtitle">避難收容所、消防分隊、衛生所、活動中心、物資分發點</div>
-          </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-ghost btn-sm" onclick="seedPoints()">📥 從政府資料匯入</button>
-            <button class="btn btn-primary btn-sm" onclick="openPointModal()">＋ 手動新增</button>
-          </div>
-        </div>
-        <!-- 分類篩選器 -->
-        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">
-          <button class="filter-btn active" data-type="" onclick="filterPoints(this,'')">全部</button>
-          <button class="filter-btn" data-type="shelter" onclick="filterPoints(this,'shelter')">🏠 避難所</button>
-          <button class="filter-btn" data-type="fire_station" onclick="filterPoints(this,'fire_station')">🚒 消防</button>
-          <button class="filter-btn" data-type="hospital" onclick="filterPoints(this,'hospital')">🏥 醫院</button>
-          <button class="filter-btn" data-type="clinic" onclick="filterPoints(this,'clinic')">💊 衛生所</button>
-          <button class="filter-btn" data-type="community" onclick="filterPoints(this,'community')">🏘️ 活動中心</button>
-          <button class="filter-btn" data-type="store" onclick="filterPoints(this,'store')">🛒 分發點</button>
-          <button class="filter-btn" data-type="warehouse" onclick="filterPoints(this,'warehouse')">📦 倉庫</button>
-        </div>
-        <div class="table-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>名稱</th>
-                <th>類型</th>
-                <th>地址</th>
-                <th>目前使用 / 容量</th>
-                <th>可提供物資</th>
-                <th>電話</th>
-                <th>來源</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="points-tbody">
-              <tr><td colspan="8"><div class="empty"><div class="spinner"></div></div></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <div id="seed-notice" style="display:none;margin-top:0"></div>
-    </div>
+    
 
     <!-- ══════════════════════════════════════════════ -->
     <!-- 緊急需求                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-needs">
+      <div class="dispatch-grid">
+        <div class="dispatch-main">
       <div class="stat-strip" id="needs-stats"></div>
 
       <!-- 資料來源說明 -->
@@ -983,6 +905,89 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             </div>
           </details>
         </div>
+      </div>
+    </div>
+        <div class="dispatch-side">
+      <div class="stat-strip" id="resources-stats"></div>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">社區物資清單</div>
+            <div class="card-subtitle">點擊「可用 / 不可用」快速切換狀態</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-danger btn-sm" onclick="runDispatch(this)" id="dispatch-btn">
+              🚨 立即自動媒合
+            </button>
+            <button class="btn btn-primary btn-sm" onclick="openResourceModal()">＋ 新增物資</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>類型</th>
+                <th>數量</th>
+                <th>地址</th>
+                <th>登記人</th>
+                <th>狀態</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="resources-tbody">
+              <tr><td colspan="7"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    
+
+      <div class="stat-strip" id="points-stats"></div>
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">社區固定資源點</div>
+            <div class="card-subtitle">避難收容所、消防分隊、衛生所、活動中心、物資分發點</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-sm" onclick="seedPoints()">📥 從政府資料匯入</button>
+            <button class="btn btn-primary btn-sm" onclick="openPointModal()">＋ 手動新增</button>
+          </div>
+        </div>
+        <!-- 分類篩選器 -->
+        <div style="padding:12px 18px;border-bottom:1px solid var(--border);display:flex;gap:6px;flex-wrap:wrap">
+          <button class="filter-btn active" data-type="" onclick="filterPoints(this,'')">全部</button>
+          <button class="filter-btn" data-type="shelter" onclick="filterPoints(this,'shelter')">🏠 避難所</button>
+          <button class="filter-btn" data-type="fire_station" onclick="filterPoints(this,'fire_station')">🚒 消防</button>
+          <button class="filter-btn" data-type="hospital" onclick="filterPoints(this,'hospital')">🏥 醫院</button>
+          <button class="filter-btn" data-type="clinic" onclick="filterPoints(this,'clinic')">💊 衛生所</button>
+          <button class="filter-btn" data-type="community" onclick="filterPoints(this,'community')">🏘️ 活動中心</button>
+          <button class="filter-btn" data-type="store" onclick="filterPoints(this,'store')">🛒 分發點</button>
+          <button class="filter-btn" data-type="warehouse" onclick="filterPoints(this,'warehouse')">📦 倉庫</button>
+        </div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead>
+              <tr>
+                <th>名稱</th>
+                <th>類型</th>
+                <th>地址</th>
+                <th>目前使用 / 容量</th>
+                <th>可提供物資</th>
+                <th>電話</th>
+                <th>來源</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="points-tbody">
+              <tr><td colspan="8"><div class="empty"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div id="seed-notice" style="display:none;margin-top:0"></div>
+    </div>
       </div>
     </div>
 
@@ -1606,9 +1611,7 @@ const PAGE_TITLE = {
   'page-elderly':   '長者管理',
   'page-volunteers':'志工 / 家屬',
   'page-relations': '照護關係',
-  'page-resources': '個人物資',
-  'page-points':    '社區資源點',
-  'page-needs':     '緊急需求',
+  'page-needs':     '調度',
   'page-kb':        '知識庫',
 };
 let allUsers = [];
@@ -1724,17 +1727,19 @@ async function geocodeNow(prefix) {
 // Navigation
 // ════════════════════════════════════════════════
 function showPage(id) {
+  // 需求、個人物資、社區資源點是同一件事（把物資派給需求），整合在同一個「調度」畫面。
+  if (id === 'page-resources' || id === 'page-points') id = 'page-needs';
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(id).classList.add('active');
-  const navEl = document.querySelector(`.nav-item[data-page="${id}"]`);
+  const navId = id;
+  const navEl = document.querySelector(`.nav-item[data-page="${navId}"]`);
   if (navEl) navEl.classList.add('active');
   document.getElementById('topbar-title').textContent = PAGE_TITLE[id] || '';
 
   // Lazy-load when first visiting
   if (id === 'page-relations') loadRelations();
-  if (id === 'page-points')    loadPoints();
-  if (id === 'page-needs')     loadNeeds();
+  if (id === 'page-needs')     { loadNeeds(); loadPoints(); }
   if (id === 'page-kb')        loadKB();
   if (id === 'page-volunteers') loadVolunteerApplications();
 }
