@@ -38,7 +38,12 @@
   .done pre { text-align:left; white-space:pre-wrap; font-family:inherit; background:var(--bg);
               padding:12px; border-radius:10px; font-size:16px; }
   .hint { color:var(--muted); font-size:14px; margin-top:6px; }
-  .is-hidden { display:none; }
+  .task { background:var(--bg); border:2px solid var(--line); border-radius:10px; padding:12px; margin-top:4px; }
+  .task strong { display:block; margin-bottom:2px; }
+  .choices label { display:block; padding:12px; margin-top:8px; border:2px solid var(--line); border-radius:10px; font-weight:600; }
+  .choices small { display:block; font-weight:400; color:var(--muted); margin-left:26px; }
+  .choices input { width:20px; height:20px; margin-right:8px; vertical-align:middle; }
+  .is-hidden { display:none !important; }
 </style>
 </head>
 <body>
@@ -49,27 +54,28 @@
 <main>
   <div class="card">
     <form id="form" novalidate>
-      <label class="field">姓名<small>（志工聯絡您時用）</small>
-        <input type="text" id="name" maxlength="100" autocomplete="name" placeholder="例如：王小明">
+      <div id="task-box" class="task is-hidden"></div>
+      <label class="field profile">姓名
+        <input type="text" id="name" maxlength="100" autocomplete="name">
       </label>
-      <label class="field">電話<small>（選填）</small>
-        <input type="tel" id="phone" maxlength="40" autocomplete="tel" inputmode="tel" placeholder="例如：0912-345-678">
+      <label class="field profile">電話<small>（選填）</small>
+        <input type="tel" id="phone" maxlength="40" autocomplete="tel" inputmode="tel">
       </label>
-      <label class="field">地址
-        <input type="text" id="address" maxlength="200" autocomplete="street-address" placeholder="例如：台中市南區崇倫街 88 號">
+      <label class="field profile">地址
+        <input type="text" id="address" maxlength="200" autocomplete="street-address">
       </label>
 
       <div data-kind="need">
         <label class="field">需要什麼？<small>（可多選）</small></label>
         <div class="checks" id="need-types"></div>
         <label class="field">家裡幾個人？
-          <input type="number" id="people" min="1" max="99" inputmode="numeric" placeholder="例如：3">
+          <input type="number" id="people" min="1" max="99" inputmode="numeric">
         </label>
         <label class="field">有多急？
           <select id="urgent"><option value="0">一般</option><option value="1">很急，請優先處理</option></select>
         </label>
         <label class="field">想告訴志工的話<small>（選填）</small>
-          <textarea id="note" maxlength="500" placeholder="例如：樓梯很陡、家裡有行動不便的長者"></textarea>
+          <textarea id="note" maxlength="500"></textarea>
         </label>
         <p class="hint" style="color:#c0392b">有生命危險請直接撥 119，不要等表單。</p>
       </div>
@@ -84,16 +90,28 @@
           </select>
         </label>
         <label class="field">物資名稱<small>（選填）</small>
-          <input type="text" id="resource_name" maxlength="100" placeholder="例如：礦泉水 600ml">
+          <input type="text" id="resource_name" maxlength="100">
         </label>
         <label class="field">數量
-          <input type="text" id="quantity" maxlength="60" placeholder="例如：20箱、50份、2台">
+          <input type="text" id="quantity" maxlength="60">
+        </label>
+      </div>
+
+      <div data-kind="report">
+        <label class="field">現場狀況</label>
+        <div class="choices" id="report-outcomes">
+          <label><input type="radio" name="outcome" value="delivered" checked> ✅ 已送達，任務完成</label>
+          <label><input type="radio" name="outcome" value="issue"> ⚠️ 遇到狀況（先不結案）</label>
+          <label><input type="radio" name="outcome" value="cannot_go"> ❌ 無法前往，請改派他人</label>
+        </div>
+        <label class="field">說明<small id="report-note-hint">（選填）</small>
+          <textarea id="report_note" maxlength="500"></textarea>
         </label>
       </div>
 
       <div data-kind="apply">
         <label class="field">可以服務的區域<small>（選填）</small>
-          <input type="text" id="service_area" maxlength="200" placeholder="例如：台中市南區、北屯區">
+          <input type="text" id="service_area" maxlength="200">
         </label>
       </div>
 
@@ -116,6 +134,7 @@
   var META = {
     need:  { title: '📋 申請物資', sub: '填好送出，志工會盡快協助', action: '/f/api/need', btn: '送出申請' },
     res:   { title: '📦 登記可提供物資', sub: '謝謝您願意分享物資', action: '/f/api/resource', btn: '送出登記' },
+    report: { title: '📝 回報任務現況', sub: '寫下現場狀況，管理員會收到通知', action: '/f/api/report', btn: '送出回報' },
     apply: { title: '🙋 志工申請', sub: '謝謝您願意幫忙，管理員審核後會通知您', action: '/f/api/apply', btn: '送出申請' }
   };
   var TYPES = [['water','💧 飲用水'],['food','🍱 食物'],['first_aid','🩹 藥品／急救'],['shelter','🏠 庇護所'],['vehicle','🚗 交通接送']];
@@ -139,6 +158,19 @@
     });
   }
   if (KIND === 'apply') { $('address').closest('label').classList.add('is-hidden'); }
+  if (KIND === 'report') {
+    Array.prototype.forEach.call(document.querySelectorAll('.profile'), function (el) { el.classList.add('is-hidden'); });
+  }
+  var NEED_ID = new URLSearchParams(location.search).get('n') || '';
+  function syncReportHint() {
+    var v = (document.querySelector('input[name=outcome]:checked') || {}).value;
+    $('report-note-hint').textContent = v === 'issue' ? '（必填：請寫下發生了什麼事）' : '（選填）';
+  }
+  if (KIND === 'report') {
+    Array.prototype.forEach.call(document.querySelectorAll('input[name=outcome]'), function (r) {
+      r.addEventListener('change', syncReportHint);
+    });
+  }
 
   function showError(text) {
     var box = $('error');
@@ -146,10 +178,18 @@
     box.classList.remove('is-hidden');
   }
 
-  fetch('/f/api/context?t=' + encodeURIComponent(TOKEN)).then(function (r) {
+  fetch('/f/api/context?t=' + encodeURIComponent(TOKEN) + (KIND === 'report' ? '&n=' + encodeURIComponent(NEED_ID) : '')).then(function (r) {
     return r.json().then(function (d) { return { ok: r.ok, d: d }; });
   }).then(function (res) {
     if (!res.ok) { showError(res.d.detail || res.d.error || '表單連結無效'); $('submit').disabled = true; return; }
+    if (res.d.task) {
+      var box = $('task-box');
+      box.classList.remove('is-hidden');
+      var t1 = document.createElement('strong'); t1.textContent = res.d.task.type + '｜' + res.d.task.status_zh;
+      var t2 = document.createElement('div'); t2.textContent = '地點：' + (res.d.task.address || '地址未填');
+      var t3 = document.createElement('div'); t3.textContent = res.d.task.description || '';
+      box.appendChild(t1); box.appendChild(t2); box.appendChild(t3);
+    }
     if (res.d.name) $('name').value = res.d.name;
     if (res.d.phone) $('phone').value = res.d.phone;
     if (res.d.address) $('address').value = res.d.address;
@@ -171,6 +211,10 @@
     } else if (KIND === 'res') {
       body.rtype = $('rtype').value; body.quantity = $('quantity').value; body.resource_name = $('resource_name').value;
       if (!body.quantity.trim()) { showError('請填寫數量。'); return; }
+    } else if (KIND === 'report') {
+      body = { t: TOKEN, need_id: NEED_ID, outcome: document.querySelector('input[name=outcome]:checked').value,
+               note: $('report_note').value };
+      if (body.outcome === 'issue' && !body.note.trim()) { showError('請寫下現場發生了什麼事。'); return; }
     } else {
       body.service_area = $('service_area').value;
       if (!body.name.trim()) { showError('請填寫姓名。'); return; }

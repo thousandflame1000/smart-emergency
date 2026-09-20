@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FORM_PAGE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "form.html")
-KINDS = {"need", "res", "apply"}
+KINDS = {"need", "res", "apply", "report"}
 NEED_CHOICES = {"water", "food", "first_aid", "shelter", "vehicle"}
 PHONE_RE = re.compile(r"^[0-9+\-()\s]{7,20}$")
 
@@ -45,6 +45,13 @@ class ResourceForm(_Base):
     rtype: str
     quantity: str = Field(min_length=1, max_length=60)
     resource_name: str | None = Field(default=None, max_length=100)
+
+
+class ReportForm(BaseModel):
+    t: str = Field(min_length=10, max_length=600)
+    need_id: str = Field(min_length=8, max_length=64)
+    outcome: str
+    note: str | None = Field(default=None, max_length=500)
 
 
 class ApplyForm(_Base):
@@ -92,12 +99,55 @@ def _notify(user: User, text: str, ask_location: bool) -> None:
         logger.warning("web form confirmation push failed", exc_info=True)
 
 
+def _task_for(db: Session, user: User, need_id: str):
+    """The need this volunteer is assigned to; raises a clear error when they are not."""
+    from app.models.need import CommunityNeed
+    from app.services.dispatch import assignee_user_id
+    try:
+        need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    except Exception:
+        need = None
+    if not need:
+        raise ApiError(404, "找不到這筆任務，可能已被刪除。")
+    is_admin = bool(user.roles) and "admin" in user.roles
+    if assignee_user_id(need) != str(user.id) and not is_admin:
+        raise ApiError(403, "這筆任務不是派給您的，無法回報。")
+    return need
+
+
 @router.get("/api/context")
-def form_context(t: str, db: Session = Depends(get_db)):
-    from app.routers.linebot import _is_staff
+def form_context(t: str, n: str | None = None, db: Session = Depends(get_db)):
+    from app.routers.linebot import NEED_ZH, STATUS_ZH, _is_staff
     user = _user_from_token(db, t)
-    return {"name": user.name, "phone": user.phone, "address": user.address,
-            "is_staff": _is_staff(user), "has_location": user.lat is not None}
+    out = {"name": user.name, "phone": user.phone, "address": user.address,
+           "is_staff": _is_staff(user), "has_location": user.lat is not None}
+    if n:
+        need = _task_for(db, user, n)
+        out["task"] = {"need_id": str(need.id), "type": NEED_ZH.get(need.need_type, need.need_type),
+                       "address": need.address, "description": need.description,
+                       "status": need.status, "status_zh": STATUS_ZH.get(need.status, need.status)}
+    return out
+
+
+@router.post("/api/report")
+def submit_report_form(form: ReportForm, db: Session = Depends(get_db)):
+    from app.services.dispatch import REPORT_OUTCOME_ZH, report_task
+    user = _user_from_token(db, form.t)
+    need = _task_for(db, user, form.need_id)
+    if form.outcome not in REPORT_OUTCOME_ZH:
+        raise ApiError(422, "請選擇回報結果。")
+    result = report_task(str(need.id), db, outcome=form.outcome, note=form.note,
+                         actor_id=str(user.id), actor_label="volunteer:web")
+    if result.get("error") == "invalid task state":
+        raise ApiError(409, "這筆任務目前的狀態已經不能回報了（可能已完成、已取消，或已退回重新派遣）。")
+    if result.get("error"):
+        raise ApiError(422 if "請" in str(result["error"]) else 409, str(result["error"]))
+    label = REPORT_OUTCOME_ZH[form.outcome]
+    reply = f"📝 已收到您的回報：{label}。" + (f"\n說明：{form.note.strip()}" if (form.note or "").strip() else "")
+    if form.outcome == "issue":
+        reply += "\n管理員已收到通知，任務仍保留給您；需要換人請按任務卡上的「無法前往」。"
+    _notify(user, reply, False)
+    return {"ok": True, "message": reply}
 
 
 @router.post("/api/need")

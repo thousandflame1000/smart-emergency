@@ -51,5 +51,6 @@ def verify_token(token: str, *, now: float | None = None) -> str | None:
         return None
 
 
-def form_url(kind: str, line_uid: str) -> str:
-    return f"{settings.PUBLIC_BASE_URL.rstrip('/')}/f/{kind}?t={make_token(line_uid)}"
+def form_url(kind: str, line_uid: str, need_id: str | None = None) -> str:
+    url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/f/{kind}?t={make_token(line_uid)}"
+    return f"{url}&n={need_id}" if need_id else url

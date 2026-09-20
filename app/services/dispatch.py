@@ -1071,6 +1071,70 @@ def mark_task_delivered(
     }
 
 
+REPORT_OUTCOMES = {"delivered", "cannot_go", "issue"}
+REPORT_OUTCOME_ZH = {"delivered": "已送達", "cannot_go": "無法前往", "issue": "現場遇到狀況"}
+
+
+def report_task(
+    need_id: str,
+    db: Session,
+    *,
+    outcome: str,
+    note: str | None = None,
+    actor_id: str | None = None,
+    actor_label: str = "volunteer:web",
+) -> dict:
+    """A volunteer's written report on a task: delivered, can't go, or "something came up".
+
+    The card's two buttons could only close or drop a task; the volunteer had no way to say
+    "nobody answered the door" or "address doesn't exist", so the admin only ever saw a status
+    flip. The note is stored on the audit trail and pushed to the admins."""
+    if outcome not in REPORT_OUTCOMES:
+        return {"error": "invalid outcome"}
+    note = (note or "").strip() or None
+    if outcome == "issue" and not note:
+        return {"error": "回報現場狀況時，請寫下發生了什麼事。"}
+
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "need not found"}
+    resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
+    need_status = need.status
+
+    if outcome == "delivered":
+        result = mark_task_delivered(need_id, db, actor_id=actor_id, actor_label=actor_label)
+    elif outcome == "cannot_go":
+        result = decline_task_assignment(need_id, db, actor_id=actor_id, actor_label=actor_label)
+    else:
+        if need_status != "matched":
+            return {"error": "invalid task state", "need_id": need_id, "need_status": need_status}
+        result = {"message": "issue recorded", "need_id": need_id}
+    if "error" in result:
+        return result
+
+    if note or outcome != "delivered":
+        db.refresh(need)
+        _log_dispatch_event(
+            db, "task_report", need=need, resource_id=resource_id, actor_id=actor_id,
+            actor_label=actor_label, previous_status=need_status, new_status=need.status,
+            outcome=outcome, details={"note": note, "outcome": outcome},
+        )
+        db.commit()
+        from app.services.alert import notify_admins
+        label = NEED_TYPE_ZH.get(need.need_type, need.need_type)
+        where = f"（{need.address}）" if need.address else ""
+        try:
+            notify_admins(
+                db,
+                f"📝 志工回報【{REPORT_OUTCOME_ZH[outcome]}】{label}{where}\n"
+                + (f"說明：{note}" if note else "（沒有附說明）")
+                + ("\n需求已退回待媒合，請重新派遣。" if outcome == "cannot_go" else ""),
+            )
+        except Exception:
+            pass
+    return result
+
+
 def decline_task_assignment(
     need_id: str,
     db: Session,

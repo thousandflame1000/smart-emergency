@@ -268,6 +268,14 @@ def send_task_message(
                 "uri": f"https://www.google.com/maps/dir/?api=1&destination={dest_lat},{dest_lng}",
             },
         })
+    report_buttons = []
+    if need_id:
+        from app.services.form_token import form_url
+        report_buttons.append({
+            "type": "button", "style": "secondary", "height": "sm",
+            "action": {"type": "uri", "label": "📝 回報現況（可打字說明）",
+                       "uri": form_url("report", line_uid, need_id)},
+        })
     flex = {
         "type": "bubble",
         "header": {
@@ -289,7 +297,7 @@ def send_task_message(
             "type": "box",
             "layout": "vertical",
             "spacing": "sm",
-            "contents": footer_contents + [{
+            "contents": footer_contents + report_buttons + [{
                 "type": "box",
                 "layout": "horizontal",
                 "spacing": "sm",

@@ -2562,6 +2562,8 @@ const STATUS_BADGE = {
 let allNeeds = [];
 let needStatusFilter = '';
 
+const REPORT_LABEL = { delivered: '已送達', cannot_go: '無法前往', issue: '現場遇到狀況' };
+
 async function loadNeeds() {
   try {
     // "取消" 按下去之後之前完全沒有地方看得到——這裡只抓 open/
@@ -2661,7 +2663,7 @@ function renderNeeds(data) {
         <strong style="font-size:15px">${n.urgency}</strong>
       </td>
       <td>${NEED_TYPE_ICON[n.need_type]||'📦'} ${n.need_type === 'sos' ? '<strong style="color:var(--danger)">' + esc(NEED_TYPE_LABEL.sos) + '</strong>' : esc(NEED_TYPE_LABEL[n.need_type] || n.need_type)}</td>
-      <td class="muted">${esc(n.description) || '—'}</td>
+      <td class="muted">${esc(n.description) || '—'}${n.last_report ? `<div style="margin-top:4px;color:var(--warning,#b9770e)">📝 志工回報【${esc(REPORT_LABEL[n.last_report.outcome] || n.last_report.outcome)}】${esc(n.last_report.note || '（沒有附說明）')}</div>` : ''}</td>
       <td class="muted" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(n.address)||'—'}</td>
       <td>${STATUS_BADGE[n.status]||n.status}</td>
       <td class="muted" style="white-space:nowrap">${esc(twTime(n.created_at))}</td>

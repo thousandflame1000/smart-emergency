@@ -20,11 +20,10 @@ ADDRESS_PREFIX = "地址："
 MAX_TEXT = 100
 
 
-def _text_field(prefix: str, label: str, value: str | None, hint: str) -> list[dict]:
+def _text_field(prefix: str, label: str, value: str | None) -> list[dict]:
     """Not a real textbox (LINE has none in chat): the button opens the keyboard with the
     prefix already typed, and the bot reads the next message that starts with that prefix."""
-    shown = [{"type": "text", "text": f"已填：{value}", "size": "sm", "color": "#27ae60", "wrap": True}] if value \
-        else [{"type": "text", "text": hint, "size": "xs", "color": "#888888", "wrap": True}]
+    shown = [{"type": "text", "text": f"已填：{value}", "size": "sm", "color": "#27ae60", "wrap": True}] if value else []
     return shown + [{
         "type": "button", "height": "sm", "style": "secondary",
         "action": {"type": "postback", "label": ("✏️ 修改" if value else "✏️ ") + label,
@@ -52,8 +51,6 @@ def link_card(kind: str, url: str) -> dict:
                    "contents": [{"type": "text", "text": title, "color": "#ffffff", "weight": "bold", "size": "lg"}]},
         "body": {"type": "box", "layout": "vertical", "spacing": "md", "contents": [
             {"type": "text", "text": desc, "wrap": True, "size": "md"},
-            {"type": "text", "text": "連結 3 小時內有效，只能用在您自己的帳號。", "wrap": True,
-             "size": "xs", "color": "#888888"},
         ]},
         "footer": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [
             {"type": "button", "style": "primary", "color": "#27ae60", "height": "md",
@@ -103,8 +100,7 @@ def _shell(header: str, color: str, body: list[dict], submit_label: str, submit_
 
 def need_card(data: dict) -> dict:
     types = set(data.get("types", []))
-    body = [{"type": "text", "text": "點選就好，不用打字", "size": "sm", "color": "#888888"},
-            _title("① 需要什麼？（可多選）")]
+    body = [_title("① 需要什麼？（可多選）")]
     body += _rows([_btn(lbl, f"action=form&f=need&op=type&v={k}", k in types) for k, lbl in NEED_TYPES], 2)
     body.append(_title("② 家裡幾個人？"))
     body += _rows([_btn(f"{n}人" if n != "4" else "4人以上", f"action=form&f=need&op=people&v={n}",
@@ -115,7 +111,7 @@ def need_card(data: dict) -> dict:
         _btn("很急", "action=form&f=need&op=urgent&v=1", bool(data.get("urgent")), color="#e74c3c"),
     ], 2)
     body.append(_title("④ 還有什麼想告訴志工？（選填）"))
-    body += _text_field(NOTE_PREFIX, "打字補充說明", data.get("note"), "例如：樓梯很陡、家裡有行動不便的長者")
+    body += _text_field(NOTE_PREFIX, "打字補充說明", data.get("note"))
     body.append({"type": "text", "text": "有生命危險請直接撥 119，或按選單的「需要幫忙」。",
                  "size": "xs", "color": "#e74c3c", "wrap": True, "margin": "lg"})
     return _shell("📋 申請物資", "#c0392b", body, "送出申請", "action=form&f=need&op=go")
@@ -123,14 +119,12 @@ def need_card(data: dict) -> dict:
 
 def resource_card(data: dict) -> dict:
     rtype = data.get("rtype")
-    body = [{"type": "text", "text": "點選就好，不用打字", "size": "sm", "color": "#888888"},
-            _title("① 您能提供什麼？")]
+    body = [_title("① 您能提供什麼？")]
     body += _rows([_btn(lbl, f"action=form&f=res&op=type&v={k}", rtype == k, color="#148f77")
                    for k, lbl, _kw in RES_TYPES], 2)
     body.append(_title("② 大約多少？"))
     body += _rows([_btn(q, f"action=form&f=res&op=qty&v={q}", data.get("qty") == q, color="#148f77")
                    for q in qty_options(rtype)], 2)
     body.append(_title("③ 物資放在哪裡？（選填）"))
-    body += _text_field(ADDRESS_PREFIX, "打字輸入地址", data.get("address"),
-                        "不填就用您帳號上的地址或位置，都沒有時送出後會請您分享位置。")
+    body += _text_field(ADDRESS_PREFIX, "打字輸入地址", data.get("address"))
     return _shell("📦 登記可提供物資", "#148f77", body, "送出登記", "action=form&f=res&op=go")

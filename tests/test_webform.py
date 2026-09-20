@@ -187,3 +187,96 @@ def test_bot_entry_commands_send_a_signed_link(db, line_outbox):
     assert "/f/res?t=" in str(line_outbox.sent[-1][2].contents.to_dict())
     say("U-bot", "我要當志工")
     assert "/f/apply?t=" in str(line_outbox.sent[-1][2].contents.to_dict())
+
+
+# ── 志工回報現況 ─────────────────────────────────────────────────────────────
+def _matched_task(db, vol_uid="U-vol", requester_uid="U-req"):
+    vol = mk(db, "志工", ["volunteer"], vol_uid, lat=24.0, lng=120.6)
+    req = mk(db, "求助者", ["elderly"], requester_uid, lat=24.01, lng=120.61)
+    res = CommunityResource(owner_id=vol.id, resource_type="water", name="水", quantity="10",
+                            lat=24.0, lng=120.6, is_available=False)
+    db.add(res); db.commit(); db.refresh(res)
+    need = CommunityNeed(requester_id=req.id, need_type="water", description="要水", address="台中市南區",
+                         lat=24.01, lng=120.61, urgency=3, status="matched", matched_resource_id=res.id)
+    db.add(need); db.commit(); db.refresh(need)
+    return vol, req, res, need
+
+
+def _report(client, uid, need, outcome, note=None):
+    return client.post("/f/api/report", json={"t": form_token.make_token(uid), "need_id": str(need.id),
+                                              "outcome": outcome, "note": note})
+
+
+def test_task_card_has_report_button_with_signed_link_and_task_id(db, line_outbox):
+    from app.services.line_notify import send_task_message
+    send_task_message("U-vol", "要水", "台中市南區", "水", need_id="abc12345-need")
+    card = str(line_outbox.sent[-1][2].contents.to_dict())
+    assert "/f/report?t=" in card and "&n=abc12345-need" in card
+    token = card.split("/f/report?t=")[1].split("&n=")[0]
+    assert form_token.verify_token(token) == "U-vol"
+
+
+def test_report_context_shows_task_and_blocks_other_volunteers(db, client):
+    vol, req, res, need = _matched_task(db)
+    mk(db, "別的志工", ["volunteer"], "U-other")
+    ok = client.get("/f/api/context", params={"t": form_token.make_token("U-vol"), "n": str(need.id)})
+    assert ok.status_code == 200 and ok.json()["task"]["address"] == "台中市南區"
+    no = client.get("/f/api/context", params={"t": form_token.make_token("U-other"), "n": str(need.id)})
+    assert no.status_code == 403
+    gone = client.get("/f/api/context", params={"t": form_token.make_token("U-vol"), "n": "not-a-real-id"})
+    assert gone.status_code == 404
+
+
+def test_report_delivered_with_note_closes_task_logs_and_tells_requester_and_admin(db, client, line_outbox):
+    from app.models.dispatch_event import DispatchEvent
+    vol, req, res, need = _matched_task(db)
+    mk(db, "管理員", ["admin"], "U-admin")
+    r = _report(client, "U-vol", need, "delivered", "放在門口信箱旁，已拍照")
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert db.query(CommunityNeed).one().status == "fulfilled"
+    ev = db.query(DispatchEvent).filter(DispatchEvent.action == "task_report").one()
+    assert "放在門口" in ev.details_json and ev.outcome == "delivered"
+    assert any("送達" in t for t in line_outbox.texts("U-req"))
+    assert any("放在門口" in t for t in line_outbox.texts("U-admin"))
+    assert any("已收到您的回報" in t for t in line_outbox.texts("U-vol"))
+
+
+def test_report_issue_keeps_task_and_alerts_admin_and_requires_a_note(db, client, line_outbox):
+    vol, req, res, need = _matched_task(db)
+    mk(db, "管理員", ["admin"], "U-admin")
+    assert _report(client, "U-vol", need, "issue", "  ").status_code == 422
+    assert _report(client, "U-vol", need, "issue", "對方不在家，電話也沒接").status_code == 200
+    db.expire_all()
+    assert db.query(CommunityNeed).one().status == "matched"
+    assert any("對方不在家" in t for t in line_outbox.texts("U-admin"))
+
+
+def test_report_cannot_go_reopens_need_and_releases_resource(db, client, line_outbox):
+    vol, req, res, need = _matched_task(db)
+    mk(db, "管理員", ["admin"], "U-admin")
+    assert _report(client, "U-vol", need, "cannot_go", "車壞了").status_code == 200
+    db.expire_all()
+    n = db.query(CommunityNeed).one()
+    assert n.status == "open" and n.matched_resource_id is None
+    assert db.query(CommunityResource).one().is_available is True
+    assert any("車壞了" in t and "重新派遣" in t for t in line_outbox.texts("U-admin"))
+
+
+def test_report_on_finished_or_someone_elses_task_is_refused(db, client):
+    vol, req, res, need = _matched_task(db)
+    mk(db, "別人", ["volunteer"], "U-other")
+    assert _report(client, "U-other", need, "delivered").status_code == 403
+    assert _report(client, "U-vol", need, "delivered").status_code == 200
+    assert _report(client, "U-vol", need, "issue", "還想補充").status_code == 409     # 已完成，不能再回報狀況
+    assert _report(client, "U-vol", need, "bogus").status_code == 422
+
+
+def test_admin_needs_list_exposes_the_latest_report(db, client):
+    from fastapi import FastAPI
+    from app.routers import resources as resources_router
+    vol, req, res, need = _matched_task(db)
+    _report(client, "U-vol", need, "issue", "找不到大門")
+    api = FastAPI(); api.include_router(resources_router.router, prefix="/api/resources")
+    rows = TestClient(api).get("/api/resources/needs", params={"status": "matched"}).json()
+    assert rows[0]["last_report"]["note"] == "找不到大門" and rows[0]["last_report"]["outcome"] == "issue"

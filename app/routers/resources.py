@@ -161,6 +161,16 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
         .order_by(CommunityNeed.urgency, CommunityNeed.created_at)
         .all()
     )
+    reports = {}
+    if needs:
+        rows = (
+            db.query(DispatchEvent)
+            .filter(DispatchEvent.action == "task_report", DispatchEvent.need_id.in_([n.id for n in needs]))
+            .order_by(DispatchEvent.created_at)
+            .all()
+        )
+        for e in rows:
+            reports[str(e.need_id)] = e
     return [
         {
             "id":          str(n.id),
@@ -173,9 +183,21 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
             "urgency":     n.urgency,
             "status":      n.status,
             "created_at":  str(n.created_at),
+            "last_report": _fmt_report(reports.get(str(n.id))),
         }
         for n in needs
     ]
+
+
+def _fmt_report(event):
+    if event is None:
+        return None
+    try:
+        details = json.loads(event.details_json or "{}")
+    except ValueError:
+        details = {}
+    return {"outcome": event.outcome, "note": details.get("note"),
+            "actor": event.actor_label, "created_at": str(event.created_at)}
 
 
 PROXY_REQUESTER_NAME = "管理員代建（未指定登記人）"
