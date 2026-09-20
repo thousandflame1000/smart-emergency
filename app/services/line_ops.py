@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
 ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "更新選單"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
-RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "我的紀錄"}
+RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "我的紀錄", "刪除我的帳號", "刪除帳號"}
 COMMAND_WORDS = VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
 BIND_RE = re.compile(r"^綁定\s*(\d{6})$")
 INVITE_TTL = timedelta(hours=24)
@@ -394,6 +394,33 @@ def my_needs(event, db: Session, user: User) -> None:
     _flex(event, "我的需求", bubble("📋 我的需求（最近 5 筆）", "#c0392b", lines, buttons))
 
 
+def ask_delete_me(event, db: Session, user: User) -> None:
+    lines = ["這會永久刪除您在鄰里守望的帳號，以及您的打卡紀錄、需求、登記的物資、家人綁定與志工申請。",
+             "刪除後無法復原。之後您再傳訊息，會以全新的一般居民身分重新註冊。"]
+    if is_admin(user) and db.query(User).filter(User.role_filter("admin"), User.id != user.id).count() == 0:
+        lines.append("⚠️ 您是唯一的管理員，刪除後沒有人能登入後台。")
+    _flex(event, "確認刪除帳號", bubble("🗑 刪除我的帳號", "#7f8c8d", lines, [
+        {"label": "確定刪除", "data": "action=delete_me", "color": "#c0392b"},
+        {"label": "先不要", "data": "action=keep_me"}]))
+
+
+def delete_me(event, db: Session, user: User) -> None:
+    from app.services.user_deletion import UserDeletionBlocked, delete_user_data
+    line_uid = user.line_uid
+    try:
+        delete_user_data(db, user)
+    except UserDeletionBlocked as exc:
+        _say(event, f"⚠️ 現在還不能刪除：{exc}")
+        return
+    try:
+        from app.services.rich_menu import _apis
+        if line_uid:
+            _apis()[0].unlink_rich_menu_id_from_user(line_uid)
+    except Exception:
+        logger.warning("unlink menu after account deletion failed", exc_info=True)
+    _say(event, "✅ 您的帳號與相關資料已刪除。之後再傳訊息給我，會重新註冊成新的居民。")
+
+
 def cancel_my_needs(event, db: Session, user: User) -> None:
     active = db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id,
                                             CommunityNeed.status.in_(["open", "suggested", "matched"])).all()
@@ -447,6 +474,8 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
         elder_status(event, db, user)
     elif text == "我的紀錄":
         my_records_link(event, user)
+    elif text in ("刪除我的帳號", "刪除帳號"):
+        ask_delete_me(event, db, user)
     else:
         my_needs(event, db, user)
     return True
@@ -461,5 +490,11 @@ def handle_postback(event, db: Session, user: User, action: str, data: dict) -> 
         return True
     if action == "cancel_needs":
         cancel_my_needs(event, db, user)
+        return True
+    if action == "delete_me":
+        delete_me(event, db, user)
+        return True
+    if action == "keep_me":
+        _say(event, "好的，帳號保持原樣。")
         return True
     return False

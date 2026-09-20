@@ -366,43 +366,13 @@ def delete_user(user_id: str, db: Session = Depends(get_db)):
     之前直接 db.delete(user)：只要這個人有打卡、警報、需求、物資或照護關係，資料庫的外鍵
     就會擋下來，整個請求變成沒有任何說明的 500。現在先檢查有沒有進行中的派遣（有就
     拒絕並說明原因），沒有的話依序清掉相關紀錄；仍有稽核紀錄無法刪時回 409，建議改為停用。"""
-    from app.models.care_relation import CareRelation
-    from app.models.checkin import DailyCheckin
-    from app.models.resource import CommunityResource
-    from app.models.volunteer_application import VolunteerApplication
+    from app.services.user_deletion import UserDeletionBlocked, delete_user_data
 
     user = _get_user_or_404(db, user_id)
-    my_resource_ids = [r.id for r in db.query(CommunityResource.id).filter(CommunityResource.owner_id == user.id)]
-    active_q = db.query(CommunityNeed).filter(CommunityNeed.status.in_(["suggested", "matched"]))
-    if my_resource_ids:
-        active_q = active_q.filter((CommunityNeed.requester_id == user.id)
-                                   | CommunityNeed.matched_resource_id.in_(my_resource_ids))
-    else:
-        active_q = active_q.filter(CommunityNeed.requester_id == user.id)
-    active = active_q.count()
-    if active:
-        raise ApiError(409, f"這位使用者還有 {active} 筆進行中的派遣（待確認或已派遣），請先取消或完成後再刪除；"
-                            "也可以改成「停用」保留紀錄。")
     try:
-        checkin_ids = [c.id for c in db.query(DailyCheckin.id).filter(DailyCheckin.elderly_id == user.id)]
-        if checkin_ids:
-            db.query(Alert).filter(Alert.checkin_id.in_(checkin_ids)).delete(synchronize_session=False)
-        db.query(Alert).filter(Alert.elderly_id == user.id).delete(synchronize_session=False)
-        db.query(Alert).filter(Alert.resolved_by == user.id).update({"resolved_by": None}, synchronize_session=False)
-        db.query(DailyCheckin).filter(DailyCheckin.confirmed_by == user.id).update({"confirmed_by": None}, synchronize_session=False)
-        db.query(DailyCheckin).filter(DailyCheckin.elderly_id == user.id).delete(synchronize_session=False)
-        db.query(CareRelation).filter(
-            (CareRelation.elderly_id == user.id) | (CareRelation.contact_id == user.id)
-        ).delete(synchronize_session=False)
-        db.query(VolunteerApplication).filter(VolunteerApplication.applicant_id == user.id).update({"applicant_id": None}, synchronize_session=False)
-        db.query(VolunteerApplication).filter(VolunteerApplication.reviewed_by == user.id).update({"reviewed_by": None}, synchronize_session=False)
-        db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id).delete(synchronize_session=False)
-        db.query(CommunityResource).filter(CommunityResource.owner_id == user.id).delete(synchronize_session=False)
-        db.delete(user)
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        raise ApiError(409, "這位使用者仍有派遣或任務的稽核紀錄無法刪除，請改成「停用」以保留紀錄。")
+        delete_user_data(db, user)
+    except UserDeletionBlocked as exc:
+        raise ApiError(409, f"這位使用者{exc}")
     return {"message": "刪除成功"}
 
 

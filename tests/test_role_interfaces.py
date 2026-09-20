@@ -338,3 +338,76 @@ def test_admin_can_rebuild_menus_from_line(db, line_outbox, monkeypatch):
     assert any("已重建 2 張選單" in t and "3 位" in t for t in replies(line_outbox))
     say("U-vol", "更新選單")
     assert any("僅限管理員" in t for t in replies(line_outbox))
+
+
+# ═══════════════ 刪除我的帳號 ═══════════════
+def test_delete_my_account_asks_first_and_warns_the_only_admin(db, line_outbox):
+    vol, req, adm, res, need = world(db)
+    say("U-adm", "刪除我的帳號")
+    card = card_text(line_outbox, None)
+    assert "action=delete_me" in card and "唯一的管理員" in card
+    assert db.query(User).filter(User.line_uid == "U-adm").count() == 1, "還沒按確定不能刪"
+    press("U-adm", "action=keep_me")
+    assert db.query(User).filter(User.line_uid == "U-adm").count() == 1
+    say("U-req", "刪除我的帳號")
+    assert "唯一的管理員" not in str(line_outbox.sent[-1][2].contents.to_dict())
+
+
+def test_confirming_deletes_the_account_and_everything_that_belongs_to_it(db, line_outbox, monkeypatch):
+    from app.services import rich_menu
+    unlinked = []
+
+    class Api:
+        def unlink_rich_menu_id_from_user(self, uid):
+            unlinked.append(uid)
+
+    monkeypatch.setattr(rich_menu, "_apis", lambda: (Api(), None))
+    vol, req, adm, res, need = world(db)
+    db.add(DailyCheckin(elderly_id=req.id, date=today_tw(), status="ok"))
+    db.add(SystemConfig(key="flow:U-req", value="{}"))
+    db.commit()
+    old_id = str(req.id)
+    press("U-req", "action=delete_me")
+    db.expire_all()
+    assert db.query(User).filter(User.line_uid == "U-req").count() == 0
+    assert db.query(CommunityNeed).count() == 0 and db.query(DailyCheckin).count() == 0
+    assert db.query(SystemConfig).filter(SystemConfig.key == "flow:U-req").count() == 0
+    assert db.query(User).filter(User.line_uid == "U-vol").count() == 1, "別人的資料不能被動到"
+    assert unlinked == ["U-req"]
+    assert any("已刪除" in t for t in replies(line_outbox))
+    say("U-req", "我很好")
+    db.expire_all()
+    fresh = db.query(User).filter(User.line_uid == "U-req").one()
+    assert fresh.roles == ["elderly"] and str(fresh.id) != old_id, "刪除後再傳訊息要重新註冊成新的居民"
+
+
+def test_deleting_an_admin_keeps_the_audit_trail(db, line_outbox):
+    vol, req, adm, res, need = world(db)
+    press("U-adm", f"action=admin_match&need_id={need.id}&resource_id={res.id}")
+    dispatch.cancel_need(str(need.id), db)                       # 任務結束，才不會被進行中的派遣擋住
+    press("U-adm", "action=delete_me")
+    db.expire_all()
+    assert db.query(User).filter(User.line_uid == "U-adm").count() == 0
+    ev = db.query(DispatchEvent).filter(DispatchEvent.action == "manual_dispatch").one()
+    assert ev.actor_label == "admin:管理員小張", "稽核紀錄留著名字，但不再指向已刪除的帳號"
+
+
+def test_delete_is_refused_while_a_dispatch_is_in_progress(db, line_outbox):
+    vol, req, adm, res, need = world(db)
+    dispatch.manual_dispatch(str(need.id), str(res.id), db)
+    press("U-vol", "action=delete_me")
+    press("U-req", "action=delete_me")
+    assert sum("現在還不能刪除" in t for t in replies(line_outbox)) == 2
+    assert db.query(User).filter(User.line_uid.in_(["U-vol", "U-req"])).count() == 2
+
+
+def test_console_delete_still_works_and_reports_blockers(db):
+    from app.main import app
+    from fastapi.testclient import TestClient
+    vol, req, adm, res, need = world(db)
+    c = TestClient(app)
+    dispatch.manual_dispatch(str(need.id), str(res.id), db)
+    blocked = c.delete(f"/api/dashboard/users/{vol.id}")
+    assert blocked.status_code == 409 and "進行中的派遣" in blocked.text
+    dispatch.cancel_need(str(need.id), db)
+    assert c.delete(f"/api/dashboard/users/{vol.id}").status_code == 200
