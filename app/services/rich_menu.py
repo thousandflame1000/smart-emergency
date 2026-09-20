@@ -66,6 +66,9 @@ def layout(rows):
 
 def _apis():
     client = ApiClient(Configuration(access_token=settings.LINE_CHANNEL_ACCESS_TOKEN))
+    send = client.rest_client.request
+    client.rest_client.request = lambda *a, _request_timeout=None, **kw: send(
+        *a, _request_timeout=_request_timeout or (5.0, 30.0), **kw)
     return MessagingApi(client), MessagingApiBlob(client)
 
 

@@ -2,6 +2,7 @@ import logging
 import re
 
 from fastapi import APIRouter, Request, HTTPException
+from starlette.concurrency import run_in_threadpool
 from linebot.v3 import WebhookHandler
 from linebot.v3.exceptions import InvalidSignatureError
 from linebot.v3.webhooks import (
@@ -50,7 +51,10 @@ async def line_webhook(request: Request):
     body      = await request.body()
 
     try:
-        handler.handle(body.decode(), signature)
+        # The handlers are synchronous (database, LINE calls, address lookup). Run directly in this
+        # async route they block the event loop, freezing every other request while one slow
+        # message is processed.
+        await run_in_threadpool(handler.handle, body.decode(), signature)
     except InvalidSignatureError:
         if _DEV_MODE:
             pass   # dev 模式略過驗證
@@ -500,7 +504,9 @@ def _list_claimable(event, db, user) -> None:
         return
     found = dispatch.list_claimable(user, db)
     if not found["items"]:
-        if not found["has_resources"]:
+        if not found["has_resources"] and found["has_registered"]:
+            _say(event, "您登記的物資目前都已派出或保留中，沒有可接的單。物資補齊後請再點選單的「登記表單」登記。")
+        elif not found["has_resources"]:
             _say(event, "您目前沒有登記可提供的物資，所以沒有可接的單。請先點選單的「登記表單」登記物資。")
         elif found["open_total"] == 0:
             _say(event, "目前沒有待處理的需求，辛苦了 🙏 有新需求或管理員派單時會直接通知您。")

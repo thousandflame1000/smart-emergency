@@ -78,4 +78,4 @@ def no_real_geocoding(monkeypatch):
     """Nominatim is a real network call with a 1s throttle; tests must never hit it.
     Individual tests can override with monkeypatch.setattr(places, "search_places", ...)."""
     from app.services import places
-    monkeypatch.setattr(places, "search_places", lambda query: [])
+    monkeypatch.setattr(places, "search_places", lambda query, **kw: [])

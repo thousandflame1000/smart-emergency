@@ -128,7 +128,10 @@ def _log_dispatch_event(
     outcome: str = "success",
     details: dict | None = None,
 ) -> DispatchEvent:
+    # Explicit microsecond timestamp: the database default has one-second resolution on some
+    # backends, and "was this task accepted after the latest dispatch" needs a strict order.
     event = DispatchEvent(
+        created_at=_utcnow_naive(),
         action=action,
         outcome=outcome,
         need_id=need.id if need else None,
@@ -1078,9 +1081,8 @@ def list_claimable(user, db: Session, limit: int = 5) -> dict:
     """Open needs this volunteer could take right now: they own an available resource of the same type.
 
     Returns {"items": [{need, resource, dist_km}], "open_total": n, "has_resources": bool}."""
-    mine = db.query(CommunityResource).filter(
-        CommunityResource.owner_id == user.id, CommunityResource.is_available == True,  # noqa: E712
-    ).all()
+    owned = db.query(CommunityResource).filter(CommunityResource.owner_id == user.id).all()
+    mine = [r for r in owned if r.is_available]
     by_type: dict[str, CommunityResource] = {}
     for r in mine:
         by_type.setdefault(r.resource_type, r)
@@ -1096,7 +1098,8 @@ def list_claimable(user, db: Session, limit: int = 5) -> dict:
         d = _distance_km(n.lat, n.lng, r.lat, r.lng, db)
         items.append({"need": n, "resource": r, "dist_km": None if math.isinf(d) else round(d, 1)})
     items.sort(key=lambda i: (-(i["need"].urgency or 0), i["dist_km"] if i["dist_km"] is not None else 1e9))
-    return {"items": items[:limit], "open_total": len(needs), "has_resources": bool(mine)}
+    return {"items": items[:limit], "open_total": len(needs), "has_resources": bool(mine),
+            "has_registered": bool(owned)}
 
 
 def claim_need(need_id: str, user, db: Session) -> dict:

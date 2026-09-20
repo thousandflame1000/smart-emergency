@@ -17,8 +17,25 @@ def _flex(alt_text: str, contents) -> FlexMessage:
 _line_config = Configuration(access_token=settings.LINE_CHANNEL_ACCESS_TOKEN)
 
 
+LINE_TIMEOUT = (3.0, 8.0)  # (connect, read) seconds
+_api: MessagingApi | None = None
+
+
 def _get_api() -> MessagingApi:
-    return MessagingApi(ApiClient(_line_config))
+    """One shared client. Building a new one per call threw away the keep-alive connection, so
+    every push paid a fresh TLS handshake; and the SDK's default is no timeout at all, so a
+    stuck LINE response would hang the request (and the whole worker) forever."""
+    global _api
+    if _api is None:
+        client = ApiClient(_line_config)
+        send = client.rest_client.request
+
+        def request(*args, _request_timeout=None, **kwargs):
+            return send(*args, _request_timeout=_request_timeout or LINE_TIMEOUT, **kwargs)
+
+        client.rest_client.request = request
+        _api = MessagingApi(client)
+    return _api
 
 
 def push_flex_message(line_uid: str, alt_text: str, contents: dict) -> None:

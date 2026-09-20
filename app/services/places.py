@@ -13,7 +13,11 @@ _cache = OrderedDict()
 _last_request = 0.0
 
 
-def search_places(query: str) -> list[dict]:
+_failed: dict[str, float] = {}
+FAILURE_MEMORY_SECONDS = 300
+
+
+def search_places(query: str, *, timeout: float = 15) -> list[dict]:
     global _last_request
     query = query.strip()
     if len(query) < 2:
@@ -23,6 +27,9 @@ def search_places(query: str) -> list[dict]:
         if cached and time.monotonic() - cached[0] < 21600:
             _cache.move_to_end(query)
             return cached[1]
+        failed_at = _failed.get(query)
+        if failed_at and time.monotonic() - failed_at < FAILURE_MEMORY_SECONDS:
+            raise RuntimeError("地址查詢剛剛失敗過，稍後再試")
         delay = 1.1 - (time.monotonic() - _last_request)
         if delay > 0:
             time.sleep(delay)
@@ -33,8 +40,12 @@ def search_places(query: str) -> list[dict]:
             "Accept": "application/json",
         })
         _last_request = time.monotonic()
-        with urlopen(request, timeout=15) as response:
-            data = json.loads(response.read(500_000))
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                data = json.loads(response.read(500_000))
+        except Exception:
+            _failed[query] = time.monotonic()
+            raise
         if not isinstance(data, list):
             raise ValueError("地區搜尋服務回傳格式不正確")
         result = [{"name": p["display_name"], "lat": float(p["lat"]), "lng": float(p["lon"])} for p in data[:6]]
@@ -48,7 +59,9 @@ def geocode_address(address: str) -> tuple[float, float] | None:
     """Best-effort address -> (lat, lng). Never raises: callers use it to fill in
     coordinates opportunistically and must keep working when the lookup fails."""
     try:
-        results = search_places(address)
+        # Runs while someone waits for a chat reply, so give up quickly instead of holding the
+        # whole conversation (and the shared throttle lock) for the full 15 seconds.
+        results = search_places(address, timeout=5)
     except Exception:
         return None
     if not results:

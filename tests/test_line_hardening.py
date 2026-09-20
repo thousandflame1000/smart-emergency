@@ -378,7 +378,7 @@ def test_resource_without_location_warns_and_is_fixed_by_sharing_location(db, li
 
 def test_resource_address_is_geocoded_when_user_has_no_location(db, line_outbox, monkeypatch):
     from app.services import places
-    monkeypatch.setattr(places, "search_places", lambda q: [{"name": q, "lat": 24.2, "lng": 120.7}])
+    monkeypatch.setattr(places, "search_places", lambda q, **kw: [{"name": q, "lat": 24.2, "lng": 120.7}])
     mk(db, "志工", ["volunteer"], "Uv")
     say("Uv", "我有 水 20箱 台中市南區崇倫街88號")
     db2 = SessionLocal()
@@ -953,3 +953,10 @@ def test_task_card_has_accept_button(db, line_outbox):
     from app.services.line_notify import send_task_message
     send_task_message("U-cv", "要水", "台中市南區", "水", need_id="need-xyz-123")
     assert "action=task_accept&need_id=need-xyz-123" in str(line_outbox.sent[-1][2].contents.to_dict())
+
+
+def test_claim_list_tells_a_volunteer_whose_stock_is_all_in_use(db, line_outbox):
+    vol, req, res, need = _claim_world(db)
+    dispatch.manual_dispatch(str(need.id), str(res.id), db)      # 唯一一份水已被保留
+    say("U-cv", "接單")
+    assert any("都已派出或保留中" in t for t in replies(line_outbox))
