@@ -264,6 +264,7 @@ def enforced(monkeypatch):
     from app import demo_auth
     monkeypatch.setattr(settings, "APP_ENV", "production")
     monkeypatch.setattr(settings, "DEMO_PASSWORD", "")
+    monkeypatch.setattr(settings, "ADMIN_LINE_LOGIN", True)
     demo_auth.reset_cache()
     yield
     demo_auth.reset_cache()
@@ -625,3 +626,16 @@ def test_join_page_degrades_gracefully_without_the_bot_id(monkeypatch, webclient
     monkeypatch.setattr(line_notify, "_basic_id", None)
     page = webclient.get("/join")
     assert page.status_code == 200 and "暫時查不到官方帳號資訊" in page.text
+
+
+def test_console_needs_no_login_by_default_even_with_a_bound_admin(db, monkeypatch, webclient):
+    from app import demo_auth
+    monkeypatch.setattr(settings, "APP_ENV", "production")
+    monkeypatch.setattr(settings, "DEMO_PASSWORD", "")
+    demo_auth.reset_cache()
+    assert settings.ADMIN_LINE_LOGIN is False
+    mk(db, "管理員", ["admin"], "U-adm")
+    assert webclient.get("/admin").status_code == 200
+    assert webclient.get("/api/dashboard/users").status_code == 200
+    assert webclient.get("/").status_code == 200
+    demo_auth.reset_cache()

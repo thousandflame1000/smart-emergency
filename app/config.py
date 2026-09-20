@@ -28,8 +28,9 @@ class Settings(BaseSettings):
     # 本地開發/測試預設不受影響。
     DEMO_PASSWORD: str = ""
 
-    # 正式環境只要有管理員綁了 LINE，後台就要求用 LINE 登入（傳「後台」取得連結）。設成 false 可關閉。
-    ADMIN_LINE_LOGIN: bool = True
+    # 設成 true 時，正式環境只要有管理員綁了 LINE，後台就要求用 LINE 登入（傳「後台」取得連結）。
+    # 預設關閉：後台不需要登入。要保護後台請設 true，或設 DEMO_PASSWORD。
+    ADMIN_LINE_LOGIN: bool = False
 
     # 官方帳號的 Basic ID（例如 @571hpppb）。留空會用 LINE API 自動查；掃碼加入要靠它組出連結。
     LINE_BOT_BASIC_ID: str = ""

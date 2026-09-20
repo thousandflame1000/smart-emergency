@@ -1678,9 +1678,8 @@ async function loadSecurityBanner() {
     const s = await fetch('/api/system/security').then(r => r.json());
     const el = document.getElementById('security-banner');
     if (s.public_admin) {
-      el.innerHTML = '⚠️ <strong>後台目前沒有任何登入保護</strong>：任何拿到網址的人都能看到長者姓名與地址、刪除資料。'
-        + '請把管理員帳號綁上 LINE（成員管理裡填 LINE User ID），之後在 LINE 傳「後台」就會取得登入連結，並自動啟用登入保護；'
-        + '也可以在 Railway 設定 <code>DEMO_PASSWORD</code>。';
+      el.innerHTML = '⚠️ <strong>後台目前沒有登入保護</strong>：任何拿到網址的人都能看到長者姓名與地址、修改資料。'
+        + '要啟用請在 Railway 設定 <code>ADMIN_LINE_LOGIN=true</code>（管理員用 LINE 傳「後台」登入）或 <code>DEMO_PASSWORD</code>。';
       el.classList.remove('is-hidden');
     } else if (s.admin) {
       el.className = 'notice';
