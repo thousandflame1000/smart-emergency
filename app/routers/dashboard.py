@@ -366,8 +366,12 @@ def make_join_code(user_id: str, db: Session = Depends(get_db)):
     user = _get_user_or_404(db, user_id)
     if user.line_uid:
         raise ApiError(409, "這位成員已經綁定 LINE，要更換請先解除綁定。")
+    from app.services.line_notify import oa_message_link
+    from app.services.qr import svg_data_uri
     code, minutes = create_join_code(db, user)
-    return {"code": code, "expires_minutes": minutes, "say": f"加入 {code}"}
+    link = oa_message_link(f"加入 {code}")
+    return {"code": code, "expires_minutes": minutes, "say": f"加入 {code}",
+            "link": link, "qr": svg_data_uri(link) if link else None}
 
 
 @router.post("/users/{user_id}/unlink_line")

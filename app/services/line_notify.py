@@ -38,6 +38,34 @@ def _get_api() -> MessagingApi:
     return _api
 
 
+_basic_id: str | None = None
+
+
+def bot_basic_id() -> str | None:
+    """The official account's Basic ID (like @571hpppb), from config or LINE's bot-info API.
+    Only successes are cached, so a temporary LINE hiccup does not disable QR codes for good."""
+    global _basic_id
+    if settings.LINE_BOT_BASIC_ID:
+        return settings.LINE_BOT_BASIC_ID
+    if _basic_id:
+        return _basic_id
+    try:
+        _basic_id = _get_api().get_bot_info().basic_id or None
+    except Exception:
+        return None
+    return _basic_id
+
+
+def oa_message_link(text: str) -> str | None:
+    """A link that opens a chat with the official account and pre-fills `text`. Scanned from a QR
+    code or tapped in a message, the person only has to press send."""
+    basic = bot_basic_id()
+    if not basic:
+        return None
+    from urllib.parse import quote
+    return f"https://line.me/R/oaMessage/{basic}/?{quote(text)}"
+
+
 def push_flex_message(line_uid: str, alt_text: str, contents: dict) -> None:
     _get_api().push_message(PushMessageRequest(
         to=line_uid,

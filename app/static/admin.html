@@ -1376,6 +1376,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <label class="form-label">LINE 綁定</label>
         <div id="user-bind-status" class="form-hint"></div>
         <div id="user-bind-code" class="is-hidden" style="font-size:30px;font-weight:800;letter-spacing:3px;margin:8px 0"></div>
+        <div id="user-bind-qr" class="is-hidden" style="margin:8px 0">
+          <img id="user-bind-qr-img" alt="掃碼加入" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:8px">
+          <div class="form-hint">請對方用手機相機或 LINE 掃描，會直接開啟聊天室並帶好訊息，按送出即可。</div>
+        </div>
         <div id="user-bind-note" class="form-hint is-hidden"></div>
         <div style="display:flex;gap:8px;margin-top:6px">
           <button type="button" class="btn btn-ghost btn-sm is-hidden" id="user-bind-btn" onclick="makeJoinCode()">產生綁定碼</button>
@@ -1969,6 +1973,7 @@ function renderBindState(user) {
   const bindBtn = document.getElementById('user-bind-btn');
   const unbindBtn = document.getElementById('user-unbind-btn');
   document.getElementById('user-bind-code').classList.add('is-hidden');
+  document.getElementById('user-bind-qr').classList.add('is-hidden');
   document.getElementById('user-bind-note').classList.add('is-hidden');
   bindBtn.classList.add('is-hidden');
   unbindBtn.classList.add('is-hidden');
@@ -1991,6 +1996,13 @@ async function makeJoinCode(userId) {
   const codeEl = document.getElementById('user-bind-code');
   codeEl.textContent = data.say;
   codeEl.classList.remove('is-hidden');
+  const qrBox = document.getElementById('user-bind-qr');
+  if (data.qr) {
+    document.getElementById('user-bind-qr-img').src = data.qr;
+    qrBox.classList.remove('is-hidden');
+  } else {
+    qrBox.classList.add('is-hidden');
+  }
   const note = document.getElementById('user-bind-note');
   note.textContent = `請對方把上面這句話傳給官方帳號，${data.expires_minutes >= 60 ? Math.round(data.expires_minutes / 60 / 24) + ' 天' : data.expires_minutes + ' 分鐘'}內有效，只能用一次。`;
   note.classList.remove('is-hidden');

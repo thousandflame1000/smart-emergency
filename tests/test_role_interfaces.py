@@ -532,3 +532,70 @@ def test_unlinking_line_frees_the_member(db, console, monkeypatch):
     assert db.query(User).filter(User.id == vol.id).one().line_uid is None
     assert unlinked == ["U-vol"]
     assert console.post(f"/api/dashboard/users/{vol.id}/join_code").status_code == 200
+
+
+# ═══════════════ 掃碼加入 ═══════════════
+@pytest.fixture()
+def bot_id(monkeypatch):
+    from app.services import line_notify
+    monkeypatch.setattr(line_notify, "_basic_id", None)
+    monkeypatch.setattr(settings, "LINE_BOT_BASIC_ID", "@571hpppb")
+    yield "@571hpppb"
+    monkeypatch.setattr(line_notify, "_basic_id", None)
+
+
+def test_oa_message_link_prefills_the_join_message(bot_id):
+    from app.services.line_notify import oa_message_link
+    link = oa_message_link("加入 12345678")
+    assert link == "https://line.me/R/oaMessage/@571hpppb/?%E5%8A%A0%E5%85%A5%2012345678"
+
+
+def test_basic_id_comes_from_the_line_api_and_only_successes_are_cached(monkeypatch):
+    from app.services import line_notify
+    monkeypatch.setattr(settings, "LINE_BOT_BASIC_ID", "")
+    monkeypatch.setattr(line_notify, "_basic_id", None)
+    calls = []
+
+    class Api:
+        def get_bot_info(self):
+            calls.append(1)
+            if len(calls) == 1:
+                raise RuntimeError("LINE hiccup")
+            return type("Info", (), {"basic_id": "@abc123"})()
+
+    monkeypatch.setattr(line_notify, "_get_api", lambda: Api())
+    assert line_notify.bot_basic_id() is None, "查詢失敗時不能讓掃碼功能當機"
+    assert line_notify.bot_basic_id() == "@abc123"
+    assert line_notify.bot_basic_id() == "@abc123" and len(calls) == 2, "成功後要快取"
+    monkeypatch.setattr(line_notify, "_basic_id", None)
+
+
+def test_join_code_comes_with_a_scannable_qr_when_the_bot_id_is_known(db, console, bot_id):
+    import base64
+    member_id = _create_member(console, "志工", "volunteer")
+    info = _join_code(console, member_id)
+    assert info["link"].endswith("%E5%8A%A0%E5%85%A5%20" + info["code"])
+    assert info["qr"].startswith("data:image/svg+xml;base64,")
+    svg = base64.b64decode(info["qr"].split(",", 1)[1]).decode()
+    assert svg.startswith("<svg") and "path" in svg
+
+
+def test_join_code_still_works_without_a_qr_when_the_bot_id_is_unknown(db, console, monkeypatch):
+    from app.services import line_notify
+    monkeypatch.setattr(settings, "LINE_BOT_BASIC_ID", "")
+    monkeypatch.setattr(line_notify, "_basic_id", None)
+    info = _join_code(console, _create_member(console, "志工", "volunteer"))
+    assert info["qr"] is None and info["link"] is None and info["say"].startswith("加入 ")
+
+
+def test_family_invite_gives_a_tap_to_bind_link(db, line_outbox, bot_id):
+    vol, req, adm, res, need = world(db)
+    say("U-req", "邀請家人")
+    text = [t for t in replies(line_outbox) if "綁定" in t][-1]
+    assert "https://line.me/R/oaMessage/@571hpppb/?" in text and "24 小時內有效" in text
+
+
+def test_me_page_invite_returns_the_link(db, webclient, bot_id):
+    vol, req, adm, res, need = world(db)
+    out = webclient.post("/f/api/invite", json={"t": form_token.make_token("U-req")}).json()
+    assert out["link"].startswith("https://line.me/R/oaMessage/@571hpppb/?") and len(out["code"]) == 6

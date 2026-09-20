@@ -241,6 +241,10 @@
             if (!res2.ok) { showError(res2.d.detail || '產生失敗'); return; }
             var c = el('div', res2.d.code, 'code'); s2.appendChild(c);
             s2.appendChild(el('div', '請家人傳「綁定 ' + res2.d.code + '」給機器人，24 小時內有效。', 'meta'));
+            if (res2.d.link) {
+              var a = el('a', '把這個連結傳給家人，點開就會綁定', 'me-btn'); a.href = res2.d.link;
+              a.style.display = 'inline-block'; a.style.textDecoration = 'none'; s2.appendChild(a);
+            }
             inv.disabled = true;
           });
         });

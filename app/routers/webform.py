@@ -285,9 +285,11 @@ def withdraw_my_resource(form: MeAction, db: Session = Depends(get_db)):
 
 @router.post("/api/invite")
 def make_family_invite(form: MeAction, db: Session = Depends(get_db)):
+    from app.services.line_notify import oa_message_link
     from app.services.line_ops import create_invite
     user = _user_from_token(db, form.t)
-    return {"ok": True, "code": create_invite(db, user)}
+    code = create_invite(db, user)
+    return {"ok": True, "code": code, "link": oa_message_link(f"綁定 {code}")}
 
 
 @router.post("/api/unbind")

@@ -32,3 +32,6 @@ networkx==3.4.2
 
 # Rate limiting（系統沒有登入驗證，用來擋掉短時間內狂打同一 IP 的濫用）
 slowapi==0.1.10
+
+# QR code（掃碼加入）
+segno==1.6.6

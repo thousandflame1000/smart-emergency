@@ -451,9 +451,13 @@ def create_invite(db: Session, elder: User) -> str:
 
 
 def invite_family(event, db: Session, user: User) -> None:
+    from app.services.line_notify import oa_message_link
     code = create_invite(db, user)
-    _say(event, f"👨‍👩‍👧 請家人先加入本官方帳號，然後傳這句話給機器人：\n\n綁定 {code}\n\n"
-                "24 小時內有效，只能用一次。綁定後，您如果沒回報平安或按了求助，家人會收到通知。")
+    link = oa_message_link(f"綁定 {code}")
+    how = (f"把下面這個連結傳給家人，他點開就會跳到機器人聊天室，按送出就綁定好了：\n{link}\n\n"
+           f"（連結不能用時，請家人加入官方帳號後傳這句話：綁定 {code}）" if link else
+           f"請家人先加入本官方帳號，然後傳這句話給機器人：\n\n綁定 {code}")
+    _say(event, f"👨‍👩‍👧 {how}\n\n24 小時內有效，只能用一次。綁定後，您如果沒回報平安或按了求助，家人會收到通知。")
 
 
 def bind_family(event, db: Session, user: User, code: str) -> None:
