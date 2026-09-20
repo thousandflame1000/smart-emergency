@@ -14,6 +14,7 @@ class IngestRequest(BaseModel):
     content: str
     source: str
     category: str
+    version: str | None = None
 
 
 class ChunkUpdateRequest(BaseModel):
@@ -46,8 +47,15 @@ def ingest(req: IngestRequest):
         content  = req.content,
         source   = req.source,
         category = req.category,
+        version  = req.version,
     )
     return {"message": f"成功載入 {inserted} 個 chunks", "inserted": inserted}
+
+
+@router.post("/sync")
+def sync_builtin():
+    """只補上資料庫缺少的預設文件，不刪除也不覆蓋（重新載入會清空後台編輯過的內容）。"""
+    return rag_svc.sync_builtin_documents()
 
 
 _ingest_status = {"running": False, "done": False, "chunks": 0, "error": None}
@@ -131,6 +139,7 @@ def list_chunks(
                     "content_preview": (c.content[:80] + "…") if len(c.content) > 80 else c.content,
                     "source":         c.source,
                     "category":       c.category,
+                    "version":        c.version,
                     "has_embedding":  c.embedding is not None,
                     "created_at":     str(c.created_at),
                 }

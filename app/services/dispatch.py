@@ -1131,8 +1131,11 @@ def claim_need(need_id: str, user, db: Session) -> dict:
     db.commit()
     from app.services.alert import notify_admins
     try:
-        notify_admins(db, f"🙋 志工「{user.name}」自行接單：{NEED_TYPE_ZH.get(need.need_type, need.need_type)}"
-                          f"（{need.address or '地址未填'}）")
+        notify_admins(
+            db, f"🙋 志工「{user.name}」自行接單：{NEED_TYPE_ZH.get(need.need_type, need.need_type)}"
+                f"（{need.address or '地址未填'}）\n如果不適合，可以撤銷，需求會退回待派遣。",
+            buttons=[{"label": "↩ 撤銷這次接單", "data": f"action=admin_revoke&need_id={need.id}", "color": "#c0392b"}],
+        )
     except Exception:
         pass
     return {"message": "claimed", "need_id": need_id, "resource_name": resource.name}

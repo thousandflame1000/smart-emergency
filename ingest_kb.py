@@ -336,6 +336,11 @@ T – Time（時間）：上述任一 → 立刻撥打 119，記錄發作時間�
 # ──────────────────────────────────────────────
 # 執行載入
 # ──────────────────────────────────────────────
+from kb_more import MORE  # noqa: E402
+
+DOCUMENTS = DOCUMENTS + MORE
+
+
 def run():
     print("開始載入知識庫...")
     total = 0
@@ -344,6 +349,7 @@ def run():
             content  = doc["content"],
             source   = doc["source"],
             category = doc["category"],
+            version  = doc.get("version", "1.0"),
         )
         print(f"  [{doc['category']}] {doc['source'][:30]}... → {n} chunks")
         total += n

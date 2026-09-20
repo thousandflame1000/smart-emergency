@@ -69,20 +69,27 @@ def query(question: str) -> dict:
 # ──────────────────────────────────────────────
 # 載入文件
 # ──────────────────────────────────────────────
-def ingest_document(content: str, source: str, category: str) -> int:
+def ingest_document(content: str, source: str, category: str, version: str | None = None,
+                    skip_existing: bool = False) -> int:
     chunks   = _chunk_text(content)
     db       = SessionLocal()
     inserted = 0
 
     try:
         from app.models.knowledge import KnowledgeChunk
+        have = set()
+        if skip_existing:
+            have = {row[0] for row in db.query(KnowledgeChunk.content).filter(KnowledgeChunk.source == source).all()}
         for chunk in chunks:
+            if chunk in have:
+                continue
             emb = _embed(chunk)
             kc  = KnowledgeChunk(
                 content   = chunk,
                 embedding = json.dumps(emb),   # SQLite: 存 JSON string
                 source    = source,
                 category  = category,
+                version   = version,
             )
             db.add(kc)
             inserted += 1
@@ -91,6 +98,28 @@ def ingest_document(content: str, source: str, category: str) -> int:
         db.close()
 
     return inserted
+
+
+def sync_builtin_documents() -> dict:
+    """Add the shipped documents that are missing from the database, and never delete or overwrite.
+
+    "Reload everything" wipes the table, which also throws away anything an admin edited in the
+    console. This only fills gaps, so it is safe to run at every startup and from the console."""
+    import importlib
+    import os
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if root not in sys.path:
+        sys.path.insert(0, root)
+    ingest_kb = importlib.reload(importlib.import_module("ingest_kb"))
+    added, failed = 0, 0
+    for doc in ingest_kb.DOCUMENTS:
+        try:
+            added += ingest_document(doc["content"], doc["source"], doc["category"],
+                                     version=doc.get("version", "1.0"), skip_existing=True)
+        except Exception:
+            failed += 1
+    return {"added": added, "failed": failed, "documents": len(ingest_kb.DOCUMENTS)}
 
 
 # ──────────────────────────────────────────────

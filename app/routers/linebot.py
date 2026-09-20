@@ -206,7 +206,8 @@ URGENCY_BY_TYPE = {"first_aid": 4}
 CANCEL_NEED_WORDS = ("取消需求", "取消求助", "我不需要了", "不需要了", "已經收到了", "已收到物資")
 CHECKIN_OK_WORDS = ("我很好", "好", "OK", "ok", "沒事", "沒事了", "平安")
 KNOWN_TOPICS = ("CPR", "cpr", "AED", "aed", "止血", "心肺復甦", "燒燙傷", "骨折", "中暑", "溺水",
-                "哽塞", "哈姆立克", "地震", "颱風", "淹水", "電線", "停電")
+                "哽塞", "哈姆立克", "地震", "颱風", "淹水", "電線", "停電", "壓瘡", "褥瘡", "失智",
+                "癲癇", "抽搐", "過敏", "一氧化碳", "土石流", "跌倒預防", "低血糖", "失溫")
 QUESTION_HINTS = ("怎麼", "如何", "怎樣", "什麼", "該怎", "要怎", "能不能", "可以嗎", "嗎", "呢", "？", "?", "教我")
 
 
@@ -315,6 +316,37 @@ def _trigger_sos(user, db) -> dict:
         buttons=[{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={sos_need.id}", "color": "#c0392b"}],
     )
     return {"contacts": contacts, "admins": admins, "created": created}
+
+
+def _report_unwell(user, db, checkin=None) -> str:
+    """Elder says they are not feeling well: record it and let their family know.
+
+    Not an emergency, so no SOS need is created and admins are not paged. It is a middle step
+    between "I'm fine" and "help": family gets a card, the elder gets clear next steps."""
+    from app.models.checkin import DailyCheckin
+    from app.services.alert import send_alerts_for_checkin
+    if checkin is None:
+        checkin = (db.query(DailyCheckin)
+                   .filter(DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw()).first())
+    if checkin is None:
+        checkin = DailyCheckin(elderly_id=user.id, date=today_tw(), status="pending")
+        db.add(checkin)
+        db.commit()
+        db.refresh(checkin)
+    if checkin.status == "help_needed":
+        return "您剛剛已經按過「需要幫忙」，家人和管理員都已收到通知，請保持手機暢通。"
+    if checkin.status == "unwell":
+        return "您今天已經回報過身體不舒服，家人已收到通知。如果變嚴重請按「需要幫忙」，或直接撥 119。"
+    checkin_svc.mark_checkin(str(checkin.id), "unwell", db)
+    try:
+        told = send_alerts_for_checkin(checkin.id, "unwell", db)
+    except Exception:
+        logger.exception("[unwell] 通知家人失敗")
+        told = 0
+    lines = ["收到了，請好好休息 🙏"]
+    lines.append("已通知您的家人關心您。" if told else "目前沒有登記可以通知的家人，可以傳「邀請家人」請家人綁定。")
+    lines.append("如果變嚴重（胸痛、呼吸困難、跌倒起不來、意識不清），請立刻按選單「需要幫忙」，或直接撥 119。")
+    return "\n\n".join(lines)
 
 
 def _sos_reply_text(result: dict) -> str:
@@ -832,7 +864,8 @@ FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
                   "申請物資", "物資申請", "需要物資", "申請表單", "接單", "可接任務", "找任務"}
-FIXED_COMMANDS |= line_ops.COMMAND_WORDS
+UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
+FIXED_COMMANDS |= line_ops.COMMAND_WORDS | set(UNWELL_WORDS)
 
 
 def _is_known_command(text: str, intent: dict) -> bool:
@@ -876,6 +909,10 @@ def _process_text(event, db, user, text) -> bool:
         if checkin:
             checkin_svc.mark_checkin(str(checkin.id), "ok", db)
         _say(event, "✅ 收到，今天也要保重喔！")
+        return True
+
+    if text in UNWELL_WORDS:
+        _say(event, _report_unwell(user, db))
         return True
 
     if text in ("分享位置", "傳位置", "更新位置"):
@@ -1130,6 +1167,13 @@ def handle_postback(event: PostbackEvent):
 
     elif action == "form":
         _handle_form_postback(event, db, user, data)
+
+    elif action == "unwell":
+        checkin = _own_checkin(db, user, checkin_id)
+        if checkin is None:
+            _say(event, "這張打卡卡片不是您的，或已失效。")
+        else:
+            _say(event, _report_unwell(user, db, checkin))
 
     elif action == "dismiss_sos":
         _say(event, "好的，沒事就好 😊")

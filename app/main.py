@@ -38,12 +38,25 @@ async def lifespan(app: FastAPI):
             startup.run()
         except Exception as e:
             print(f"[startup] 警告：{e}")
-    if os.getenv("APP_ENV", "development") == "production" and not settings.DEMO_PASSWORD:
+    if os.getenv("APP_ENV", "development") == "production":
+        import threading
+
+        def _sync_kb():
+            try:
+                from app.services import rag
+                result = rag.sync_builtin_documents()
+                logging.getLogger("startup").info("knowledge base sync: %s", result)
+            except Exception:
+                logging.getLogger("startup").exception("knowledge base sync failed")
+
+        threading.Thread(target=_sync_kb, daemon=True).start()
+    from app.demo_auth import auth_mode
+    if os.getenv("APP_ENV", "development") == "production" and auth_mode() == "open":
         # 用 logging 而不是 print：print 在非 UTF-8 的 console（例如 Windows cp950）遇到
         # emoji 會直接丟 UnicodeEncodeError，讓「只是一句提醒」把整個服務啟動搞掛。
         logging.getLogger("security").warning(
-            "DEMO_PASSWORD is not set: the admin console and every API are publicly readable/writable, "
-            "including elder names, addresses and coordinates. Set DEMO_PASSWORD in the deployment environment.")
+            "The admin console and every API are publicly readable/writable, including elder names, "
+            "addresses and coordinates. Bind an admin to LINE (login link via the bot) or set DEMO_PASSWORD.")
     start_scheduler()
     yield
     # 關閉時

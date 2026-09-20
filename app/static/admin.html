@@ -706,6 +706,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-ghost btn-sm" onclick="loadKB()">🔄 刷新</button>
+            <button class="btn btn-ghost btn-sm" id="sync-btn" onclick="syncKB()" title="只補上缺少的預設文件，不會刪除或覆蓋您編輯過的內容">➕ 補齊預設文件</button>
             <button class="btn btn-warning btn-sm" id="ingest-btn" onclick="ingestAll()">📥 重新載入知識庫</button>
           </div>
         </div>
@@ -2186,11 +2187,12 @@ async function loadDocList() {
     el.innerHTML = `
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>來源</th><th>分類</th><th>內容預覽</th><th>向量化</th><th>操作</th></tr></thead>
+          <thead><tr><th>來源</th><th>版本</th><th>分類</th><th>內容預覽</th><th>向量化</th><th>操作</th></tr></thead>
           <tbody>
             ${chunks.map(c => `
               <tr>
                 <td style="white-space:nowrap">${esc(c.source)}</td>
+                <td class="muted">${esc(c.version || '—')}</td>
                 <td><span class="cat-chip">${esc(CAT_LABEL[c.category] || c.category)}</span></td>
                 <td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(c.content_preview)}</td>
                 <td>${c.has_embedding ? '✅' : '—'}</td>
@@ -2293,6 +2295,22 @@ async function addDocument() {
   } finally {
     btn.disabled = false; btn.textContent = '➕ 新增並向量化';
   }
+}
+
+async function syncKB() {
+  const btn = document.getElementById('sync-btn');
+  btn.disabled = true;
+  showNotice('ingest-notice', 'info', '⏳ 正在補齊缺少的預設文件（需要一點時間做向量化）…');
+  try {
+    const res  = await fetch('/api/rag/sync', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || data.error || res.status);
+    showNotice('ingest-notice', 'info', `完成：新增 ${data.added} 段，共 ${data.documents} 份預設文件` + (data.failed ? `，${data.failed} 份失敗` : ''));
+    loadKB();
+  } catch (e) {
+    showNotice('ingest-notice', 'danger', '補齊失敗：' + e.message);
+  }
+  btn.disabled = false;
 }
 
 async function ingestAll() {

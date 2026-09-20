@@ -141,13 +141,14 @@ def send_checkin_message(line_uid: str, checkin_id: str) -> None:
         },
         "footer": {
             "type": "box",
-            "layout": "horizontal",
+            "layout": "vertical",
             "spacing": "sm",
             "contents": [
                 {
                     "type": "button",
                     "style": "primary",
                     "color": "#27ACB2",
+                    "height": "md",
                     "action": {
                         "type": "postback",
                         "label": "✅ 我很好",
@@ -157,7 +158,20 @@ def send_checkin_message(line_uid: str, checkin_id: str) -> None:
                 },
                 {
                     "type": "button",
+                    "style": "primary",
+                    "color": "#E69F00",
+                    "height": "md",
+                    "action": {
+                        "type": "postback",
+                        "label": "🤒 身體不舒服",
+                        "data": f"action=unwell&checkin_id={checkin_id}",
+                        "displayText": "我今天身體不舒服",
+                    },
+                },
+                {
+                    "type": "button",
                     "style": "secondary",
+                    "height": "md",
                     "action": {
                         "type": "postback",
                         "label": "🆘 需要幫忙",
@@ -198,6 +212,11 @@ def send_alert_message(
             f"🆘 需要幫忙",
             f"{elderly_name} 按下了「需要幫忙」，請盡快聯繫。",
             "#FF6B35",
+        ),
+        "unwell": (
+            f"🤒 身體不舒服",
+            f"{elderly_name} 今天回報身體不舒服，建議打個電話關心一下。",
+            "#E69F00",
         ),
     }
 

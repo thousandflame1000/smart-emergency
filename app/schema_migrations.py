@@ -20,6 +20,12 @@ def ensure_additive_schema(engine: Engine) -> None:
                     "ALTER TABLE tasks ADD COLUMN route_reference VARCHAR(36)"
                 )
 
+    if "knowledge_base" in inspector.get_table_names():
+        kb_columns = {column["name"] for column in inspector.get_columns("knowledge_base")}
+        if "version" not in kb_columns:
+            with engine.begin() as connection:
+                connection.exec_driver_sql("ALTER TABLE knowledge_base ADD COLUMN version TEXT")
+
     if engine.dialect.name == "postgresql":
         _ensure_postgresql_append_only_triggers(engine)
 

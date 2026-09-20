@@ -36,4 +36,5 @@ class KnowledgeChunk(Base):
     embedding  = Column(Text, nullable=True)   # SQLite: JSON string；Postgres: vector(3072)
     source     = Column(Text, nullable=False)
     category   = Column(Text, nullable=False)
+    version    = Column(Text, nullable=True)
     created_at = Column(TIMESTAMP(), server_default=func.now())

@@ -126,6 +126,8 @@ def admin_overview(event, db: Session, user: User) -> None:
                                                DailyCheckin.status.in_(["pending", "no_response"])).count()
     helping = db.query(DailyCheckin).filter(DailyCheckin.date == today_tw(),
                                             DailyCheckin.status == "help_needed").count()
+    unwell = db.query(DailyCheckin).filter(DailyCheckin.date == today_tw(),
+                                           DailyCheckin.status == "unwell").count()
     mode = "🚨 緊急模式" if _get_mode(db) == "emergency" else "🟢 日常模式"
     _say(event, "\n".join([
         f"📊 目前狀況　{mode}",
@@ -133,7 +135,7 @@ def admin_overview(event, db: Session, user: User) -> None:
         f"📦 待派遣需求：{open_n}（另有 {suggested} 筆系統建議待您確認）",
         f"🚚 進行中任務：{len(matched)}（志工已確認 {len(accepted)}）",
         f"🙋 待審志工申請：{apps}",
-        f"👴 今日長者：求助 {helping}、未回覆 {unanswered}",
+        f"👴 今日長者：求助 {helping}、不舒服 {unwell}、未回覆 {unanswered}",
         "",
         "指令：待派、待審、求救單、後台",
     ]))
@@ -246,6 +248,23 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
         else:
             note = "任務卡已傳給志工" if result.get("volunteer_notified") else "志工未綁定 LINE，請自行聯繫"
             _say(event, f"✅ 已派遣。{note}；求助的人也已收到通知。")
+    elif action == "admin_revoke":
+        need = db.query(CommunityNeed).filter(CommunityNeed.id == data.get("need_id", "")).first()
+        volunteer_uid = None
+        if need is not None and need.matched_resource is not None and need.matched_resource.owner is not None:
+            volunteer_uid = need.matched_resource.owner.line_uid
+        result = dispatch.decline_task_assignment(data.get("need_id", ""), db,
+                                                  actor_id=str(user.id), actor_label=label)
+        if result.get("already_open") or result.get("error"):
+            _say(event, "這筆任務已經不在進行中了（可能已完成、已取消或早就撤銷）。")
+        else:
+            _say(event, "✅ 已撤銷，需求退回待派遣。求助的人已收到通知，志工的物資已釋放。")
+            if volunteer_uid:
+                try:
+                    from app.services.line_notify import send_text
+                    send_text(volunteer_uid, "ℹ️ 管理員調整了任務安排，您剛才接的那一單已撤銷，不需要前往，謝謝您的熱心。")
+                except Exception:
+                    logger.warning("notify volunteer about revoke failed", exc_info=True)
     elif action == "admin_sos":
         result = dispatch.resolve_sos(data.get("need_id", ""), db, actor_label=label)
         _say(event, "⚠️ " + result["error"] if result.get("error") else
