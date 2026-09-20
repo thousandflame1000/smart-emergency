@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -114,6 +114,20 @@ def dashboard():
     return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"))
 
 # 靜態資源
+@app.post("/api/system/rich-menu/install", tags=["System"])
+def install_rich_menu():
+    """用部署環境的 LINE token 重建兩張 Rich Menu（一般版設為預設、志工版綁給現有志工）。"""
+    from app.database import SessionLocal
+    from app.services.rich_menu import install_menus
+    db = SessionLocal()
+    try:
+        return install_menus(db)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"LINE 建立選單失敗：{exc}")
+    finally:
+        db.close()
+
+
 @app.get("/api/system/security", tags=["System"])
 def security_status():
     """Tell the console whether the deployment is publicly readable.

@@ -117,6 +117,8 @@ def decide(
             user.phone = application.phone
         application.applicant_id = user.id
         db.commit()
+        from app.services.rich_menu import sync_user_menu
+        sync_user_menu(user)
         try:
             from app.services.line_notify import send_text
             send_text(application.line_uid,

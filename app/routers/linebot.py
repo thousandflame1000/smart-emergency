@@ -655,7 +655,7 @@ HELP_BASE = (
 
 FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "狀態", "status", "幫助", "help", "?", "？",
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
-                  "取消物資", "撤回物資", "刪除物資"}
+                  "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置"}
 
 
 def _is_known_command(text: str, intent: dict) -> bool:
@@ -693,6 +693,10 @@ def _process_text(event, db, user, text) -> bool:
         if checkin:
             checkin_svc.mark_checkin(str(checkin.id), "ok", db)
         _say(event, "✅ 收到，今天也要保重喔！")
+        return True
+
+    if text in ("分享位置", "傳位置", "更新位置"):
+        _say(event, "📍 請點下面的「分享我的位置」按鈕，志工才找得到您。\n（也可以點 LINE 對話框的「＋」→「位置資訊」）", ask_location=True)
         return True
 
     if text in ["狀態", "status"]:

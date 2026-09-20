@@ -330,8 +330,12 @@ def update_user(
     if lat      is not None: user.lat      = lat
     if lng      is not None: user.lng      = lng
     if is_active is not None: user.is_active = is_active
+    roles_changed = roles is not None and roles != user.roles
     if roles    is not None: user.roles    = roles
     db.commit()
+    if roles_changed or line_uid is not None:
+        from app.services.rich_menu import sync_user_menu
+        sync_user_menu(user)
     return {"message": "更新成功", "id": user_id}
 
 

@@ -594,3 +594,88 @@ def test_resource_point_rejects_bad_coordinates_and_negative_capacity(db, api):
     assert bad.status_code == 422
     neg = api.post("/api/resources/points", params={"name": "某處", "point_type": "shelter", "capacity": -5})
     assert neg.status_code == 422
+
+
+# ── Rich Menu ────────────────────────────────────────────────────────────────
+class _FakeMenuApi:
+    def __init__(self, existing=()):
+        self.calls = []
+        self.existing = list(existing)
+
+    def get_rich_menu_list(self):
+        class R: pass
+        r = R()
+        r.richmenus = self.existing
+        return r
+
+    def delete_rich_menu(self, mid): self.calls.append(("delete", mid))
+
+    def create_rich_menu(self, req):
+        self.calls.append(("create", req))
+        class R: pass
+        r = R()
+        r.rich_menu_id = f"menu-{len([c for c in self.calls if c[0] == 'create'])}"
+        return r
+
+    def set_default_rich_menu(self, mid): self.calls.append(("default", mid))
+    def link_rich_menu_id_to_user(self, uid, mid): self.calls.append(("link", uid, mid))
+    def unlink_rich_menu_id_from_user(self, uid): self.calls.append(("unlink", uid))
+
+
+class _FakeBlob:
+    def __init__(self): self.images = []
+    def set_rich_menu_image(self, mid, body=None, **kw): self.images.append((mid, len(body), kw))
+
+
+def test_rich_menu_layout_covers_canvas_and_uses_known_commands():
+    from app.routers.linebot import FIXED_COMMANDS, parse_intent
+    from app.services import rich_menu as rm
+    for name, spec in rm.MENUS.items():
+        cells = rm.layout(spec["rows"])
+        assert len(cells) == 8
+        assert sum(w * h for _, _, w, h, _ in cells) == rm.W * rm.H
+        for *_, cell in cells:
+            text = cell[4]
+            assert text in FIXED_COMMANDS or parse_intent(text)["needs"] or parse_intent(text)["sos"], (name, text)
+
+
+def test_install_menus_creates_two_and_links_staff(db, monkeypatch):
+    from app.models.user import User
+    from app.services import rich_menu as rm
+    api, blob = _FakeMenuApi(), _FakeBlob()
+    monkeypatch.setattr(rm, "_apis", lambda: (api, blob))
+    db.add_all([User(name="志工", roles=["volunteer"], line_uid="U-vol", is_active=True),
+                User(name="長者", roles=["elderly"], line_uid="U-eld", is_active=True)])
+    db.commit()
+    result = rm.install_menus(db)
+    assert len([c for c in api.calls if c[0] == "create"]) == 2
+    assert len(blob.images) == 2 and all(size > 1000 for _, size, _ in blob.images)
+    assert ("default", result["menus"][rm.RESIDENT_NAME]) in api.calls
+    assert api.calls.count(("link", "U-vol", result["menus"][rm.STAFF_NAME])) == 1
+    assert not [c for c in api.calls if c[0] == "link" and c[1] == "U-eld"]
+    assert result["staff_linked"] == 1
+
+
+def test_install_menus_removes_old_menus(db, monkeypatch):
+    from app.services import rich_menu as rm
+    class M:
+        def __init__(self, i, n): self.rich_menu_id, self.name = i, n
+    api = _FakeMenuApi(existing=[M("old-1", "鄰里守望選單"), M("other", "別人的選單")])
+    monkeypatch.setattr(rm, "_apis", lambda: (api, _FakeBlob()))
+    result = rm.install_menus(db)
+    assert ("delete", "old-1") in api.calls and ("delete", "other") not in api.calls
+    assert result["removed_old"] == 1
+
+
+def test_sync_user_menu_is_best_effort(monkeypatch):
+    from app.models.user import User
+    from app.services import rich_menu as rm
+    def boom(): raise RuntimeError("LINE down")
+    monkeypatch.setattr(rm, "_apis", boom)
+    rm.sync_user_menu(User(name="x", roles=["volunteer"], line_uid="U-x"))  # must not raise
+
+
+def test_share_location_command_offers_location_button(db, line_outbox):
+    mk(db, "長者", ["elderly"], uid="U-loc", lat=23.9, lng=121.6)
+    say("U-loc", "分享位置")
+    assert any("分享我的位置" in t for t in replies(line_outbox))
