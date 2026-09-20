@@ -781,3 +781,61 @@ def test_flex_cards_keep_their_content_when_serialized():
         req = ReplyMessageRequest(reply_token="t", messages=[_flex("alt", card)])
         sent = client.sanitize_for_serialization(req)["messages"][0]["contents"]
         assert "body" in sent and "footer" in sent and len(str(sent)) > 1000
+
+
+def test_text_fields_open_keyboard_with_prefill_and_survive_serialization():
+    from linebot.v3.messaging import ApiClient, Configuration, ReplyMessageRequest
+    from app.services import line_forms
+    from app.services.line_notify import _flex
+    client = ApiClient(Configuration(access_token="x"))
+    for card, prefix in ((line_forms.need_card({}), "補充："), (line_forms.resource_card({}), "地址：")):
+        req = ReplyMessageRequest(reply_token="t", messages=[_flex("alt", card)])
+        text = str(client.sanitize_for_serialization(req))
+        assert "openKeyboard" in text and prefix in text
+
+
+def test_need_form_note_is_saved_with_the_need(db, line_outbox):
+    mk(db, "長者", ["elderly"], uid="U-note", lat=23.9, lng=121.6)
+    say("U-note", "申請物資")
+    press("U-note", "action=form&f=need&op=type&v=water")
+    press("U-note", "action=form&op=noop")                         # 按鈕本身送出的 postback 要被安靜略過
+    say("U-note", "補充：樓梯很陡，家裡有行動不便的長者")
+    assert any("樓梯很陡" in " ".join(_selected_or_text(m)) for m in _flex_replies(line_outbox)[-1:])
+    press("U-note", "action=form&f=need&op=go")
+    need = db.query(CommunityNeed).one()
+    assert "樓梯很陡" in need.description
+
+
+def _selected_or_text(flex_message):
+    out = []
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") == "text":
+                out.append(node["text"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(flex_message.contents.to_dict())
+    return out
+
+
+def test_resource_form_address_with_keyword_does_not_change_type(db, line_outbox, monkeypatch):
+    from app.services import places
+    monkeypatch.setattr(places, "geocode_address", lambda a: (24.15, 120.68))
+    mk(db, "志工", ["volunteer"], uid="U-addr")
+    say("U-addr", "登記物資")
+    press("U-addr", "action=form&f=res&op=type&v=food")
+    press("U-addr", "action=form&f=res&op=qty&v=30份")
+    say("U-addr", "地址：台中市西區水湳路99號")                       # 地址裡有「水」，不能被當成飲用水
+    press("U-addr", "action=form&f=res&op=go")
+    res = db.query(CommunityResource).one()
+    assert (res.resource_type, res.quantity, res.address) == ("food", "30份", "台中市西區水湳路99號")
+    assert (res.lat, res.lng) == (24.15, 120.68)
+
+
+def test_form_text_prefix_without_open_form_falls_through(db, line_outbox):
+    mk(db, "長者", ["elderly"], uid="U-nf")
+    say("U-nf", "補充：隨便")                                        # 沒有開表單就當一般訊息，不能吞掉也不能壞掉
+    assert replies(line_outbox)

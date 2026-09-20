@@ -498,9 +498,15 @@ def _register_resource(event, db, user, rest: str) -> None:
             remain = remain.replace(kw, "", 1).strip()
     parts = remain.split(None, 1)
     quantity = parts[0] if parts else None
-    address = parts[1] if len(parts) > 1 else (user.address or None)
+    explicit_address = parts[1] if len(parts) > 1 else None
+    _save_resource(event, db, user, detected_type, quantity, explicit_address)
 
-    coords = _resolve_coordinates(user, address if len(parts) > 1 else None)
+
+def _save_resource(event, db, user, detected_type: str, quantity, explicit_address) -> None:
+    from app.models.resource import CommunityResource
+    address = explicit_address or (user.address or None)
+
+    coords = _resolve_coordinates(user, explicit_address)
     lat, lng = (coords if coords else (None, None))
 
     # 同一位志工、同一種物資只保留一筆：「我有水」再傳一次是更新，不是
@@ -638,12 +644,36 @@ def _open_form(event, db, user, kind: str) -> None:
     _send_form(event, kind, conversation.get(db, user.line_uid, line_forms.FORM_NS)["data"])
 
 
+def _handle_form_text(event, db, user, text: str) -> bool:
+    """「✏️」按鈕會彈出鍵盤並預填「補充：」「地址：」，這裡接住使用者打的那一句。"""
+    from app.services import line_forms
+    prefixes = {line_forms.NOTE_PREFIX: ("need", "note"), line_forms.ADDRESS_PREFIX: ("res", "address")}
+    normalized = text.replace(":", "：", 1)
+    for prefix, (kind, field) in prefixes.items():
+        if not normalized.startswith(prefix):
+            continue
+        state = conversation.get(db, user.line_uid, line_forms.FORM_NS)
+        if not state or state.get("flow") != f"form_{kind}":
+            return False
+        value = normalized[len(prefix):].strip()[:line_forms.MAX_TEXT]
+        if not value:
+            _say(event, "內容是空的，請在「" + prefix + "」後面接著打字。")
+            return True
+        form = {**state.get("data", {}), field: value}
+        conversation.advance(db, user.line_uid, state, "edit", ns=line_forms.FORM_NS, **form)
+        _send_form(event, kind, form)
+        return True
+    return False
+
+
 def _handle_form_postback(event, db, user, data: dict) -> None:
     from app.services import line_forms
     ns = line_forms.FORM_NS
     op, kind = data.get("op"), data.get("f")
     state = conversation.get(db, user.line_uid, ns)
 
+    if op == "noop":
+        return
     if op == "cancel":
         conversation.clear(db, user.line_uid, ns)
         _say(event, "好的，已取消表單。")
@@ -665,15 +695,16 @@ def _handle_form_postback(event, db, user, data: dict) -> None:
                 return
             people = form.get("people")
             desc = "卡片表單申請" + (f"（{people}人{'以上' if people == '4' else ''}）" if people else "")
+            if form.get("note"):
+                desc += f"｜補充：{form['note']}"
             conversation.clear(db, user.line_uid, ns)
             _submit_needs(event, db, user, form["types"], desc, urgent=bool(form.get("urgent")))
         else:
             if not form.get("rtype") or not form.get("qty"):
                 _say(event, "請先選擇物資種類和數量。")
                 return
-            keyword = next(kw for k, _l, kw in line_forms.RES_TYPES if k == form["rtype"])
             conversation.clear(db, user.line_uid, ns)
-            _register_resource(event, db, user, f"{keyword} {form['qty']}")
+            _save_resource(event, db, user, form["rtype"], form["qty"], form.get("address"))
         return
 
     if kind == "need":
@@ -765,6 +796,9 @@ def _process_text(event, db, user, text) -> bool:
             conversation.clear(db, user.line_uid)
         elif _continue_flow(event, db, user, text, state):
             return True
+
+    if _handle_form_text(event, db, user, text):
+        return True
 
     if text in CHECKIN_OK_WORDS:
         from app.models.checkin import DailyCheckin

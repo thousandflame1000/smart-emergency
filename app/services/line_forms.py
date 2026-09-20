@@ -15,6 +15,21 @@ RES_TYPES = [("water", "💧 飲用水", "水"), ("food", "🍱 食物", "食物
 RES_QTY = {"vehicle": ["1台", "2台", "3台"], "shelter": ["1間", "2間", "5間"], "tool": ["1組", "3組", "5組"]}
 RES_QTY_DEFAULT = ["10份", "30份", "50份", "100份"]
 FORM_NS = "form"
+NOTE_PREFIX = "補充："
+ADDRESS_PREFIX = "地址："
+MAX_TEXT = 100
+
+
+def _text_field(prefix: str, label: str, value: str | None, hint: str) -> list[dict]:
+    """Not a real textbox (LINE has none in chat): the button opens the keyboard with the
+    prefix already typed, and the bot reads the next message that starts with that prefix."""
+    shown = [{"type": "text", "text": f"已填：{value}", "size": "sm", "color": "#27ae60", "wrap": True}] if value \
+        else [{"type": "text", "text": hint, "size": "xs", "color": "#888888", "wrap": True}]
+    return shown + [{
+        "type": "button", "height": "sm", "style": "secondary",
+        "action": {"type": "postback", "label": ("✏️ 修改" if value else "✏️ ") + label,
+                   "data": "action=form&op=noop", "inputOption": "openKeyboard", "fillInText": prefix},
+    }]
 
 
 def qty_options(rtype: str | None) -> list[str]:
@@ -68,6 +83,8 @@ def need_card(data: dict) -> dict:
         _btn("一般", "action=form&f=need&op=urgent&v=0", not data.get("urgent")),
         _btn("很急", "action=form&f=need&op=urgent&v=1", bool(data.get("urgent")), color="#e74c3c"),
     ], 2)
+    body.append(_title("④ 還有什麼想告訴志工？（選填）"))
+    body += _text_field(NOTE_PREFIX, "打字補充說明", data.get("note"), "例如：樓梯很陡、家裡有行動不便的長者")
     body.append({"type": "text", "text": "有生命危險請直接撥 119，或按選單的「需要幫忙」。",
                  "size": "xs", "color": "#e74c3c", "wrap": True, "margin": "lg"})
     return _shell("📋 申請物資", "#c0392b", body, "送出申請", "action=form&f=need&op=go")
@@ -82,6 +99,7 @@ def resource_card(data: dict) -> dict:
     body.append(_title("② 大約多少？"))
     body += _rows([_btn(q, f"action=form&f=res&op=qty&v={q}", data.get("qty") == q, color="#148f77")
                    for q in qty_options(rtype)], 2)
-    body.append({"type": "text", "text": "物資放在哪裡：用您帳號上的地址或位置，沒有的話送出後會請您分享位置。",
-                 "size": "xs", "color": "#888888", "wrap": True, "margin": "lg"})
+    body.append(_title("③ 物資放在哪裡？（選填）"))
+    body += _text_field(ADDRESS_PREFIX, "打字輸入地址", data.get("address"),
+                        "不填就用您帳號上的地址或位置，都沒有時送出後會請您分享位置。")
     return _shell("📦 登記可提供物資", "#148f77", body, "送出登記", "action=form&f=res&op=go")
