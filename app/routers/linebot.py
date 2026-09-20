@@ -402,17 +402,7 @@ def _handle_volunteer_commands(event, db, user, text) -> bool:
         if not staff:
             _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
             return True
-        from app.services.line_notify import send_resource_register_menu
-        try:
-            send_resource_register_menu(user.line_uid, event.reply_token)
-        except Exception:
-            _say(event,
-                 "📦 請用以下格式登記物資：\n\n"
-                 "我有 [類型] [數量] [地址]\n\n"
-                 "類型可填：水/食物/藥品/工具/車/庇護所/其他\n\n"
-                 "範例：\n"
-                 "我有 水 20箱 台中市南區崇倫街88號\n"
-                 "我有 食物 50份 自家（台中市東區）")
+        _open_form(event, db, user, "res")
         return True
 
     if text in ["我的物資"]:
@@ -579,42 +569,132 @@ def _handle_needs(event, db, user, text, intent) -> bool:
              if active else "您目前沒有進行中的需求。")
         return True
 
-    if intent["needs"]:
-        existing_types = {n.need_type for n in db.query(CommunityNeed).filter(
-            CommunityNeed.requester_id == user.id, CommunityNeed.status.in_(["open", "suggested", "matched"])).all()}
-        coords = _resolve_coordinates(user)
-        created, duplicates = [], []
-        for ntype in intent["needs"]:
-            if ntype in existing_types:
-                duplicates.append(ntype)
-                continue
-            db.add(CommunityNeed(
-                requester_id=user.id, need_type=ntype, description=text, address=user.address,
-                lat=coords[0] if coords else None, lng=coords[1] if coords else None,
-                urgency=URGENCY_BY_TYPE.get(ntype, 3),
-            ))
-            created.append(ntype)
-        db.commit()
+    if text in ("申請物資", "物資申請", "需要物資", "申請表單"):
+        _open_form(event, db, user, "need")
+        return True
 
-        lines = []
-        if created:
-            lines.append("📋 已登記您的需求：" + "、".join(NEED_ZH.get(t, t) for t in created))
-            lines.append("系統正在協調物資，志工確認後會盡快送達；有進展會直接通知您。")
-        if duplicates:
-            lines.append("您稍早已提出過：" + "、".join(NEED_ZH.get(t, t) for t in duplicates)
-                         + "，志工正在處理中，不用重新提出。")
-        lines.append("傳「我的需求」可以查看進度；情況緊急請傳「需要幫忙」。")
-        if "first_aid" in created:
-            lines.append(EMERGENCY_TIP)
-        if not coords:
-            lines.append(LOCATION_HINT)
-        _say(event, "\n\n".join(lines), ask_location=not coords)
+    if intent["needs"]:
+        _submit_needs(event, db, user, intent["needs"], text)
         return True
 
     if intent["negated"]:
         _say(event, "了解，先不用登記 😊 之後有需要再傳「需要水」「需要食物」等就可以。")
         return True
     return False
+
+
+def _submit_needs(event, db, user, ntypes, description, *, urgent=False) -> None:
+    from app.models.need import CommunityNeed
+    existing_types = {n.need_type for n in db.query(CommunityNeed).filter(
+        CommunityNeed.requester_id == user.id, CommunityNeed.status.in_(["open", "suggested", "matched"])).all()}
+    coords = _resolve_coordinates(user)
+    created, duplicates = [], []
+    for ntype in ntypes:
+        if ntype in existing_types:
+            duplicates.append(ntype)
+            continue
+        base = URGENCY_BY_TYPE.get(ntype, 3)
+        db.add(CommunityNeed(
+            requester_id=user.id, need_type=ntype, description=description, address=user.address,
+            lat=coords[0] if coords else None, lng=coords[1] if coords else None,
+            urgency=max(base, 4) if urgent else base,
+        ))
+        created.append(ntype)
+    db.commit()
+
+    lines = []
+    if created:
+        lines.append("📋 已登記您的需求：" + "、".join(NEED_ZH.get(t, t) for t in created))
+        lines.append("系統正在協調物資，志工確認後會盡快送達；有進展會直接通知您。")
+    if duplicates:
+        lines.append("您稍早已提出過：" + "、".join(NEED_ZH.get(t, t) for t in duplicates)
+                     + "，志工正在處理中，不用重新提出。")
+    lines.append("傳「我的需求」可以查看進度；情況緊急請傳「需要幫忙」。")
+    if "first_aid" in created:
+        lines.append(EMERGENCY_TIP)
+    if not coords:
+        lines.append(LOCATION_HINT)
+    _say(event, "\n\n".join(lines), ask_location=not coords)
+
+
+# ──────────────────────────────────────────────
+# 卡片表單（點選式，不用打字）
+# ──────────────────────────────────────────────
+def _form_card(kind: str, data: dict) -> dict:
+    from app.services import line_forms
+    return line_forms.need_card(data) if kind == "need" else line_forms.resource_card(data)
+
+
+def _send_form(event, kind: str, data: dict) -> None:
+    from app.services.line_notify import reply_flex_message
+    alt = "申請物資表單" if kind == "need" else "登記物資表單"
+    reply_flex_message(event.reply_token, alt, _form_card(kind, data))
+
+
+def _open_form(event, db, user, kind: str) -> None:
+    from app.services import line_forms
+    conversation.start(db, user.line_uid, f"form_{kind}", "edit",
+                       {"types": [], "urgent": False} if kind == "need" else {}, ns=line_forms.FORM_NS)
+    _send_form(event, kind, conversation.get(db, user.line_uid, line_forms.FORM_NS)["data"])
+
+
+def _handle_form_postback(event, db, user, data: dict) -> None:
+    from app.services import line_forms
+    ns = line_forms.FORM_NS
+    op, kind = data.get("op"), data.get("f")
+    state = conversation.get(db, user.line_uid, ns)
+
+    if op == "cancel":
+        conversation.clear(db, user.line_uid, ns)
+        _say(event, "好的，已取消表單。")
+        return
+    if not state or state.get("flow") != f"form_{kind}":
+        _say(event, "這張表單已經失效了，請重新點選單的「申請物資」或傳「登記物資」。")
+        return
+    if kind == "res" and not _is_staff(user):
+        _say(event, "此功能僅限志工使用。")
+        return
+
+    form = dict(state.get("data", {}))
+    value = data.get("v", "")
+
+    if op == "go":
+        if kind == "need":
+            if not form.get("types"):
+                _say(event, "請先點選至少一項需要的物資。")
+                return
+            people = form.get("people")
+            desc = "卡片表單申請" + (f"（{people}人{'以上' if people == '4' else ''}）" if people else "")
+            conversation.clear(db, user.line_uid, ns)
+            _submit_needs(event, db, user, form["types"], desc, urgent=bool(form.get("urgent")))
+        else:
+            if not form.get("rtype") or not form.get("qty"):
+                _say(event, "請先選擇物資種類和數量。")
+                return
+            keyword = next(kw for k, _l, kw in line_forms.RES_TYPES if k == form["rtype"])
+            conversation.clear(db, user.line_uid, ns)
+            _register_resource(event, db, user, f"{keyword} {form['qty']}")
+        return
+
+    if kind == "need":
+        if op == "type" and value in dict(line_forms.NEED_TYPES):
+            types = list(form.get("types", []))
+            types.remove(value) if value in types else types.append(value)
+            form["types"] = types
+        elif op == "people" and value in line_forms.PEOPLE:
+            form["people"] = None if form.get("people") == value else value
+        elif op == "urgent":
+            form["urgent"] = value == "1"
+    else:
+        if op == "type" and value in {k for k, _l, _kw in line_forms.RES_TYPES}:
+            if form.get("rtype") != value:
+                form["qty"] = None
+            form["rtype"] = value
+        elif op == "qty" and value in line_forms.qty_options(form.get("rtype")):
+            form["qty"] = value
+
+    conversation.advance(db, user.line_uid, state, "edit", ns=ns, **form)
+    _send_form(event, kind, form)
 
 
 # ──────────────────────────────────────────────
@@ -655,7 +735,8 @@ HELP_BASE = (
 
 FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "狀態", "status", "幫助", "help", "?", "？",
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
-                  "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置"}
+                  "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
+                  "申請物資", "物資申請", "需要物資", "申請表單"}
 
 
 def _is_known_command(text: str, intent: dict) -> bool:
@@ -924,6 +1005,9 @@ def handle_postback(event: PostbackEvent):
         # 打卡卡片上的「需要幫忙」之前只改狀態、完全沒發警報；現在兩條路徑一致。
         result = _trigger_sos(user, db)
         _say(event, _sos_reply_text(result), ask_location=user.lat is None)
+
+    elif action == "form":
+        _handle_form_postback(event, db, user, data)
 
     elif action == "dismiss_sos":
         _say(event, "好的，沒事就好 😊")

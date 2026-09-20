@@ -679,3 +679,105 @@ def test_share_location_command_offers_location_button(db, line_outbox):
     mk(db, "長者", ["elderly"], uid="U-loc", lat=23.9, lng=121.6)
     say("U-loc", "分享位置")
     assert any("分享我的位置" in t for t in replies(line_outbox))
+
+
+# ── 卡片表單 ─────────────────────────────────────────────────────────────────
+def _flex_replies(outbox):
+    return [m for kind, _to, m in outbox.sent if kind == "reply" and type(m).__name__ == "FlexMessage"]
+
+
+def _selected_labels(flex_message) -> list[str]:
+    out = []
+    def walk(node):
+        if isinstance(node, dict):
+            if node.get("type") == "button" and node["action"]["label"].startswith("✅"):
+                out.append(node["action"]["label"])
+            for v in node.values():
+                walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                walk(v)
+    walk(flex_message.contents.to_dict() if hasattr(flex_message.contents, "to_dict") else flex_message.contents)
+    return out
+
+
+def test_need_form_end_to_end(db, line_outbox):
+    mk(db, "長者", ["elderly"], uid="U-form", lat=23.9, lng=121.6)
+    say("U-form", "申請物資")
+    assert len(_flex_replies(line_outbox)) == 1
+    press("U-form", "action=form&f=need&op=type&v=water")
+    press("U-form", "action=form&f=need&op=type&v=food")
+    press("U-form", "action=form&f=need&op=type&v=food")          # 再按一次取消勾選
+    press("U-form", "action=form&f=need&op=people&v=3")
+    press("U-form", "action=form&f=need&op=urgent&v=1")
+    labels = _selected_labels(_flex_replies(line_outbox)[-1])
+    assert any("飲用水" in l for l in labels) and not any("食物" in l for l in labels)
+    press("U-form", "action=form&f=need&op=go")
+    needs = db.query(CommunityNeed).all()
+    assert [(n.need_type, n.urgency) for n in needs] == [("water", 4)]
+    assert "3人" in needs[0].description
+    assert any("已登記您的需求" in t for t in replies(line_outbox))
+    press("U-form", "action=form&f=need&op=go")                    # 表單已用完，不能重複送出
+    assert len(db.query(CommunityNeed).all()) == 1
+
+
+def test_need_form_requires_a_choice_and_can_be_cancelled(db, line_outbox):
+    mk(db, "長者", ["elderly"], uid="U-form2")
+    say("U-form2", "申請物資")
+    press("U-form2", "action=form&f=need&op=go")
+    assert any("至少一項" in t for t in replies(line_outbox))
+    assert db.query(CommunityNeed).count() == 0
+    press("U-form2", "action=form&f=need&op=cancel")
+    press("U-form2", "action=form&f=need&op=type&v=water")
+    assert any("失效" in t for t in replies(line_outbox))
+
+
+def test_resource_form_is_staff_only_and_registers(db, line_outbox):
+    mk(db, "民眾", ["elderly"], uid="U-res-no")
+    say("U-res-no", "登記物資")
+    assert any("僅限志工" in t for t in replies(line_outbox))
+    press("U-res-no", "action=form&f=res&op=type&v=water")
+    assert db.query(CommunityResource).count() == 0
+
+    mk(db, "志工", ["volunteer"], uid="U-res-ok", lat=23.9, lng=121.6)
+    say("U-res-ok", "登記物資")
+    press("U-res-ok", "action=form&f=res&op=type&v=water")
+    press("U-res-ok", "action=form&f=res&op=qty&v=30份")
+    press("U-res-ok", "action=form&f=res&op=go")
+    res = db.query(CommunityResource).all()
+    assert [(r.resource_type, r.quantity) for r in res] == [("water", "30份")]
+
+
+def test_resource_form_needs_type_and_quantity_and_resets_qty_on_type_change(db, line_outbox):
+    mk(db, "志工", ["volunteer"], uid="U-res2")
+    say("U-res2", "登記物資")
+    press("U-res2", "action=form&f=res&op=go")
+    assert any("種類和數量" in t for t in replies(line_outbox))
+    press("U-res2", "action=form&f=res&op=type&v=water")
+    press("U-res2", "action=form&f=res&op=qty&v=30份")
+    press("U-res2", "action=form&f=res&op=type&v=vehicle")         # 換種類：舊數量不適用
+    press("U-res2", "action=form&f=res&op=qty&v=30份")             # 車輛沒有「30份」，要被忽略
+    press("U-res2", "action=form&f=res&op=go")
+    assert db.query(CommunityResource).count() == 0
+
+
+def test_form_does_not_hijack_text_and_forged_values_are_ignored(db, line_outbox):
+    mk(db, "長者", ["elderly"], uid="U-form3", lat=23.9, lng=121.6)
+    say("U-form3", "申請物資")
+    say("U-form3", "我很好")                                        # 表單開著時一般指令照常運作
+    assert any("太好了" in t or "平安" in t or "今天" in t for t in replies(line_outbox))
+    press("U-form3", "action=form&f=need&op=type&v=<script>")
+    press("U-form3", "action=form&f=need&op=go")
+    assert db.query(CommunityNeed).count() == 0
+
+
+def test_flex_cards_keep_their_content_when_serialized():
+    """字典直接塞給 FlexMessage 時，SDK 只留下 type，送出去是空的 bubble。"""
+    from linebot.v3.messaging import ApiClient, Configuration, ReplyMessageRequest
+    from app.services import line_forms
+    from app.services.line_notify import _flex
+    client = ApiClient(Configuration(access_token="x"))
+    for card in (line_forms.need_card({"types": ["water"]}), line_forms.resource_card({"rtype": "water"})):
+        req = ReplyMessageRequest(reply_token="t", messages=[_flex("alt", card)])
+        sent = client.sanitize_for_serialization(req)["messages"][0]["contents"]
+        assert "body" in sent and "footer" in sent and len(str(sent)) > 1000

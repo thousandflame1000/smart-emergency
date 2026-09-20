@@ -2,9 +2,17 @@ import json
 from linebot.v3.messaging import (
     ApiClient, Configuration, MessagingApi,
     PushMessageRequest, ReplyMessageRequest,
-    FlexMessage, TextMessage,
+    FlexContainer, FlexMessage, TextMessage,
 )
 from app.config import settings
+
+def _flex(alt_text: str, contents) -> FlexMessage:
+    """Build a Flex message. A plain dict must go through FlexContainer.from_dict: handed to
+    FlexMessage directly, the SDK keeps only the top-level type and serializes an empty bubble."""
+    if isinstance(contents, dict):
+        contents = FlexContainer.from_dict(contents)
+    return FlexMessage(alt_text=alt_text, contents=contents)
+
 
 _line_config = Configuration(access_token=settings.LINE_CHANNEL_ACCESS_TOKEN)
 
@@ -16,14 +24,14 @@ def _get_api() -> MessagingApi:
 def push_flex_message(line_uid: str, alt_text: str, contents: dict) -> None:
     _get_api().push_message(PushMessageRequest(
         to=line_uid,
-        messages=[FlexMessage(alt_text=alt_text, contents=contents)],
+        messages=[_flex(alt_text, contents)],
     ))
 
 
 def reply_flex_message(reply_token: str, alt_text: str, contents: dict) -> None:
     _get_api().reply_message(ReplyMessageRequest(
         reply_token=reply_token,
-        messages=[FlexMessage(alt_text=alt_text, contents=contents)],
+        messages=[_flex(alt_text, contents)],
     ))
 
 
@@ -145,7 +153,7 @@ def send_checkin_message(line_uid: str, checkin_id: str) -> None:
     }
     _get_api().push_message(PushMessageRequest(
         to=line_uid,
-        messages=[FlexMessage(alt_text="今日關懷打卡", contents=flex)],
+        messages=[_flex("今日關懷打卡", flex)],
     ))
 
 
@@ -218,7 +226,7 @@ def send_alert_message(
     }
     _get_api().push_message(PushMessageRequest(
         to=line_uid,
-        messages=[FlexMessage(alt_text=body_text, contents=flex)],
+        messages=[_flex(body_text, flex)],
     ))
 
 
@@ -312,7 +320,7 @@ def send_task_message(
     }
     _get_api().push_message(PushMessageRequest(
         to=line_uid,
-        messages=[FlexMessage(alt_text="社區支援任務", contents=flex)],
+        messages=[_flex("社區支援任務", flex)],
     ))
 
 
@@ -357,80 +365,3 @@ def reply_text_with_location_prompt(reply_token: str, text: str) -> None:
         quick_reply=QuickReply(items=[QuickReplyItem(action=LocationAction(label="📍 分享我的位置"))]),
     )
     _get_api().reply_message(ReplyMessageRequest(reply_token=reply_token, messages=[message]))
-
-
-# ──────────────────────────────────────────────
-# 志工物資登記選單
-# ──────────────────────────────────────────────
-def send_resource_register_menu(line_uid: str, reply_token: str) -> None:
-    """發送物資類型選單給志工，讓他快速登記"""
-    flex = {
-        "type": "bubble",
-        "header": {
-            "type": "box", "layout": "vertical",
-            "backgroundColor": "#27ACB2",
-            "contents": [{"type": "text", "text": "📦 登記可提供物資",
-                          "color": "#ffffff", "size": "md", "weight": "bold"}],
-        },
-        "body": {
-            "type": "box", "layout": "vertical", "spacing": "sm",
-            "contents": [
-                {"type": "text", "text": "請選擇物資類型，或直接輸入：",
-                 "size": "sm", "color": "#555555", "wrap": True},
-                {"type": "text",
-                 "text": "我有 [類型] [數量] [地址]",
-                 "size": "sm", "color": "#27ACB2", "weight": "bold"},
-                {"type": "text",
-                 "text": "例：我有 水 20箱 台中市南區",
-                 "size": "xs", "color": "#888888"},
-            ],
-        },
-        "footer": {
-            "type": "box", "layout": "vertical", "spacing": "xs",
-            "contents": [
-                {
-                    "type": "box", "layout": "horizontal", "spacing": "xs",
-                    "contents": [
-                        {"type": "button", "style": "primary", "color": "#27ACB2",
-                         "flex": 1, "height": "sm",
-                         "action": {"type": "message", "label": "💧 飲用水",
-                                    "text": "我有 水"}},
-                        {"type": "button", "style": "primary", "color": "#27ACB2",
-                         "flex": 1, "height": "sm",
-                         "action": {"type": "message", "label": "🍱 食物",
-                                    "text": "我有 食物"}},
-                    ],
-                },
-                {
-                    "type": "box", "layout": "horizontal", "spacing": "xs",
-                    "contents": [
-                        {"type": "button", "style": "primary", "color": "#FF6B35",
-                         "flex": 1, "height": "sm",
-                         "action": {"type": "message", "label": "🩹 急救用品",
-                                    "text": "我有 藥品"}},
-                        {"type": "button", "style": "primary", "color": "#FF6B35",
-                         "flex": 1, "height": "sm",
-                         "action": {"type": "message", "label": "🚗 交通工具",
-                                    "text": "我有 車"}},
-                    ],
-                },
-                {
-                    "type": "box", "layout": "horizontal", "spacing": "xs",
-                    "contents": [
-                        {"type": "button", "style": "secondary",
-                         "flex": 1, "height": "sm",
-                         "action": {"type": "message", "label": "🔧 工具",
-                                    "text": "我有 工具"}},
-                        {"type": "button", "style": "secondary",
-                         "flex": 1, "height": "sm",
-                         "action": {"type": "message", "label": "🏠 庇護空間",
-                                    "text": "我有 空間"}},
-                    ],
-                },
-            ],
-        },
-    }
-    _get_api().reply_message(ReplyMessageRequest(
-        reply_token=reply_token,
-        messages=[FlexMessage(alt_text="登記可提供物資", contents=flex)],
-    ))
