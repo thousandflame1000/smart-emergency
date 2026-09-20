@@ -18,7 +18,7 @@ from app.errors import http_exception_handler, validation_error_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.demo_auth import DemoAuthMiddleware
-from app.routers import webform, linebot, dashboard, resources, rag, scenario, ontology, road_network, workspace, tasks
+from app.routers import join_page, webform, linebot, dashboard, resources, rag, scenario, ontology, road_network, workspace, tasks
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
@@ -98,6 +98,7 @@ app.add_middleware(SlowAPIMiddleware)
 
 app.include_router(linebot.router,   prefix="/webhook",       tags=["LINE Bot"])
 app.include_router(webform.router,   prefix="/f",             tags=["Web Form"])
+app.include_router(join_page.router, tags=["Join"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(resources.router, prefix="/api/resources", tags=["Resources"])
 app.include_router(rag.router,       prefix="/api/rag",       tags=["RAG"])

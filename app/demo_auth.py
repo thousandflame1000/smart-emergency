@@ -30,7 +30,8 @@ from app.services import admin_session
 
 # /f/ 是機器人發給民眾與志工的網頁表單，身分由連結上的簽章保證，不能要求他們輸入展演密碼。
 # /admin/login 是管理員用 LINE 連結換取登入 cookie 的入口，本身用簽章保護。
-_EXEMPT_PREFIXES = ("/webhook", "/health", "/f/", "/admin/login")
+# /join 是公開的掃碼加入頁：只有兩個 QR Code，沒有任何資料，讓現場的人可以直接掃碼試用。
+_EXEMPT_PREFIXES = ("/webhook", "/health", "/f/", "/admin/login", "/join")
 
 _CACHE_SECONDS = 30
 _cache: dict = {}

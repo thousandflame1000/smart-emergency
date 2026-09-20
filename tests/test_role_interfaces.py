@@ -599,3 +599,29 @@ def test_me_page_invite_returns_the_link(db, webclient, bot_id):
     vol, req, adm, res, need = world(db)
     out = webclient.post("/f/api/invite", json={"t": form_token.make_token("U-req")}).json()
     assert out["link"].startswith("https://line.me/R/oaMessage/@571hpppb/?") and len(out["code"]) == 6
+
+
+# ═══════════════ 公開的掃碼加入頁 ═══════════════
+def test_join_page_is_public_even_when_the_console_requires_login(db, enforced, webclient, bot_id):
+    mk(db, "管理員", ["admin"], "U-adm")
+    assert webclient.get("/api/dashboard/users").status_code == 401 and webclient.get("/admin").status_code == 401
+    page = webclient.get("/join")
+    assert page.status_code == 200
+    assert page.text.count("data:image/svg+xml;base64,") == 2
+    assert "https://line.me/R/ti/p/%40571hpppb" in page.text
+    assert "oaMessage/@571hpppb/?%E6%88%91%E8%A6%81%E7%95%B6%E5%BF%97%E5%B7%A5" in page.text
+
+
+def test_join_page_exposes_no_member_data(db, webclient, bot_id):
+    vol, req, adm, res, need = world(db)
+    text = webclient.get("/join").text
+    for private in ("王奶奶", "志工甲", "管理員小張", "0912345678", "U-req", "台中市南區"):
+        assert private not in text
+
+
+def test_join_page_degrades_gracefully_without_the_bot_id(monkeypatch, webclient):
+    from app.services import line_notify
+    monkeypatch.setattr(settings, "LINE_BOT_BASIC_ID", "")
+    monkeypatch.setattr(line_notify, "_basic_id", None)
+    page = webclient.get("/join")
+    assert page.status_code == 200 and "暫時查不到官方帳號資訊" in page.text
