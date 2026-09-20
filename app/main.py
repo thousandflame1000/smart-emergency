@@ -129,6 +129,37 @@ def install_rich_menu():
         db.close()
 
 
+@app.get("/admin/login", include_in_schema=False)
+def admin_login(t: str = ""):
+    """Exchange the one-time link the bot sent an admin for a 12-hour session cookie."""
+    from fastapi.responses import HTMLResponse, RedirectResponse
+    from app.database import SessionLocal
+    from app.models.user import User
+    from app.services import admin_session
+    uid = admin_session.verify_login_token(t)
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.id == uid).first() if uid else None
+        if not user or not user.roles or "admin" not in user.roles or user.is_active is False:
+            return HTMLResponse("登入連結已過期或無效。請回 LINE 傳「後台」取得新的連結。", status_code=401)
+    finally:
+        db.close()
+    response = RedirectResponse("/admin", status_code=303)
+    response.set_cookie(admin_session.COOKIE_NAME, admin_session.make_session(uid),
+                        max_age=admin_session.SESSION_TTL, httponly=True, samesite="lax",
+                        secure=settings.APP_ENV == "production")
+    return response
+
+
+@app.get("/admin/logout", include_in_schema=False)
+def admin_logout():
+    from fastapi.responses import RedirectResponse
+    from app.services import admin_session
+    response = RedirectResponse("/admin", status_code=303)
+    response.delete_cookie(admin_session.COOKIE_NAME)
+    return response
+
+
 @app.get("/api/system/security", tags=["System"])
 def security_status():
     """Tell the console whether the deployment is publicly readable.
@@ -137,10 +168,16 @@ def security_status():
     open to anyone with the URL — including the elder list with names, addresses and
     coordinates. The admin console shows a red banner when this is true."""
     from app.config import settings as _settings
+    from app.demo_auth import auth_mode
+    from app.services.admin_session import current_admin
+    mode = auth_mode()
+    admin = current_admin.get()
     return {
         "app_env": _settings.APP_ENV,
-        "auth_enabled": bool(_settings.DEMO_PASSWORD),
-        "public_admin": _settings.APP_ENV == "production" and not _settings.DEMO_PASSWORD,
+        "auth_mode": mode,
+        "auth_enabled": mode != "open",
+        "public_admin": _settings.APP_ENV == "production" and mode == "open",
+        "admin": admin["name"] if admin else None,
     }
 
 

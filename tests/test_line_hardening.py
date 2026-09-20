@@ -628,32 +628,38 @@ class _FakeBlob:
 
 
 def test_rich_menu_layout_covers_canvas_and_uses_known_commands():
-    from app.routers.linebot import FIXED_COMMANDS, parse_intent
+    from app.routers.linebot import APPLY_PREFIXES, FIXED_COMMANDS, parse_intent
     from app.services import rich_menu as rm
+    assert set(rm.MENUS) == {rm.RESIDENT_NAME, rm.STAFF_NAME, rm.FAMILY_NAME, rm.ADMIN_NAME}
     for name, spec in rm.MENUS.items():
         cells = rm.layout(spec["rows"])
         assert len(cells) == 8
         assert sum(w * h for _, _, w, h, _ in cells) == rm.W * rm.H
         for *_, cell in cells:
             text = cell[4]
-            assert text in FIXED_COMMANDS or parse_intent(text)["needs"] or parse_intent(text)["sos"], (name, text)
+            assert (text in FIXED_COMMANDS or parse_intent(text)["needs"] or parse_intent(text)["sos"]
+                    or any(text.startswith(p) for p in APPLY_PREFIXES)), (name, text)
 
 
-def test_install_menus_creates_two_and_links_staff(db, monkeypatch):
+def test_install_menus_creates_four_and_links_each_role(db, monkeypatch):
     from app.models.user import User
     from app.services import rich_menu as rm
     api, blob = _FakeMenuApi(), _FakeBlob()
     monkeypatch.setattr(rm, "_apis", lambda: (api, blob))
     db.add_all([User(name="志工", roles=["volunteer"], line_uid="U-vol", is_active=True),
+                User(name="家屬", roles=["family"], line_uid="U-fam", is_active=True),
+                User(name="管理員", roles=["admin", "volunteer"], line_uid="U-adm", is_active=True),
                 User(name="長者", roles=["elderly"], line_uid="U-eld", is_active=True)])
     db.commit()
     result = rm.install_menus(db)
-    assert len([c for c in api.calls if c[0] == "create"]) == 2
-    assert len(blob.images) == 2 and all(size > 1000 for _, size, _ in blob.images)
+    assert len([c for c in api.calls if c[0] == "create"]) == 4
+    assert len(blob.images) == 4 and all(size > 1000 for _, size, _ in blob.images)
     assert ("default", result["menus"][rm.RESIDENT_NAME]) in api.calls
-    assert api.calls.count(("link", "U-vol", result["menus"][rm.STAFF_NAME])) == 1
+    assert ("link", "U-vol", result["menus"][rm.STAFF_NAME]) in api.calls
+    assert ("link", "U-fam", result["menus"][rm.FAMILY_NAME]) in api.calls
+    assert ("link", "U-adm", result["menus"][rm.ADMIN_NAME]) in api.calls, "管理員同時是志工時看管理員選單"
     assert not [c for c in api.calls if c[0] == "link" and c[1] == "U-eld"]
-    assert result["staff_linked"] == 1
+    assert result["staff_linked"] == 3
 
 
 def test_install_menus_removes_old_menus(db, monkeypatch):

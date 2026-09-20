@@ -13,7 +13,7 @@ from linebot.v3.webhooks import (
 from app.config import settings
 from app.database import get_db
 from app.services import checkin as checkin_svc
-from app.services import conversation
+from app.services import conversation, line_ops
 from app.services.line_notify import reply_text
 from app.services.task_commands import TaskWorkflowError
 from app.services.task_line_execution import TaskLineExecutionService
@@ -292,9 +292,10 @@ def _trigger_sos(user, db) -> dict:
         CommunityNeed.need_type == "sos",
     ).first()
     created = False
+    sos_need = existing_sos
     if not existing_sos:
         coords = _resolve_coordinates(user)
-        db.add(CommunityNeed(
+        sos_need = CommunityNeed(
             requester_id=user.id,
             need_type="sos",
             description="LINE 一鍵求助（需要幫忙）",
@@ -302,7 +303,8 @@ def _trigger_sos(user, db) -> dict:
             lat=coords[0] if coords else None,
             lng=coords[1] if coords else None,
             urgency=5,
-        ))
+        )
+        db.add(sos_need)
         db.commit()
         created = True
 
@@ -310,6 +312,7 @@ def _trigger_sos(user, db) -> dict:
     admins = notify_admins(
         db,
         f"🆘 {user.name} 剛按下一鍵求助（{where}）。{'已' if created else '之前已'}建立緊急求助單，請立即聯繫確認。",
+        buttons=[{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={sos_need.id}", "color": "#c0392b"}],
     )
     return {"contacts": contacts, "admins": admins, "created": created}
 
@@ -602,18 +605,6 @@ def _handle_needs(event, db, user, text, intent) -> bool:
     from app.models.need import CommunityNeed
     from app.services.dispatch import cancel_need
 
-    if text in ["我的需求", "進度", "求助進度"]:
-        my_needs = (db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id)
-                    .order_by(CommunityNeed.created_at.desc()).limit(5).all())
-        if not my_needs:
-            _say(event, "您目前沒有提出過的需求。\n傳「需要水」「需要食物」等可以求助。")
-            return True
-        lines = ["📋 您最近的需求（最多顯示 5 筆）：\n"]
-        for n in my_needs:
-            lines.append(f"・{NEED_ZH.get(n.need_type, n.need_type)} — {STATUS_ZH.get(n.status, n.status)}")
-        _say(event, "\n".join(lines))
-        return True
-
     if text in CANCEL_NEED_WORDS:
         active = (db.query(CommunityNeed)
                   .filter(CommunityNeed.requester_id == user.id,
@@ -841,12 +832,13 @@ FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
                   "申請物資", "物資申請", "需要物資", "申請表單", "接單", "可接任務", "找任務"}
+FIXED_COMMANDS |= line_ops.COMMAND_WORDS
 
 
 def _is_known_command(text: str, intent: dict) -> bool:
     return (
         text in FIXED_COMMANDS or text in CANCEL_NEED_WORDS
-        or bool(intent["needs"])
+        or bool(intent["needs"]) or bool(line_ops.BIND_RE.match(text))
         or any(text.startswith(p) for p in APPLY_PREFIXES + ["新增長者", "幫長者登記", "代辦長者", "登記長者", "我有"])
     )
 
@@ -873,6 +865,9 @@ def _process_text(event, db, user, text) -> bool:
     if _handle_form_text(event, db, user, text):
         return True
 
+    if line_ops.handle_text(event, db, user, text):
+        return True
+
     if text in CHECKIN_OK_WORDS:
         from app.models.checkin import DailyCheckin
         checkin = (db.query(DailyCheckin)
@@ -892,11 +887,21 @@ def _process_text(event, db, user, text) -> bool:
         return True
 
     if text in ["幫助", "help", "?", "？"]:
-        extra = ("\n\n📦 志工指令：\n・「登記物資」— 登記您可提供的物資\n・「我的物資」— 查看已登記項目\n"
-                 "・「取消物資」— 撤回還沒被媒合的物資\n・「新增長者 [姓名] [地址]」— 幫家中長者代辦註冊\n"
-                 "・直接輸入問題 — AI 急救 / 照護知識查詢 🤖") if _is_staff(user) \
-            else "\n\n🙋 想幫忙嗎？\n・「我要當志工」— 我會一題一題問您，申請成為志工"
-        _say(event, HELP_BASE + extra)
+        parts = [HELP_BASE, "・「我的紀錄」— 需求紀錄、取消需求、家人綁定\n・「邀請家人」— 取得綁定碼，讓家人收到您的狀況通知"]
+        roles = user.roles or []
+        if "volunteer" in roles or "admin" in roles:
+            parts.append("📦 志工指令：\n・「接單」— 挑選附近的需求\n・「我的任務」— 進行中的任務與回報\n"
+                         "・「登記物資」「我的物資」「取消物資」\n・「新增長者 [姓名] [地址]」— 幫長者代辦註冊\n"
+                         "・直接輸入問題 — AI 急救 / 照護知識查詢 🤖")
+        else:
+            parts.append("🙋 想幫忙嗎？\n・「我要當志工」— 申請成為志工")
+        if "family" in roles:
+            parts.append("👨‍👩‍👧 家屬指令：\n・「長輩狀況」— 查看長輩今天平安嗎\n・「綁定 123456」— 用長輩給的綁定碼綁定")
+        else:
+            parts.append("👨‍👩‍👧 家人想關心您？請他傳「綁定 碼」（碼由您傳「邀請家人」取得）。")
+        if "admin" in roles:
+            parts.append("🛠 管理員指令：\n・「總覽」「待派」「待審」「求救單」\n・「後台」— 取得後台登入連結")
+        _say(event, "\n\n".join(parts))
         return True
 
     if text in ("取消",):
@@ -1149,6 +1154,9 @@ def handle_postback(event: PostbackEvent):
 
     elif action == "claim":
         _handle_claim(event, db, user, data.get("need_id", ""))
+
+    elif line_ops.handle_postback(event, db, user, action or "", data):
+        pass
 
     elif action in ("task_delivered", "task_decline", "task_accept"):
         _handle_task_button(event, db, user, action, data.get("need_id", ""))

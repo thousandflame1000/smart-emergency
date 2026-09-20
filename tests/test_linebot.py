@@ -280,19 +280,18 @@ def test_duplicate_need_reply_is_honest_not_a_repeat_of_success(db, monkeypatch)
     db2.close()
 
 
-def test_my_needs_command_shows_status(db, monkeypatch):
-    replies = []
-    monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+def test_my_needs_command_shows_status(db, line_outbox):
     elder = User(name="周伯伯", roles=["elderly"], line_uid="Uelder4", address="測試地址")
     db.add(elder); db.commit(); db.refresh(elder)
     db.close()
 
     lb.handle_text(_FakeEvent("我的需求", "Uelder4"))
-    assert "沒有提出過的需求" in replies[-1]
+    assert "沒有提出過的需求" in line_outbox.texts()[-1]
 
     lb.handle_text(_FakeEvent("需要食物", "Uelder4"))
     lb.handle_text(_FakeEvent("我的需求", "Uelder4"))
-    assert "食物" in replies[-1] and "待媒合" in replies[-1]
+    card = str(line_outbox.sent[-1][2].contents.to_dict())
+    assert "食物" in card and "待媒合" in card and "action=cancel_needs" in card and "/f/me?t=" in card
 
 
 class _FakeLocationMsg:

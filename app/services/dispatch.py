@@ -130,6 +130,11 @@ def _log_dispatch_event(
 ) -> DispatchEvent:
     # Explicit microsecond timestamp: the database default has one-second resolution on some
     # backends, and "was this task accepted after the latest dispatch" needs a strict order.
+    from app.services.admin_session import current_admin
+    admin = current_admin.get()
+    if admin and actor_label in (None, "manager"):
+        actor_label = f"admin:{admin['name']}"
+        actor_id = actor_id or admin["id"]
     event = DispatchEvent(
         created_at=_utcnow_naive(),
         action=action,
@@ -1133,6 +1138,25 @@ def claim_need(need_id: str, user, db: Session) -> dict:
     return {"message": "claimed", "need_id": need_id, "resource_name": resource.name}
 
 
+def list_my_tasks(user, db: Session) -> list[dict]:
+    """Tasks currently assigned to this volunteer (their resource is reserved for a matched need)."""
+    rows = (db.query(CommunityNeed, CommunityResource)
+            .join(CommunityResource, CommunityNeed.matched_resource_id == CommunityResource.id)
+            .filter(CommunityResource.owner_id == user.id, CommunityNeed.status == "matched")
+            .order_by(CommunityNeed.created_at).all())
+    accepted = accepted_need_ids(db, [n.id for n, _ in rows])
+    out = []
+    for need, res in rows:
+        d = _distance_km(need.lat, need.lng, res.lat, res.lng, db)
+        out.append({
+            "need_id": str(need.id), "description": need.description or need.need_type,
+            "address": need.address or "地址未填", "resource_name": res.name,
+            "dist_km": None if math.isinf(d) else round(d, 1), "lat": need.lat, "lng": need.lng,
+            "accepted": str(need.id) in accepted,
+        })
+    return out
+
+
 ASSIGNMENT_ACTIONS = ("manual_dispatch", "confirm_dispatch")
 
 
@@ -1232,6 +1256,8 @@ def report_task(
                 f"📝 志工回報【{REPORT_OUTCOME_ZH[outcome]}】{label}{where}\n"
                 + (f"說明：{note}" if note else "（沒有附說明）")
                 + ("\n需求已退回待媒合，請重新派遣。" if outcome == "cannot_go" else ""),
+                buttons=([{"label": "🔎 看候選志工重派", "data": f"action=admin_cands&need_id={need.id}"}]
+                         if outcome == "cannot_go" else None),
             )
         except Exception:
             pass

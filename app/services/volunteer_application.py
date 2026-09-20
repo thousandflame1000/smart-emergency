@@ -48,6 +48,15 @@ def submit(
     db.add(application)
     db.commit()
     db.refresh(application)
+    try:
+        from app.services.alert import notify_admins
+        notify_admins(
+            db, f"🙋 新的志工申請：{name}\n電話：{phone or '未填'}\n服務區域：{service_area or '未填'}",
+            buttons=[{"label": "✅ 核准", "data": f"action=admin_app&id={application.id}&d=approve"},
+                     {"label": "婉拒", "data": f"action=admin_app&id={application.id}&d=reject"}],
+        )
+    except Exception:
+        pass
     return application
 
 

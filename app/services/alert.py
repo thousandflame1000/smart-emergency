@@ -24,15 +24,22 @@ def send_alerts_for_checkin(checkin_id, alert_type: str, db: Session) -> int:
     return _escalate(db, checkin, alert_type, now_utc())
 
 
-def notify_admins(db: Session, text: str) -> int:
+def notify_admins(db: Session, text: str, buttons: list[dict] | None = None) -> int:
     """推播給所有綁了 LINE 的管理員。一鍵求助之前只通知照護聯絡人，長者沒有
     聯絡人時完全沒有任何人知道，管理員只能靠自己盯著後台。"""
     from app.models.user import User
-    from app.services.line_notify import send_text
+    from app.services.line_notify import push_flex_message, send_text
     sent = 0
+    card = None
+    if buttons:
+        from app.services.line_ops import bubble
+        card = bubble("📣 需要您處理", "#c0392b", text.split("\n"), buttons)
     for admin in db.query(User).filter(User.role_filter("admin"), User.line_uid != None).all():
         try:
-            send_text(admin.line_uid, text)
+            if card:
+                push_flex_message(admin.line_uid, text.split("\n")[0][:300], card)
+            else:
+                send_text(admin.line_uid, text)
             sent += 1
         except Exception as e:
             logger.error(f"[alert] 通知管理員失敗（{admin.name}）：{e}")

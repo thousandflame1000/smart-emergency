@@ -250,7 +250,7 @@ def send_alert_message(
 # ──────────────────────────────────────────────
 # 派工通知（緊急模式）
 # ──────────────────────────────────────────────
-def send_task_message(
+def build_task_bubble(
     line_uid: str,
     need_description: str,
     address: str,
@@ -259,7 +259,8 @@ def send_task_message(
     distance_km: float | None = None,
     dest_lat: float | None = None,
     dest_lng: float | None = None,
-) -> None:
+    accepted: bool = False,
+) -> dict:
     # 任務卡之前只有地址文字，志工接不接單之前完全不知道要跑多遠、
     # 也沒有地圖連結——只能自己另外查。距離跟地圖連結都是既有資料
     # （派遣當下 need/resource 都有座標），順手帶進卡片，不用志工
@@ -288,11 +289,12 @@ def send_task_message(
     report_buttons = []
     if need_id:
         from app.services.form_token import form_url
-        report_buttons.append({
-            "type": "button", "style": "primary", "color": "#e67e22", "height": "sm",
-            "action": {"type": "postback", "label": "🙋 確認接單，我會出發",
-                       "data": f"action=task_accept&need_id={need_id}"},
-        })
+        if not accepted:
+            report_buttons.append({
+                "type": "button", "style": "primary", "color": "#e67e22", "height": "sm",
+                "action": {"type": "postback", "label": "🙋 確認接單，我會出發",
+                           "data": f"action=task_accept&need_id={need_id}"},
+            })
         report_buttons.append({
             "type": "button", "style": "secondary", "height": "sm",
             "action": {"type": "uri", "label": "📝 回報現況（可打字說明）",
@@ -348,6 +350,17 @@ def send_task_message(
             }],
         },
     }
+    if accepted:
+        flex["body"]["contents"].insert(0, {"type": "text", "text": "🙋 您已確認接單", "size": "sm",
+                                            "color": "#27ae60", "weight": "bold"})
+    return flex
+
+
+def send_task_message(line_uid: str, need_description: str, address: str, resource_name: str,
+                      need_id: str = "", distance_km: float | None = None,
+                      dest_lat: float | None = None, dest_lng: float | None = None) -> None:
+    flex = build_task_bubble(line_uid, need_description, address, resource_name, need_id,
+                             distance_km, dest_lat, dest_lng)
     _get_api().push_message(PushMessageRequest(
         to=line_uid,
         messages=[_flex("社區支援任務", flex)],

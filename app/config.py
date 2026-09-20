@@ -28,6 +28,9 @@ class Settings(BaseSettings):
     # 本地開發/測試預設不受影響。
     DEMO_PASSWORD: str = ""
 
+    # 正式環境只要有管理員綁了 LINE，後台就要求用 LINE 登入（傳「後台」取得連結）。設成 false 可關閉。
+    ADMIN_LINE_LOGIN: bool = True
+
     # 機器人發給使用者的網頁表單連結要用的對外網址。
     PUBLIC_BASE_URL: str = "https://smart-emergency-production-d744.up.railway.app"
 

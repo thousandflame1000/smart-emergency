@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FORM_PAGE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "form.html")
-KINDS = {"need", "res", "apply", "report"}
+KINDS = {"need", "res", "apply", "report", "me"}
 NEED_CHOICES = {"water", "food", "first_aid", "shelter", "vehicle"}
 PHONE_RE = re.compile(r"^[0-9+\-()\s]{7,20}$")
 
@@ -52,6 +52,11 @@ class ReportForm(BaseModel):
     need_id: str = Field(min_length=8, max_length=64)
     outcome: str
     note: str | None = Field(default=None, max_length=500)
+
+
+class MeAction(BaseModel):
+    t: str = Field(min_length=10, max_length=600)
+    target_id: str | None = Field(default=None, max_length=64)
 
 
 class ApplyForm(_Base):
@@ -198,6 +203,107 @@ def submit_apply_form(form: ApplyForm, db: Session = Depends(get_db)):
              f"申請編號：{str(application.id)[:8]}")
     _notify(user, reply, False)
     return {"ok": True, "message": reply, "need_location": False}
+
+
+def _tw(value) -> str:
+    from datetime import timezone
+    from app.timeutil import TAIWAN
+    if value is None:
+        return ""
+    return value.replace(tzinfo=timezone.utc).astimezone(TAIWAN).strftime("%m/%d %H:%M")
+
+
+@router.get("/api/me")
+def my_records(t: str, db: Session = Depends(get_db)):
+    """Everything this person can see or manage about themselves, in one page."""
+    from app.models.care_relation import CareRelation
+    from app.models.need import CommunityNeed
+    from app.routers.linebot import NEED_ZH, STATUS_ZH, _is_staff
+    from app.services import dispatch
+    from app.services.form_token import form_url
+    user = _user_from_token(db, t)
+    needs = (db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id)
+             .order_by(CommunityNeed.created_at.desc()).limit(30).all())
+    contacts = db.query(CareRelation).filter(CareRelation.elderly_id == user.id, CareRelation.is_active == True).all()  # noqa: E712
+    elders = db.query(CareRelation).filter(CareRelation.contact_id == user.id, CareRelation.is_active == True).all()  # noqa: E712
+    out = {
+        "name": user.name, "is_staff": _is_staff(user),
+        "needs": [{"id": str(n.id), "type": NEED_ZH.get(n.need_type, n.need_type),
+                   "status_zh": STATUS_ZH.get(n.status, n.status), "description": n.description,
+                   "created": _tw(n.created_at), "can_cancel": n.status in ("open", "suggested", "matched")}
+                  for n in needs],
+        "family": [{"id": str(r.id), "name": r.contact.name if r.contact else "?", "relation": r.relation}
+                   for r in contacts],
+        "cared": [{"id": str(r.id), "name": r.elderly.name if r.elderly else "?"} for r in elders],
+        "resources": [], "tasks": [],
+    }
+    if _is_staff(user):
+        from app.models.resource import CommunityResource
+        rows = db.query(CommunityResource).filter(CommunityResource.owner_id == user.id).all()
+        out["resources"] = [{"id": str(r.id), "name": r.name, "quantity": r.quantity, "available": bool(r.is_available)}
+                            for r in rows]
+        out["tasks"] = [{**tk, "report_url": form_url("report", user.line_uid, tk["need_id"])}
+                        for tk in dispatch.list_my_tasks(user, db)]
+    return out
+
+
+@router.post("/api/cancel_need")
+def cancel_my_need(form: MeAction, db: Session = Depends(get_db)):
+    from app.models.need import CommunityNeed
+    from app.services import dispatch
+    user = _user_from_token(db, form.t)
+    try:
+        need = db.query(CommunityNeed).filter(CommunityNeed.id == form.target_id,
+                                              CommunityNeed.requester_id == user.id).first()
+    except Exception:
+        need = None
+    if not need:
+        raise ApiError(404, "找不到這筆需求。")
+    if need.status not in ("open", "suggested", "matched"):
+        raise ApiError(409, "這筆需求已經結束，不能取消。")
+    dispatch.cancel_need(str(need.id), db)
+    return {"ok": True}
+
+
+@router.post("/api/withdraw_resource")
+def withdraw_my_resource(form: MeAction, db: Session = Depends(get_db)):
+    from app.models.resource import CommunityResource
+    user = _user_from_token(db, form.t)
+    try:
+        res = db.query(CommunityResource).filter(CommunityResource.id == form.target_id,
+                                                 CommunityResource.owner_id == user.id).first()
+    except Exception:
+        res = None
+    if not res:
+        raise ApiError(404, "找不到這份物資。")
+    if not res.is_available:
+        raise ApiError(409, "這份物資已被派出或保留中，不能撤回，請聯絡管理員。")
+    db.delete(res)
+    db.commit()
+    return {"ok": True}
+
+
+@router.post("/api/invite")
+def make_family_invite(form: MeAction, db: Session = Depends(get_db)):
+    from app.services.line_ops import create_invite
+    user = _user_from_token(db, form.t)
+    return {"ok": True, "code": create_invite(db, user)}
+
+
+@router.post("/api/unbind")
+def unbind_relation(form: MeAction, db: Session = Depends(get_db)):
+    """Either side of a family link can end it."""
+    from app.models.care_relation import CareRelation
+    user = _user_from_token(db, form.t)
+    try:
+        rel = db.query(CareRelation).filter(CareRelation.id == form.target_id).first()
+    except Exception:
+        rel = None
+    if not rel or str(user.id) not in (str(rel.elderly_id), str(rel.contact_id)):
+        raise ApiError(404, "找不到這組關係。")
+    db.delete(rel)
+    db.commit()
+    return {"ok": True}
 
 
 @router.get("/{kind}")

@@ -20,7 +20,8 @@ W, H = 2500, 1686
 MENU_NAME_PREFIX = "鄰里守望"
 RESIDENT_NAME = "鄰里守望-一般"
 STAFF_NAME = "鄰里守望-志工"
-STAFF_ROLES = ("volunteer", "family", "admin")
+FAMILY_NAME = "鄰里守望-家屬"
+ADMIN_NAME = "鄰里守望-管理員"
 IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "richmenu")
 
 GREEN, RED, BLUE, ORANGE, GREY, TEAL = "#27ae60", "#e74c3c", "#2471a3", "#e67e22", "#7f8c8d", "#148f77"
@@ -39,16 +40,38 @@ RESIDENT_ROWS = [
 STAFF_ROWS = [
     [("我很好", "回報今日平安", GREEN, "✅", "我很好"),
      ("需要幫忙", "緊急求助", RED, "🆘", "需要幫忙")],
-    [("登記表單", "我能提供什麼", BLUE, "📦", "登記物資"),
-     ("我的物資", "已登記項目", TEAL, "🧾", "我的物資"),
-     ("接單", "看附近的需求", ORANGE, "🙋", "接單")],
-    [("我的需求", "看處理進度", GREY, "📋", "我的需求"),
+    [("接單", "看附近的需求", ORANGE, "🙋", "接單"),
+     ("我的任務", "進行中的任務", BLUE, "🚚", "我的任務"),
+     ("登記表單", "我能提供什麼", TEAL, "📦", "登記物資")],
+    [("我的物資", "已登記項目", GREY, "🧾", "我的物資"),
+     ("分享位置", "更新我的位置", GREY, "📍", "分享位置"),
+     ("全部功能", "指令說明", GREY, "❓", "幫助")],
+]
+FAMILY_ROWS = [
+    [("長輩狀況", "今天平安嗎", TEAL, "👴", "長輩狀況"),
+     ("需要幫忙", "緊急求助", RED, "🆘", "需要幫忙")],
+    [("我很好", "回報今日平安", GREEN, "✅", "我很好"),
+     ("申請表單", "多項物資一次填", ORANGE, "📝", "申請物資"),
+     ("我的需求", "看處理進度", GREY, "📋", "我的需求")],
+    [("分享位置", "更新我的位置", GREY, "📍", "分享位置"),
+     ("我要當志工", "一起幫忙", BLUE, "🙋", "我要當志工"),
+     ("全部功能", "指令說明", GREY, "❓", "幫助")],
+]
+ADMIN_ROWS = [
+    [("總覽", "目前整體狀況", BLUE, "📊", "總覽"),
+     ("求救單", "待處理的求救", RED, "🆘", "求救單")],
+    [("待派需求", "一鍵派給志工", ORANGE, "📦", "待派"),
+     ("待審志工", "核准或婉拒", TEAL, "🙋", "待審"),
+     ("開啟後台", "登入管理後台", GREY, "🔐", "後台")],
+    [("我很好", "回報今日平安", GREEN, "✅", "我很好"),
      ("分享位置", "更新我的位置", GREY, "📍", "分享位置"),
      ("全部功能", "指令說明", GREY, "❓", "幫助")],
 ]
 MENUS = {
     RESIDENT_NAME: {"rows": RESIDENT_ROWS, "image": "resident.png", "chat_bar": "📋 需要什麼？點我"},
     STAFF_NAME: {"rows": STAFF_ROWS, "image": "staff.png", "chat_bar": "📋 志工選單"},
+    FAMILY_NAME: {"rows": FAMILY_ROWS, "image": "family.png", "chat_bar": "📋 家屬選單"},
+    ADMIN_NAME: {"rows": ADMIN_ROWS, "image": "admin.png", "chat_bar": "📋 管理選單"},
 }
 
 
@@ -94,12 +117,20 @@ def _menu_id(api: MessagingApi, name: str) -> str | None:
     return None
 
 
-def is_staff(roles) -> bool:
-    return bool(roles) and any(r in roles for r in STAFF_ROLES)
+def menu_name_for(roles) -> str | None:
+    """Which menu a person should see: admin over volunteer over family; everyone else gets the default."""
+    roles = roles or []
+    if "admin" in roles:
+        return ADMIN_NAME
+    if "volunteer" in roles:
+        return STAFF_NAME
+    if "family" in roles:
+        return FAMILY_NAME
+    return None
 
 
 def install_menus(db) -> dict:
-    """刪掉舊的鄰里守望選單，重建兩張、一般版設為預設、志工版綁給現有志工。"""
+    """刪掉舊的鄰里守望選單，重建四張、一般版設為預設，志工／家屬／管理員版依角色綁給現有使用者。"""
     from app.models.user import User
 
     api, blob = _apis()
@@ -120,13 +151,14 @@ def install_menus(db) -> dict:
 
     linked, failed = 0, 0
     for user in db.query(User).filter(User.line_uid.isnot(None), User.is_active == True).all():  # noqa: E712
-        if not is_staff(user.roles):
+        name = menu_name_for(user.roles)
+        if not name:
             continue
         try:
-            api.link_rich_menu_id_to_user(user.line_uid, ids[STAFF_NAME])
+            api.link_rich_menu_id_to_user(user.line_uid, ids[name])
             linked += 1
         except Exception:
-            log.warning("link staff menu failed for %s", user.id, exc_info=True)
+            log.warning("link menu failed for %s", user.id, exc_info=True)
             failed += 1
     return {"removed_old": removed, "menus": ids, "staff_linked": linked, "staff_link_failed": failed}
 
@@ -137,10 +169,10 @@ def sync_user_menu(user) -> None:
         return
     try:
         api, _ = _apis()
-        if is_staff(user.roles):
-            menu_id = _menu_id(api, STAFF_NAME)
-            if menu_id:
-                api.link_rich_menu_id_to_user(user.line_uid, menu_id)
+        name = menu_name_for(user.roles)
+        menu_id = _menu_id(api, name) if name else None
+        if menu_id:
+            api.link_rich_menu_id_to_user(user.line_uid, menu_id)
         else:
             api.unlink_rich_menu_id_from_user(user.line_uid)
     except Exception:

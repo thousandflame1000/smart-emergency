@@ -43,6 +43,16 @@
   .choices label { display:block; padding:12px; margin-top:8px; border:2px solid var(--line); border-radius:10px; font-weight:600; }
   .choices small { display:block; font-weight:400; color:var(--muted); margin-left:26px; }
   .choices input { width:20px; height:20px; margin-right:8px; vertical-align:middle; }
+  .me-sec { margin-top:20px; }
+  .me-sec h2 { font-size:19px; margin:0 0 8px; }
+  .me-row { border:2px solid var(--line); border-radius:10px; padding:12px; margin-top:8px; }
+  .me-row .meta { color:var(--muted); font-size:15px; }
+  .me-row button, .me-btn { margin-top:8px; padding:10px 14px; font-size:16px; border-radius:8px; border:2px solid var(--line);
+                            background:var(--card); color:var(--text); font-weight:600; }
+  .me-row button.danger { border-color:#c0392b; color:#c0392b; }
+  .me-empty { color:var(--muted); }
+  .code { font-size:34px; font-weight:800; letter-spacing:6px; text-align:center; padding:12px; background:var(--bg);
+          border-radius:10px; margin-top:8px; }
   .is-hidden { display:none !important; }
 </style>
 </head>
@@ -119,6 +129,8 @@
       <button class="go" id="submit" type="submit">送出</button>
     </form>
 
+    <div id="me" class="is-hidden"></div>
+
     <div id="done" class="done is-hidden">
       <h2>✅ 已送出</h2>
       <pre id="done-text"></pre>
@@ -135,6 +147,7 @@
     need:  { title: '📋 申請物資', sub: '填好送出，志工會盡快協助', action: '/f/api/need', btn: '送出申請' },
     res:   { title: '📦 登記可提供物資', sub: '謝謝您願意分享物資', action: '/f/api/resource', btn: '送出登記' },
     report: { title: '📝 回報任務現況', sub: '寫下現場狀況，管理員會收到通知', action: '/f/api/report', btn: '送出回報' },
+    me:    { title: '📁 我的紀錄', sub: '需求、家人、物資與任務', action: '', btn: '' },
     apply: { title: '🙋 志工申請', sub: '謝謝您願意幫忙，管理員審核後會通知您', action: '/f/api/apply', btn: '送出申請' }
   };
   var TYPES = [['water','💧 飲用水'],['food','🍱 食物'],['first_aid','🩹 藥品／急救'],['shelter','🏠 庇護所'],['vehicle','🚗 交通接送']];
@@ -159,7 +172,7 @@
   }
   if (KIND === 'apply') { $('address').closest('label').classList.add('is-hidden'); }
   if (KIND === 'report') {
-    Array.prototype.forEach.call(document.querySelectorAll('.profile'), function (el) { el.classList.add('is-hidden'); });
+    Array.prototype.forEach.call(document.querySelectorAll('.profile'), function (e) { e.classList.add('is-hidden'); });
   }
   var NEED_ID = new URLSearchParams(location.search).get('n') || '';
   function syncReportHint() {
@@ -172,10 +185,109 @@
     });
   }
 
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text != null) e.textContent = text;
+    if (cls) e.className = cls;
+    return e;
+  }
+  function post(path, extra) {
+    return fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify(Object.assign({ t: TOKEN }, extra || {})) })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); });
+  }
+  function section(title) {
+    var s = el('div', null, 'me-sec'); s.appendChild(el('h2', title)); $('me').appendChild(s); return s;
+  }
+  function action(row, label, path, extra, danger, confirmText) {
+    var b = el('button', label, danger ? 'danger' : ''); b.type = 'button';
+    b.addEventListener('click', function () {
+      if (confirmText && !confirm(confirmText)) return;
+      b.disabled = true;
+      post(path, extra).then(function (res) {
+        if (!res.ok) { showError(res.d.detail || res.d.error || '操作失敗'); b.disabled = false; return; }
+        if (res.d.code) { alert('綁定碼：' + res.d.code + '\n請家人傳「綁定 ' + res.d.code + '」給機器人（24 小時內有效）'); }
+        loadMe();
+      });
+    });
+    row.appendChild(b);
+  }
+  function loadMe() {
+    fetch('/f/api/me?t=' + encodeURIComponent(TOKEN)).then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        var box = $('me'); box.innerHTML = '';
+        $('error').classList.add('is-hidden');
+        if (!res.ok) { showError(res.d.detail || res.d.error || '連結無效'); return; }
+        var d = res.d;
+        var s1 = section('我的需求');
+        if (!d.needs.length) s1.appendChild(el('div', '還沒有提出過需求', 'me-empty'));
+        d.needs.forEach(function (n) {
+          var r = el('div', null, 'me-row');
+          r.appendChild(el('strong', n.type + '　' + n.status_zh));
+          r.appendChild(el('div', n.created + (n.description ? '　' + n.description : ''), 'meta'));
+          if (n.can_cancel) action(r, '取消這筆需求', '/f/api/cancel_need', { target_id: n.id }, true, '確定取消這筆需求？');
+          s1.appendChild(r);
+        });
+        var s2 = section('我的家人');
+        if (!d.family.length) s2.appendChild(el('div', '還沒有綁定家人。產生綁定碼後，請家人傳「綁定 碼」給機器人。', 'me-empty'));
+        d.family.forEach(function (f) {
+          var r = el('div', null, 'me-row'); r.appendChild(el('strong', f.name));
+          action(r, '解除綁定', '/f/api/unbind', { target_id: f.id }, true, '確定解除與 ' + f.name + ' 的綁定？');
+          s2.appendChild(r);
+        });
+        var inv = el('button', '產生家人綁定碼', 'me-btn'); inv.type = 'button';
+        inv.addEventListener('click', function () {
+          post('/f/api/invite').then(function (res2) {
+            if (!res2.ok) { showError(res2.d.detail || '產生失敗'); return; }
+            var c = el('div', res2.d.code, 'code'); s2.appendChild(c);
+            s2.appendChild(el('div', '請家人傳「綁定 ' + res2.d.code + '」給機器人，24 小時內有效。', 'meta'));
+            inv.disabled = true;
+          });
+        });
+        s2.appendChild(inv);
+        if (d.cared.length) {
+          var s3 = section('我照顧的長輩');
+          d.cared.forEach(function (c) {
+            var r = el('div', null, 'me-row'); r.appendChild(el('strong', c.name));
+            action(r, '解除綁定', '/f/api/unbind', { target_id: c.id }, true, '確定解除與 ' + c.name + ' 的綁定？');
+            s3.appendChild(r);
+          });
+        }
+        if (d.is_staff) {
+          var s4 = section('我的任務');
+          if (!d.tasks.length) s4.appendChild(el('div', '目前沒有進行中的任務', 'me-empty'));
+          d.tasks.forEach(function (t) {
+            var r = el('div', null, 'me-row');
+            r.appendChild(el('strong', t.description));
+            r.appendChild(el('div', '地點：' + t.address + (t.accepted ? '　🙋 已接單' : ''), 'meta'));
+            var a = el('a', '📝 回報現況', 'me-btn'); a.href = t.report_url; a.style.display = 'inline-block';
+            a.style.textDecoration = 'none'; r.appendChild(a);
+            s4.appendChild(r);
+          });
+          var s5 = section('我的物資');
+          if (!d.resources.length) s5.appendChild(el('div', '還沒有登記物資', 'me-empty'));
+          d.resources.forEach(function (x) {
+            var r = el('div', null, 'me-row');
+            r.appendChild(el('strong', x.name + (x.quantity ? '　' + x.quantity : '')));
+            r.appendChild(el('div', x.available ? '可提供' : '已派出或保留中', 'meta'));
+            if (x.available) action(r, '撤回這份物資', '/f/api/withdraw_resource', { target_id: x.id }, true, '確定撤回這份物資？');
+            s5.appendChild(r);
+          });
+        }
+      }).catch(function () { showError('無法連線，請稍後再試。'); });
+  }
+
   function showError(text) {
     var box = $('error');
     box.textContent = text;
     box.classList.remove('is-hidden');
+  }
+
+  if (KIND === 'me') {
+    $('form').classList.add('is-hidden');
+    $('me').classList.remove('is-hidden');
+    loadMe();
+    return;
   }
 
   fetch('/f/api/context?t=' + encodeURIComponent(TOKEN) + (KIND === 'report' ? '&n=' + encodeURIComponent(NEED_ID) : '')).then(function (r) {

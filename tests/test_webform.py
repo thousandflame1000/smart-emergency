@@ -260,7 +260,8 @@ def test_report_cannot_go_reopens_need_and_releases_resource(db, client, line_ou
     n = db.query(CommunityNeed).one()
     assert n.status == "open" and n.matched_resource_id is None
     assert db.query(CommunityResource).one().is_available is True
-    assert any("車壞了" in t and "重新派遣" in t for t in line_outbox.texts("U-admin"))
+    card = " ".join(str(m.contents.to_dict()) for k, to, m in line_outbox.sent if to == "U-admin" and hasattr(m, "contents"))
+    assert "車壞了" in card and "重新派遣" in card and "action=admin_cands" in card
 
 
 def test_report_on_finished_or_someone_elses_task_is_refused(db, client):
