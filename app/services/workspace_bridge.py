@@ -120,7 +120,7 @@ def operational_snapshot(db: Session) -> dict:
                              logistics=[LogisticsRecord(id=node_id, role="demand", item=_item(need.need_type), unit=quantity[1],
                                          quantity=quantity[0], priority=min(max(need.urgency or 3, 1), 5),
                                          source="平台需求單")] if pending and quantity else [])
-        relation("request:" + str(need.id), person_id, node_id, "提出需求")
+        relation("request:" + str(need.id), person_id, node_id, "提出需求", "request")
         if resource_id and need.status in ("suggested", "matched", "fulfilled"):
             relation("assignment:" + str(need.id), resource_id, node_id,
                      {"suggested": "待核准", "matched": "執行中", "fulfilled": "已完成"}[need.status], "assignment",
@@ -135,14 +135,16 @@ def operational_snapshot(db: Session) -> dict:
                                          "version": row_version(point), "base_values": editable_values(point),
                                          "observed_at": stamp, "operational_status": "unknown"})
     for c in care:
-        relation("care:" + str(c.id), person(c.contact_id), person(c.elderly_id), "照護 / " + c.relation)
+        relation("care:" + str(c.id), person(c.contact_id), person(c.elderly_id), "照護 / " + c.relation, "care")
 
     graph = GraphDocument(nodes=list(nodes.values()), edges=edges)
     counts = {"elders": sum(u.is_active and u.has_role("elderly") for u in users.values()),
+              "volunteers": sum(u.is_active and u.has_role("volunteer") for u in users.values()),
               "demands": sum(bool(n.logistics) for n in nodes.values() if n.properties.get("db") == "need"),
               "supplies": len(resources), "points": len(points)}
     return {"graph": graph.model_dump(), "counts": counts, "tasks": tasks, "observed_at": stamp,
-            "owners": [{"id": str(u.id), "name": u.name} for u in users.values() if u.is_active]}
+            "owners": [{"id": str(u.id), "name": u.name} for u in users.values()
+                       if u.is_active and (u.has_role("volunteer") or u.has_role("admin"))]}
 
 
 def database_nodes(db: Session) -> tuple[list[Node], dict]:

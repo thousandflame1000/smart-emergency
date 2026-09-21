@@ -17,7 +17,7 @@
 | 志工申請 | 「我要當志工」一題一題問，管理員在後台審核，結果推播通知 |
 | AI 急救/長照問答 | Gemini embedding + cosine similarity 的本地 RAG，LINE 內直接問答 |
 | 物資媒合 | 脆弱度加權評分 + 匈牙利演算法批次最佳指派（非貪婪逐筆） |
-| 決賽情境模擬 | 颱風風場模型驅動的災害情境引擎，用於現場展演 |
+| 事件處置工作區 | 人員、需求、志工物資、設施與任務關係集中在同一個版本化工作區操作 |
 
 ## 架構
 
@@ -27,7 +27,7 @@ LINE Bot ──▶ FastAPI (Railway)
               ├─ /api/resources   物資與需求
               ├─ /api/dashboard   管理端點
               ├─ /api/rag         知識庫問答
-              ├─ /api/scenario    情境模擬引擎
+              ├─ /api/workspaces  事件處置與版本化資料工作區
               └─ PostgreSQL (Railway) / SQLite（本地開發）
 ```
 
@@ -55,13 +55,7 @@ API：
 - `/api/ontology/needs/{need_id}/decision-context`：單筆需求的候選資源、分數拆解、決策事件、建議 action 與 human-in-the-loop 限制
 - `/api/resources/needs/{need_id}/events`：後台需求詳情使用的派遣決策稽核紀錄
 
-後台操作：`/admin` → 決賽展演 → Ontology。
-
-## 情境模擬引擎
-
-`app/services/hazard.py` + `app/services/scenario.py`：用真實颱風物理模型（Holland 1980 風場模型、Kaplan-DeMaria 1995 登陸衰減模型）驅動需求生成，不是寫死的劇本。路徑錨點取材自 2024 年康芮颱風的公開報導數據；誰通報、何時通報、緊急度多少，由風速與該居民的實際脆弱度分數計算決定。
-
-決賽現場操作：`/admin` → 決賽展演 → 情境模擬 → 開始情境 / 逐步推進 / 自動播放。
+Ontology 內容由事件處置工作區與 API 使用，不另設獨立展示入口。
 
 ## 已知限制
 
@@ -71,7 +65,7 @@ API：
 - `/admin`、`/`（同為操作主控台，兩者都能改資料）僅靠共用密碼保護（`DEMO_PASSWORD` 環境變數），無使用者分級權限。**正式環境沒設 `DEMO_PASSWORD` 時整個後台與所有 API 對外公開**（後台頂端會顯示紅色警告，`/api/system/security` 也會回報 `public_admin: true`）
 - 志工身份無驗證機制，需社區組織在真實導入時另行把關
 - 派遣評分係數是初始 heuristic，尚無真實試辦資料校正
-- 情境模擬的颱風路徑逐時座標為內插，非官方最佳路徑資料
+- 候選距離目前採直線距離估計，不代表即時道路可通行；派遣前仍須人工確認
 - 詳細落差分析見 [`PRODUCT_GAP_ANALYSIS.md`](PRODUCT_GAP_ANALYSIS.md)
 
 ## Demo
@@ -79,7 +73,7 @@ API：
 | 頁面 | URL |
 |---|---|
 | 主控台 | https://smart-emergency-production-d744.up.railway.app |
-| 管理後台 | https://smart-emergency-production-d744.up.railway.app/admin |
+| 事件處置工作區 | https://smart-emergency-production-d744.up.railway.app/workspace |
 | API 文件 | https://smart-emergency-production-d744.up.railway.app/docs |
 
 ## 本地開發
@@ -107,7 +101,7 @@ pytest tests/ -v
 app/
 ├── main.py, config.py, database.py, scheduler.py, demo_auth.py
 ├── models/       SQLAlchemy models
-├── routers/      linebot / dashboard / resources / rag / scenario
-├── services/     dispatch, hungarian, hazard, scenario, checkin, alert, rag, line_notify
+├── routers/      linebot / dashboard / resources / rag / ontology / workspace
+├── services/     dispatch, hungarian, workspace, checkin, alert, rag, line_notify
 └── static/       index.html（主控台）, admin.html（後台）
 ```

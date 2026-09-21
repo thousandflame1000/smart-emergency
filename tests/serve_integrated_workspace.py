@@ -21,7 +21,7 @@ from app.models.care_relation import CareRelation
 from app.models.checkin import DailyCheckin
 from app.models.workspace import TopologyWorkspace
 from app.services.workspace_bridge import merge_database
-from app.services.workspace import GraphDocument, Edge
+from app.services.workspace import Edge, GraphDocument, Node
 from app.services.dispatch import propose_manual
 from app.routers.workspace import WorkspaceWrite, create_workspace
 
@@ -52,16 +52,27 @@ def initialize(reset=False):
                     ResourcePoint(name="社區活動中心", point_type="community", lat=24.005, lng=120.605, capacity=80, current_load=12)])
         db.commit()
         propose_manual(str(waiting.id), str(food.id), db, actor_label="本機驗證")
-        roads = GraphDocument.model_validate({"nodes": [
-            {"id": "road-west", "label": "西側路口", "kind": "road_node", "lat": 24.00, "lng": 120.60},
-            {"id": "road-east", "label": "東側路口", "kind": "road_node", "lat": 24.01, "lng": 120.61}],
-            "edges": [{"id": "road-main", "source": "road-west", "target": "road-east", "kind": "road", "label": "社區主要道路"}]})
-        graph, _ = merge_database(roads, db)
-        for n in graph.nodes:
-            if n.kind != "road_node" and n.lat is not None:
-                target = "road-west" if n.lat < 24.005 else "road-east"
-                graph.edges.append(Edge(id="access:" + n.id, source=n.id, target=target, kind="access", label="本機測試接駁", speed_kph=5))
-        create_workspace(WorkspaceWrite(name="社區營運整合 · 本機驗證資料", graph=graph), db)
+        graph, _ = merge_database(GraphDocument(), db)
+        tracked_need = next(n for n in graph.nodes if n.properties.get("db") == "need")
+        graph.nodes.append(Node(
+            id="incident-local",
+            label="本機驗證事件",
+            kind="incident",
+            lat=24.006,
+            lng=120.606,
+            source="本機驗證",
+            properties={"object_type": "incident", "status": "active"},
+        ))
+        graph.edges.append(Edge(
+            id="incident-focus",
+            source="incident-local",
+            target=tracked_need.id,
+            kind="custom",
+            label="事件追蹤",
+            directed=True,
+            provenance="本機驗證",
+        ))
+        create_workspace(WorkspaceWrite(name="事件處置 · 本機驗證資料", graph=graph), db)
 
 
 if __name__ == "__main__":

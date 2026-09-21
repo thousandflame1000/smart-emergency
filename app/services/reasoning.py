@@ -2,8 +2,7 @@
 """Operational reasoning over the emergency ontology.
 
 This layer turns the ontology from a passive graph into an active watch
-floor: it scans requests, resources, alerts, facilities, and road
-topology edits, then emits evidence-backed findings with recommended
+floor: it scans requests, resources, alerts, and facilities, then emits evidence-backed findings with recommended
 operator actions.
 """
 
@@ -20,7 +19,7 @@ from app.models.dispatch_event import DispatchEvent
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.resource_point import POINT_SUPPLY_TYPES, ResourcePoint
-from app.services import dispatch, road_network
+from app.services import dispatch
 
 
 SEVERITY_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}
@@ -34,7 +33,7 @@ PLAYBOOK_ACTIONS: dict[str, dict[str, Any]] = {
         "summary": "將待援需求與未解決警報轉成現場行動。",
         "checklist": [
             "開啟優先處理的需求或警報。",
-            "檢查可用候選資源及路網通行成本。",
+            "檢查可用候選資源及位置資料。",
             "派遣志工、建立需求或請求外部支援。",
         ],
     },
@@ -83,15 +82,6 @@ PLAYBOOK_ACTIONS: dict[str, dict[str, Any]] = {
             "所有替代設施滿載時啟用備援容量。",
         ],
     },
-    "mutate_road_topology": {
-        "title": "查核路網通行假設",
-        "summary": "確認道路封閉與繞行情況，以更新派遣評分。",
-        "checklist": [
-            "開啟路網沙盒，檢查變更路段。",
-            "修正錯誤封路，或加入已查證的替代道路。",
-            "重新試算受影響走廊的派遣。",
-        ],
-    },
 }
 
 
@@ -138,7 +128,6 @@ def operational_risks(db: Session, limit: int = 30) -> dict[str, Any]:
     now = _now()
     findings: list[dict[str, Any]] = []
 
-    _road_risks(db, findings)
     _request_risks(db, findings, now)
     _alert_risks(db, findings)
     _resource_integrity_risks(db, findings)
@@ -238,8 +227,6 @@ def _playbook_step(action_id: str, findings: list[dict[str, Any]]) -> dict[str, 
 def _expected_impact(findings: list[dict[str, Any]], categories: list[str]) -> str:
     breakdown = Counter(f["severity"] for f in findings)
     severe = breakdown.get("critical", 0) + breakdown.get("high", 0)
-    if "road_topology" in categories:
-        return f"修正 {len(findings)} 項路網風險的通行假設，其中 {severe} 項為高風險。"
     if "dispatch" in categories:
         return f"推進 {len(findings)} 項停滯需求的派遣、確認、送達或重新指派。"
     if "capacity" in categories:
@@ -262,8 +249,6 @@ def _blocked_by(action_id: str, findings: list[dict[str, Any]]) -> list[str]:
     ids = [f["id"] for f in findings]
     if action_id == "manual_dispatch" and any(fid.startswith("open_need_no_candidate:") for fid in ids):
         blockers.append("至少一筆緊急需求沒有可用候選資源；須先增援物資或請求外部支援。")
-    if action_id == "mutate_road_topology":
-        blockers.append("道路變更須依現場回報查核後，才可採用重新計算的派遣評分。")
     if action_id == "create_resource_or_facility":
         blockers.append("目前供應低於待處理需求，增援前可能仍無法派遣。")
     if action_id == "confirm_dispatch":
@@ -299,75 +284,6 @@ def _dedupe_key(value: Any) -> str:
     if isinstance(value, (dict, list)):
         return str(value)
     return str(value)
-
-
-def _road_risks(db: Session, findings: list[dict[str, Any]]) -> None:
-    snapshot = road_network.sandbox_snapshot(db)
-    changed_edges = [e for e in snapshot["edges"] if e["status"] != "normal"]
-    if changed_edges:
-        closed = [e for e in changed_edges if e["status"] == "closed"]
-        slow = [e for e in changed_edges if e["status"] == "slow"]
-        severity = "high" if closed else "medium"
-        _finding(
-            findings,
-            fid="road_topology_has_disruptions",
-            severity=severity,
-            category="road_topology",
-            title="路網沙盒有通行阻礙",
-            summary=f"有 {len(closed)} 段封閉、{len(slow)} 段緩行道路影響路徑。",
-            affected_objects=[_obj("RoadEdge", e["id"], f"{e['a']} -> {e['b']}") for e in changed_edges[:10]],
-            evidence={
-                "closed_edges": len(closed),
-                "slow_edges": len(slow),
-                "changed_edge_ids": [e["id"] for e in changed_edges],
-            },
-            recommended_action={
-                "action_id": "mutate_road_topology",
-                "label": "檢查路網沙盒並重新試算派遣",
-                "endpoint": "/#sandbox",
-                "reason": "Road edits change candidate distances and can invalidate previous assignments.",
-            },
-        )
-
-    for start, end in [("chenggong", "yuli"), ("hualien", "taitung")]:
-        base = road_network.road_distance_km(*road_network.NODES[start], *road_network.NODES[end])
-        current = road_network.road_distance_km(*road_network.NODES[start], *road_network.NODES[end], db=db)
-        if base is None:
-            continue
-        if current is None:
-            _finding(
-                findings,
-                fid=f"road_route_unreachable:{start}:{end}",
-                severity="critical",
-                category="road_topology",
-                title="重要走廊無法通行",
-                summary=f"目前沙盒中 {start} 至 {end} 沒有可達路徑。",
-                affected_objects=[_obj("RoadNode", start), _obj("RoadNode", end)],
-                evidence={"baseline_km": round(base, 3), "current_km": None},
-                recommended_action={
-                    "action_id": "mutate_road_topology",
-                    "label": "恢復道路或新增替代連線",
-                    "endpoint": "/api/road-network/sandbox",
-                    "reason": "The dispatch engine cannot score road distance across a disconnected corridor.",
-                },
-            )
-        elif current > base * 1.5:
-            _finding(
-                findings,
-                fid=f"road_route_degraded:{start}:{end}",
-                severity="high",
-                category="road_topology",
-                title="重要走廊通行成本明顯增加",
-                summary=f"{start} 至 {end} 的等效距離是基準的 {current / base:.1f} 倍。",
-                affected_objects=[_obj("RoadNode", start), _obj("RoadNode", end)],
-                evidence={"baseline_km": round(base, 3), "current_km": round(current, 3)},
-                recommended_action={
-                    "action_id": "mutate_road_topology",
-                    "label": "查核道路封閉假設",
-                    "endpoint": "/api/road-network/route",
-                    "reason": "Long detours can change the best resource assignment.",
-                },
-            )
 
 
 def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -> None:

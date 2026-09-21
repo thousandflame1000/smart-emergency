@@ -17,9 +17,11 @@ def web():
 def test_root_is_one_shell_with_every_section_in_a_single_nav(web):
     page = web.get("/")
     assert page.status_code == 200 and "<iframe" in page.text
-    for label in ("總覽", "長者狀態", "社區地圖", "趨勢分析", "長者管理", "志工 / 家屬", "照護關係",
-                  "調度（需求・物資）", "營運工作區", "情境模擬", "AI 助手", "知識庫"):
+    for label in ("事件處置工作區", "總覽", "長者狀態", "趨勢分析", "長者管理",
+                  "志工 / 家屬", "照護關係", "AI 助手", "知識庫"):
         assert label in page.text, label
+    for removed in ("社區地圖", "情境模擬", "路網沙盤", "調度（需求・物資）"):
+        assert removed not in page.text, removed
     assert "/admin" not in page.text, "外殼不能再把人導去另一個後台"
 
 
@@ -38,7 +40,7 @@ def test_both_views_can_be_embedded_and_hide_their_own_sidebar(web):
     for path in ("/view/console", "/view/dashboard"):
         html = web.get(path).text
         assert "classList.add('embed')" in html and ".embed .sidebar { display: none" in html
-        assert "e.data.navigate" in html, "要能接收外殼的切換訊息"
+        assert "data.navigate" in html, "要能接收外殼的切換訊息"
 
 
 def test_workspace_works_inside_the_shell(web):

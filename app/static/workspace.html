@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>營運工作區 | 鄰里守望</title>
+  <title>事件處置工作區 | 鄰里守望</title>
 <script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
 <style>.embed .back { display: none !important; }</style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -20,7 +20,7 @@
 <body>
   <header>
     <a class="back icon-button" href="/" title="回到主畫面" aria-label="回到主畫面"><i data-lucide="arrow-left"></i></a>
-    <h1>營運工作區</h1>
+    <h1>事件處置工作區</h1>
     <select id="workspace-list" aria-label="已儲存的工作區"><option value="">未儲存工作區</option></select>
     <input id="workspace-name" aria-label="工作區名稱" value="未命名工作區" maxlength="120">
     <div class="header-actions">
@@ -37,7 +37,7 @@
     </div>
     <button id="more-tools" title="更多工具" aria-label="更多工具" aria-expanded="false"><i data-lucide="ellipsis"></i></button>
     <select id="mode" aria-label="編輯工具">
-      <option value="select">選取／拖曳</option><option value="road_node">新增道路節點</option>
+      <option value="select">選取／拖曳</option><option value="incident">新增事件</option>
       <option value="person">新增人員</option><option value="supply">新增物資</option>
       <option value="facility">新增設施</option><option value="custom">新增自訂物件</option><option value="connect">連接物件</option>
     </select>
@@ -48,10 +48,8 @@
     <span class="spacer"></span>
     <button id="sync-db" title="讀取人員、需求、物資、照護關係與任務現況"><i data-lucide="refresh-cw"></i>更新現況</button>
     <button id="review-inventory" title="預覽待寫回資料庫的物資變更"><i data-lucide="git-pull-request"></i>待寫回 <span id="inventory-count">0</span></button>
-    <button id="region"><i data-lucide="map-pin"></i>選擇地區</button>
     <button id="import"><i data-lucide="upload"></i>匯入資料</button>
-    <button id="osm"><i data-lucide="route"></i>載入範圍道路</button>
-    <button id="analyze" class="primary"><i data-lucide="git-branch"></i>分析拓樸</button>
+    <button id="analyze" class="primary"><i data-lucide="git-branch"></i>分析關聯</button>
     <button id="compare"><i data-lucide="git-compare-arrows"></i>情境比較</button>
     <button id="allocation"><i data-lucide="package-check"></i>物資分配</button>
   </div>
@@ -59,8 +57,7 @@
   <div class="operations-bar"><div id="operation-stages" class="segmented" aria-label="需求與任務狀態"></div><span id="observed-at" class="muted">尚未讀取平台現況</span></div>
   <main>
     <aside class="catalog">
-      <button id="layer-region" class="primary wide"><i data-lucide="map-pin"></i>載入地區資料</button>
-      <button id="layer-db" class="wide" title="長者、需求單、志工物資、社區資源點"><i data-lucide="database"></i>讀取平台現況</button>
+      <button id="layer-db" class="primary wide" title="長者、需求單、志工物資、社區資源點"><i data-lucide="database"></i>讀取平台現況</button>
       <details><summary>資料圖層</summary><div id="layers"></div></details>
       <div class="segmented catalog-tabs"><button id="catalog-objects" class="active">物件</button><button id="catalog-tasks">需求與任務</button></div>
       <div class="catalog-heading"><h2>物件</h2><span id="object-count"></span></div>
@@ -75,19 +72,13 @@
         <input id="center-lng" type="number" min="-180" max="180" step="any" placeholder="經度" aria-label="定位經度" required>
         <button title="定位" aria-label="定位"><i data-lucide="locate-fixed"></i></button>
       </form>
-      <div id="empty" class="empty-state"><strong>尚未載入地區</strong><button id="empty-region" class="primary">選擇地區</button><button id="empty-import">匯入檔案</button></div>
+      <div id="empty" class="empty-state"><strong>尚未載入事件資料</strong><button id="empty-db" class="primary">讀取平台現況</button><button id="empty-import">匯入檔案</button></div>
       <div id="connect-state" class="connect-state" hidden></div>
     </section>
     <aside class="inspector">
       <h2>物件與連線</h2><div id="selection" class="muted">尚未選取</div>
       <section class="analysis-section">
-        <h2>路徑與可達性</h2>
-        <label>起點<select id="route-start"><option value="">選擇起點</option></select></label>
-        <label>終點<select id="route-end"><option value="">選擇終點</option></select></label>
-        <button id="route" class="wide"><i data-lucide="route"></i>計算最快路徑</button>
-        <div id="route-result" role="status"></div>
-        <div class="access-control"><label>接駁上限（公尺）<input id="access-radius" type="number" min="1" max="5000" value="300"></label>
-          <button id="access" class="wide"><i data-lucide="link"></i>連接鄰近道路</button></div>
+        <h2>關聯完整性</h2>
         <div id="analysis-result" class="analysis-result"></div>
       </section>
     </aside>
@@ -105,7 +96,7 @@
     <div class="dialog-heading"><h2 id="allocation-title">物資分配試算</h2><button id="close-allocation" aria-label="關閉物資分配"><i data-lucide="x"></i></button></div>
     <div class="allocation-heading"><h3>供應庫存</h3><button id="add-stock"><i data-lucide="plus"></i>新增供應</button></div><div id="allocation-stock"></div>
     <div class="allocation-heading"><h3>需求清單</h3><button id="add-demand"><i data-lucide="plus"></i>新增需求</button></div><div id="allocation-demand"></div>
-    <div class="allocation-controls"><label>品項／單位<select id="allocation-material" required></select></label><label>單程時間上限（分鐘）<input id="allocation-minutes" type="number" min="0.1" max="1440" step="0.1" value="120" required></label><label class="checkbox-label"><input id="allocation-compare" type="checkbox" checked>比較固定基準</label></div>
+    <div class="allocation-controls"><label>品項／單位<select id="allocation-material" required></select></label><label>直線距離上限（公里）<input id="allocation-distance" type="number" min="0.1" max="500" step="0.1" value="60" required></label><label class="checkbox-label"><input id="allocation-compare" type="checkbox" checked>比較固定基準</label></div>
     <div id="allocation-baseline-name" class="muted"></div>
     <div class="comparison-actions"><button id="run-allocation" class="primary"><i data-lucide="package-check"></i>計算分配</button><button id="allocation-baseline" title="將目前資料固定為比較基準" aria-label="將目前資料固定為比較基準"><i data-lucide="flag"></i></button><button id="allocation-copy" title="另存物資情境" aria-label="另存物資情境"><i data-lucide="copy"></i></button><button id="allocation-save" title="儲存目前工作區" aria-label="儲存目前工作區"><i data-lucide="save"></i></button><button id="allocation-export" disabled title="匯出分配報告與資料快照" aria-label="匯出分配報告與資料快照"><i data-lucide="download"></i></button></div>
     <p id="allocation-status" role="status"></p><div id="allocation-result"></div>
@@ -114,33 +105,16 @@
   <dialog id="comparison-dialog" aria-labelledby="comparison-title">
     <div class="dialog-heading"><h2 id="comparison-title">情境影響比較</h2><button id="close-comparison" aria-label="關閉情境比較"><i data-lucide="x"></i></button></div>
     <div class="comparison-baseline"><div><span class="muted">固定比較基準</span><strong id="baseline-name"></strong><span id="baseline-time" class="muted"></span></div><button id="capture-baseline" title="將目前拓樸設為新基準" aria-label="將目前拓樸設為新基準"><i data-lucide="flag"></i></button></div>
-    <div class="form-grid comparison-route"><label>路徑起點<select id="compare-start"></select></label><label>路徑終點<select id="compare-end"></select></label></div>
     <div class="comparison-actions"><button id="run-comparison" class="primary"><i data-lucide="git-compare-arrows"></i>重新比較</button><button id="copy-scenario"><i data-lucide="copy"></i>另存情境</button><button id="export-comparison" disabled title="匯出比較報告與輸入快照" aria-label="匯出比較報告與輸入快照"><i data-lucide="download"></i></button></div>
     <p id="comparison-status" role="status"></p><div id="comparison-result"></div>
-  </dialog>
-  <dialog id="region-dialog">
-    <div class="dialog-heading"><h2>選擇地區</h2><button id="close-region" aria-label="關閉地區選擇"><i data-lucide="x"></i></button></div>
-    <form id="region-search-form" class="region-search">
-      <input id="region-query" placeholder="輸入縣市、行政區或地標名稱" aria-label="地區或地標名稱" minlength="2" maxlength="120" required>
-      <button id="region-search-button" class="primary" aria-label="搜尋地區"><i data-lucide="search"></i></button>
-    </form>
-    <div id="region-results" role="radiogroup" aria-label="搜尋到的地區"></div>
-    <div class="region-options">
-      <label>中心周邊距離<select id="region-radius"><option value="250">250 公尺</option><option value="500" selected>500 公尺</option><option value="1000">1 公里</option><option value="2000">2 公里</option></select></label>
-      <div><strong>資料來源</strong><p>OpenStreetMap 道路與公開設施</p><span class="muted">醫療、消防、警政、學校、社福、商店位置</span></div>
-    </div>
-    <p class="muted">人員名冊與物資庫存需另行匯入；公開設施未提供即時營運與庫存。</p>
-    <div id="region-status" role="status"></div>
-    <div class="dialog-actions"><button id="region-file"><i data-lucide="upload"></i>匯入檔案</button><button id="region-load" class="primary" disabled><i data-lucide="download"></i>建立地區工作區</button></div>
-    <div class="region-attribution"><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors · ODbL</a></div>
   </dialog>
   <dialog id="import-dialog">
     <form id="import-form">
       <div class="dialog-heading"><h2>匯入開放資料</h2><button type="button" id="close-import" aria-label="關閉"><i data-lucide="x"></i></button></div>
       <label>檔案<input id="import-file" type="file" accept=".csv,.json,.geojson"></label>
       <div class="form-grid">
-        <label>資料格式<select id="import-format"><option value="geojson">GeoJSON</option><option value="csv">CSV</option><option value="json">工作區 JSON</option><option value="osm">OpenStreetMap JSON</option></select></label>
-        <label>點資料類型<select id="import-kind"><option value="person">人員</option><option value="supply">物資</option><option value="facility">設施</option><option value="road_node">道路節點</option><option value="custom">自訂物件</option><option value="relations">關係（CSV）</option></select></label>
+        <label>資料格式<select id="import-format"><option value="geojson">GeoJSON</option><option value="csv">CSV</option><option value="json">工作區 JSON</option></select></label>
+        <label>點資料類型<select id="import-kind"><option value="person">人員</option><option value="supply">物資</option><option value="facility">設施</option><option value="incident">事件</option><option value="custom">自訂物件</option><option value="relations">關係（CSV）</option></select></label>
       </div>
       <label>資料來源／授權<input id="import-source" placeholder="資料集名稱、發布單位或網址" maxlength="500"></label>
       <details><summary>貼上資料</summary><textarea id="import-content" rows="5" aria-label="資料內容"></textarea></details>

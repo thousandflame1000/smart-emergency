@@ -7,7 +7,7 @@ from app.models.need import CommunityNeed
 from app.models.resource_point import ResourcePoint
 from app.models.user import User
 from app.routers import ontology as ontology_router
-from app.services import reasoning, road_network
+from app.services import reasoning
 
 
 def _client():
@@ -54,16 +54,6 @@ def test_reasoning_flags_active_alert_without_resource_request(db):
     report = reasoning.operational_risks(db)
 
     assert f"alert_without_need:{alert.id}" in _ids(report)
-
-
-def test_reasoning_flags_road_closure_and_route_degradation(db):
-    road_network.set_edge_status(db, road_network.edge_id("yuli", "changbin"), "closed")
-
-    report = reasoning.operational_risks(db)
-    ids = _ids(report)
-
-    assert "road_topology_has_disruptions" in ids
-    assert "road_route_degraded:chenggong:yuli" in ids
 
 
 def test_reasoning_flags_facility_capacity_pressure(db):
@@ -130,17 +120,6 @@ def test_operational_playbook_groups_findings_into_action_steps(db):
     assert step["expected_impact"]
     assert step["operator_checklist"]
     assert step["blocked_by"]
-
-
-def test_operational_playbook_includes_road_topology_step(db):
-    road_network.set_edge_status(db, road_network.edge_id("yuli", "changbin"), "closed")
-
-    report = reasoning.operational_playbook(db)
-    step = next(s for s in report["steps"] if s["action_id"] == "mutate_road_topology")
-
-    assert step["finding_count"] >= 2
-    assert "road_topology_has_disruptions" in step["finding_ids"]
-    assert step["endpoint"] is not None
 
 
 def test_operational_playbook_endpoint_returns_prioritized_steps(db):

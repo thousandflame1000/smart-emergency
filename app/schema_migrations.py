@@ -56,24 +56,3 @@ def _ensure_postgresql_append_only_triggers(engine: Engine) -> None:
                 FOR EACH ROW EXECUTE FUNCTION reject_task_workflow_event_mutation()
                 """
             )
-
-        connection.exec_driver_sql(
-            """
-            CREATE OR REPLACE FUNCTION reject_road_observation_mutation()
-            RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION '%% is append-only', TG_TABLE_NAME;
-            END;
-            $$ LANGUAGE plpgsql
-            """
-        )
-        connection.exec_driver_sql(
-            "DROP TRIGGER IF EXISTS road_observations_append_only ON road_observations"
-        )
-        connection.exec_driver_sql(
-            """
-            CREATE TRIGGER road_observations_append_only
-            BEFORE UPDATE OR DELETE ON road_observations
-            FOR EACH ROW EXECUTE FUNCTION reject_road_observation_mutation()
-            """
-        )

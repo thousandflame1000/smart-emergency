@@ -82,6 +82,8 @@ def _prepare(change: InventoryChange, db: Session):
         owner = db.get(User, change.owner_id)
         if not owner or not owner.is_active:
             raise ValueError("物資擁有者不存在或已停用")
+        if not (owner.has_role("volunteer") or owner.has_role("admin")):
+            raise ValueError("物資提供者必須是志工或管理員")
         if not {"name", "quantity"} <= values.keys():
             raise ValueError("新增物資須填寫名稱與數量單位")
         key = uuid5(NAMESPACE_URL, "smart-emergency:workspace-resource:" + str(change.creation_key))

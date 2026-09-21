@@ -40,7 +40,7 @@ async function refreshOperations(){
     const ids=new Set(nodes.map(n=>n.id));
     const edges=state.graph.edges.filter(e=>!e.id.startsWith('db:edge:')&&ids.has(e.source)&&ids.has(e.target)).concat(snapshot.graph.edges);
     mutate(()=>{state.graph={nodes,edges};if(state.selected&&!ids.has(state.selected.id))state.selected=null;});
-    message(`現況已更新：${snapshot.counts.elders} 位長者、${snapshot.counts.demands} 筆可試算需求、${snapshot.counts.supplies} 筆物資`);
+    message(`現況已更新：${snapshot.counts.elders} 位長者、${snapshot.counts.volunteers} 位志工、${snapshot.counts.demands} 筆可試算需求、${snapshot.counts.supplies} 筆物資`);
   })();
   try{return await operationRequest;}finally{operationRequest=null;for(const id of ['sync-db','layer-db'])$(id).disabled=false;}
 }
@@ -97,7 +97,7 @@ async function editInventory(node){
   const values={...(p.base_values||{name:node.label,quantity:node.quantity+'份',lat:node.lat,lng:node.lng,address:'',is_available:node.available}),...staged?.values};
   const point=p.db==='point';
   $('inventory-title').textContent=create?'登記物資':point?'更新資源點位置':'更新物資資料';
-  $('inventory-fields').innerHTML=(create?`<label>擁有者<select id="inventory-owner" required><option value="">選擇登記人</option>${operationOwners.map(o=>`<option value="${escapeHtml(o.id)}" ${staged?.owner_id===o.id?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select></label><label>品項<select id="inventory-type">${options({water:'飲用水',food:'食物',first_aid:'急救用品',shelter:'庇護所',vehicle:'交通工具',tool:'工具',other:'其他物資'},staged?.resource_type||'water')}</select></label>`:'')+
+  $('inventory-fields').innerHTML=(create?`<label>提供者<select id="inventory-owner" required><option value="">選擇志工或管理員</option>${operationOwners.map(o=>`<option value="${escapeHtml(o.id)}" ${staged?.owner_id===o.id?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select></label><label>品項<select id="inventory-type">${options({water:'飲用水',food:'食物',first_aid:'急救用品',shelter:'庇護所',vehicle:'交通工具',tool:'工具',other:'其他物資'},staged?.resource_type||'water')}</select></label>`:'')+
     (!point?`<label>名稱<input id="inventory-name" maxlength="200" required value="${escapeHtml(values.name)}"></label><label>數量與單位<input id="inventory-quantity" maxlength="80" required value="${escapeHtml(values.quantity)}"></label>`:'')+
     `<div class="form-grid"><label>緯度<input id="inventory-lat" type="number" min="-90" max="90" step="any" value="${values.lat??''}"></label><label>經度<input id="inventory-lng" type="number" min="-180" max="180" step="any" value="${values.lng??''}"></label></div><label>地址<input id="inventory-address" maxlength="500" value="${escapeHtml(values.address)}"></label>`+
     (!point?`<label class="checkbox-label"><input id="inventory-available" type="checkbox" ${values.is_available?'checked':''}>物資可用</label>`:'');

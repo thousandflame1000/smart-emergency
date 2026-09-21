@@ -25,9 +25,9 @@ STATIC_DIR = "app/static"
 
 _BROWSER_STUBS = """
 // 頁面腳本裡散落著會立即執行的瀏覽器 API 呼叫
-// （document.addEventListener(...)、initMap()/loadAll() 等頁面啟動邏輯、
-// setInterval(...)），在 Node 裡直接跑會因為 document/fetch/Leaflet 的
-// L 都不存在而丟例外、中斷整段腳本。這裡不用去猜要砍哪一段，直接把
+// （document.addEventListener(...)、loadAll() 等頁面啟動邏輯），
+// 在 Node 裡直接跑會因為 document/fetch 等瀏覽器物件不存在而丟例外。
+// 這裡不用去猜要砍哪一段，直接把
 // 會被用到的全域物件都填成無害的假物件/no-op，讓整段腳本能跑到底，
 // 我們才拿得到 esc() 這個函式宣告來測。
 global.document = {
@@ -37,19 +37,14 @@ global.document = {
   addEventListener: () => {},
 };
 global.window = global;
+global.addEventListener = () => {};
+global.history = { replaceState(){} };
+global.location = { origin:'http://test', hash:'' };
 global.fetch = () => Promise.resolve({ json: () => Promise.resolve({}) });
 global.setInterval = () => {};
-global.L = { map: () => ({ setView(){return this}, eachLayer(){}, invalidateSize(){} }),
-             tileLayer: () => ({ addTo(){} }),
-             marker: () => ({ bindPopup(){return this}, addTo(){} }),
-             circleMarker: () => ({ bindPopup(){return this}, addTo(){} }) };
 global.confirm = () => true;
 global.alert = () => {};
 global.prompt = () => null;
-// index.html 用 Chart.js 畫趨勢分析圖表，同樣是外部 CDN 全域物件，
-// 在 Node 裡沒有真的載入，一樣用假物件頂著讓腳本跑到底。
-global.Chart = function() { return { destroy(){} }; };
-global.Chart.defaults = { font: {}, color: '' };
 """
 
 
@@ -58,7 +53,7 @@ def _extract_script(html_path: str) -> str:
     抓出內嵌 <script>（無 src 屬性、獨立一行的那個真正的 tag）的內容。
 
     這裡踩過兩個坑，都是因為單純用字串 index()／rindex() 找 "<script>"：
-    1. index.html 在 <head> 有 <script src="...leaflet.js"></script>
+    1. 頁面在 <head> 可能有 <script src="...library.js"></script>
        這種外部腳本標籤，直接找第一個 "<script>"／第一個 "</script>"，
        start 會落在後面真正的內嵌腳本，但 end 卻抓到前面外部標籤的
        "</script>"（字串位置更早），導致切出空字串或抓到不對的區間。

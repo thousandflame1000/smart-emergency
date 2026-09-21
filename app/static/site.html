@@ -53,27 +53,22 @@ body { background:var(--bg); color:var(--text); font-family:var(--sans); font-si
 (function () {
   var DASH = '/view/dashboard', CONSOLE = '/view/console';
   var NAV = [
-    { sec: '營運' },
-    { id: 'workspace', label: '營運工作區', icon: 'network', view: '/workspace', page: null },
-    { sec: '總覽' },
+    { sec: '事件處置' },
+    { id: 'workspace', label: '事件處置工作區', icon: 'network', view: '/workspace', page: null },
+    { sec: '照護現況' },
     { id: 'overview', label: '總覽', icon: '📊', view: DASH, page: 'overview' },
     { id: 'elders', label: '長者狀態', icon: '👴', view: DASH, page: 'elderly' },
-    { id: 'map', label: '社區地圖', icon: '🗺️', view: DASH, page: 'map-page' },
     { id: 'trends', label: '趨勢分析', icon: '📈', view: DASH, page: 'analytics-page' },
-    { sec: '成員' },
+    { sec: '資料管理' },
     { id: 'members', label: '長者管理', icon: '🧓', view: CONSOLE, page: 'page-elderly' },
     { id: 'volunteers', label: '志工 / 家屬', icon: '🙋', view: CONSOLE, page: 'page-volunteers' },
     { id: 'relations', label: '照護關係', icon: '🔗', view: CONSOLE, page: 'page-relations' },
-    { sec: '調度' },
-    { id: 'dispatch', label: '調度（需求・物資）', icon: '🆘', view: CONSOLE, page: 'page-needs' },
-    { id: 'scenario', label: '情境模擬', icon: '🎬', view: CONSOLE, page: 'page-scenario' },
-    { id: 'sandbox', label: '路網沙盤', icon: '🛣️', view: CONSOLE, page: 'page-road-sandbox' },
     { sec: '知識' },
     { id: 'ai', label: 'AI 助手', icon: '🤖', view: DASH, page: 'ai-page' },
     { id: 'kb', label: '知識庫', icon: '🧠', view: CONSOLE, page: 'page-kb' }
   ];
   var frame = document.getElementById('view'), nav = document.getElementById('nav'), buttons = {}, frames = {}, currentId = null;
-  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',map:'map',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',dispatch:'package',workspace:'network',scenario:'flask-conical',sandbox:'route',ai:'messages-square',kb:'book-open'};
+  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',workspace:'network',ai:'messages-square',kb:'book-open'};
 
   NAV.forEach(function (item) {
     if (item.sec) {

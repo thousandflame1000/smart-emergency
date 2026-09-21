@@ -12,9 +12,6 @@ from uuid import uuid4
 import networkx as nx
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.services.hazard import haversine_km
-
-
 class LogisticsRecord(BaseModel):
     id: str = Field(min_length=1, max_length=180)
     role: Literal["supply", "demand"]
@@ -41,7 +38,7 @@ class LogisticsRecord(BaseModel):
 class Node(BaseModel):
     id: str = Field(min_length=1, max_length=180)
     label: str = Field(default="未命名", max_length=300)
-    kind: Literal["road_node", "person", "supply", "facility", "custom"] = "custom"
+    kind: Literal["person", "supply", "facility", "incident", "custom"] = "custom"
     lat: float | None = Field(default=None, ge=-90, le=90, allow_inf_nan=False)
     lng: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
     quantity: float = Field(default=1, ge=0, le=1e9, allow_inf_nan=False)
@@ -49,6 +46,16 @@ class Node(BaseModel):
     source: str = Field(default="手動建立", max_length=500)
     properties: dict[str, Any] = Field(default_factory=dict)
     logistics: list[LogisticsRecord] = Field(default_factory=list, max_length=30)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_kind(cls, value):
+        if isinstance(value, dict) and value.get("kind") == "road_node":
+            value = dict(value)
+            properties = dict(value.get("properties") or {})
+            properties.setdefault("legacy_kind", "road_node")
+            value.update(kind="custom", properties=properties)
+        return value
 
     @model_validator(mode="after")
     def coordinate_pair(self):
@@ -61,14 +68,29 @@ class Edge(BaseModel):
     id: str = Field(min_length=1, max_length=180)
     source: str
     target: str
-    kind: Literal["road", "access", "assignment", "supplies", "custom"] = "custom"
+    kind: Literal["assignment", "supplies", "care", "request", "related", "custom"] = "custom"
     label: str = Field(default="連線", max_length=300)
-    status: Literal["normal", "slow", "closed"] = "normal"
+    status: Literal["active", "inactive"] = "active"
     directed: bool = False
-    speed_kph: float = Field(default=30, gt=0, le=300, allow_inf_nan=False)
-    multiplier: float = Field(default=2.5, ge=1, le=100, allow_inf_nan=False)
     provenance: str = Field(default="手動建立", max_length=500)
     properties: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_legacy_edge(cls, value):
+        if not isinstance(value, dict):
+            return value
+        value = dict(value)
+        if value.get("kind") in ("road", "access"):
+            properties = dict(value.get("properties") or {})
+            properties.setdefault("legacy_kind", value["kind"])
+            value.update(kind="related", properties=properties)
+        legacy_status = value.get("status")
+        if legacy_status in ("normal", "slow"):
+            value["status"] = "active"
+        elif legacy_status == "closed":
+            value["status"] = "inactive"
+        return value
 
 
 class GraphDocument(BaseModel):
@@ -102,9 +124,9 @@ class ComparisonBaseline(BaseModel):
 
 
 class ImportRequest(BaseModel):
-    format: Literal["geojson", "csv", "json", "osm"]
+    format: Literal["geojson", "csv", "json"]
     content: str = Field(max_length=5_000_000)
-    kind: Literal["road_node", "person", "supply", "facility", "custom", "relations"] = "custom"
+    kind: Literal["person", "supply", "facility", "incident", "custom", "relations"] = "custom"
     source: str = Field(default="匯入資料", max_length=500)
     mapping: dict[str, str] = Field(default_factory=dict)
     base: GraphDocument = Field(default_factory=GraphDocument)
@@ -179,68 +201,11 @@ def import_document(request: ImportRequest) -> dict:
         nodes, edges = document.nodes, document.edges
         if data.get("baseline") is not None:
             baseline = ComparisonBaseline.model_validate(data["baseline"]).model_dump(mode="json")
-    elif request.format == "osm":
-        data = json_object()
-        if data.get("remark"):
-            raise ValueError("OpenStreetMap 查詢未完整完成，請縮小範圍重試")
-        elements = data.get("elements", [])
-        by_id = {str(n["id"]): n for n in elements if n.get("type") == "node"}
-        used = set()
-        for way in elements:
-            if way.get("type") != "way":
-                continue
-            tags = way.get("tags", {})
-            if not tags.get("highway"):
-                continue
-            refs = [str(n) for n in way.get("nodes", [])]
-            for i, (a, b) in enumerate(zip(refs, refs[1:])):
-                if a not in by_id or b not in by_id:
-                    raise ValueError("道路缺少共用節點，請重新載入完整 OSM 資料")
-                if a == b:
-                    continue
-                used.update([a, b])
-                if tags.get("oneway") == "-1":
-                    a, b = b, a
-                edges.append(Edge(
-                    id=f"osm:way:{way['id']}:{i}", source=f"osm:node:{a}", target=f"osm:node:{b}",
-                    kind="road", label=tags.get("name", tags.get("highway", "道路")),
-                    directed=tags.get("oneway") in ("yes", "1", "true", "-1") or (
-                        tags.get("junction") == "roundabout" and tags.get("oneway") != "no"),
-                    provenance=request.source, properties=tags,
-                ))
-        nodes = [Node(id=f"osm:node:{n}", label=f"道路節點 {n}", kind="road_node",
-                      lat=by_id[n]["lat"], lng=by_id[n]["lon"], source=request.source) for n in sorted(used)]
-        categories = {
-            "hospital": "醫院", "clinic": "診所", "pharmacy": "藥局", "fire_station": "消防站",
-            "police": "警政據點", "school": "學校", "community_centre": "社區中心",
-            "social_facility": "社福設施", "shelter": "庇護設施", "supermarket": "超市", "convenience": "便利商店",
-        }
-        facilities = {}
-        for item in elements:
-            tags = item.get("tags", {})
-            category = tags.get("amenity") or tags.get("shop")
-            if category not in categories:
-                continue
-            location = item if item.get("type") == "node" else item.get("center", {})
-            if "lat" not in location or "lon" not in location:
-                continue
-            node_id = f"osm:facility:{item['type']}:{item['id']}"
-            facilities[node_id] = Node(
-                id=node_id, label=tags.get("name:zh") or tags.get("name") or categories[category],
-                kind="facility", lat=location["lat"], lng=location["lon"], quantity=0, source=request.source,
-                properties={**tags, "facility_category": categories[category], "operational_status": "unknown",
-                            "capacity_known": False, "location_method": "point" if item["type"] == "node" else "bbox_center"},
-            )
-        nodes.extend(facilities.values())
-        if facilities:
-            warnings.append("公開設施僅代表地圖位置；營運狀態、可用容量與物資庫存尚未提供。")
-        warnings.append("保留 OSM 共用節點與單行方向；預設路速 30 公里／時，可逐路調整。")
     else:
         data = json_object()
         if data.get("crs") and "CRS84" not in json.dumps(data["crs"]) and "4326" not in json.dumps(data["crs"]):
             raise ValueError("請先將座標轉換為 WGS84（EPSG:4326）")
         features = data.get("features", []) if data.get("type") == "FeatureCollection" else [data]
-        road_nodes = {}
         skipped = 0
         for i, feature in enumerate(features):
             if not isinstance(feature, dict):
@@ -252,34 +217,10 @@ def import_document(request: ImportRequest) -> dict:
             coords = geo.get("coordinates")
             if geo.get("type") == "Point" and isinstance(coords, list) and len(coords) >= 2:
                 point(props, i, coords, feature.get("id"))
-            elif geo.get("type") in ("LineString", "MultiLineString"):
-                lines = [coords] if geo["type"] == "LineString" else coords
-                for j, line in enumerate(lines or []):
-                    previous = None
-                    for k, coord in enumerate(line):
-                        # Only explicit shared vertices at the same level are joined.
-                        key = (round(float(coord[0]), 7), round(float(coord[1]), 7), str(props.get("layer", 0)))
-                        if key not in road_nodes:
-                            node_id = f"{prefix}:r:{len(road_nodes)}"
-                            road_nodes[key] = node_id
-                            nodes.append(Node(id=node_id, label=f"道路節點 {len(road_nodes)}", kind="road_node",
-                                              lng=coord[0], lat=coord[1], source=request.source))
-                        current = road_nodes[key]
-                        if previous and previous != current:
-                            reverse = str(props.get("oneway")) == "-1"
-                            edges.append(Edge(
-                                id=f"{prefix}:e:{i}:{j}:{k}", source=current if reverse else previous,
-                                target=previous if reverse else current, kind="road",
-                                label=str(field(props, "label", props.get("name", "道路"))),
-                                directed=str(props.get("oneway", "")).lower() in ("yes", "true", "1", "-1"),
-                                provenance=request.source, properties=props,
-                            ))
-                        previous = current
             else:
                 skipped += 1
         if skipped:
-            warnings.append(f"略過 {skipped} 筆不支援的幾何；目前支援點與道路線段。")
-        warnings.append("道路僅在共用座標頂點且 layer 相同時相連；幾何交叉不自動建立路口。")
+            warnings.append(f"略過 {skipped} 筆非點資料；關係請以 CSV 或工作區 JSON 明確匯入。")
     if not nodes and not edges:
         raise ValueError("資料中沒有可匯入的點或連線")
     merged_nodes = {n.id: n for n in request.base.nodes}
@@ -287,8 +228,6 @@ def import_document(request: ImportRequest) -> dict:
     for collection, incoming in ((merged_nodes, nodes), (merged_edges, edges)):
         for item in incoming:
             if item.id in collection:
-                if item.id.startswith("osm:"):
-                    continue  # Overlapping OSM tiles retain local edits.
                 raise ValueError(f"識別碼重複：{item.id}，請改用取代或調整識別碼")
             collection[item.id] = item
     result = GraphDocument(nodes=list(merged_nodes.values()), edges=list(merged_edges.values()))
@@ -297,71 +236,46 @@ def import_document(request: ImportRequest) -> dict:
             "added_edges": len(result.edges) - len(request.base.edges)}
 
 
-def build_routing_graphs(document: GraphDocument):
-    """Shared travel semantics for route analysis and capacitated allocation."""
-    nodes = {n.id: n for n in document.nodes}
-    graph = nx.MultiDiGraph()
-    graph.add_nodes_from(n.id for n in document.nodes if n.available)
-    road_graph = nx.MultiGraph()
-    road_graph.add_nodes_from(n.id for n in document.nodes if n.kind == "road_node" and n.available)
-    missing_coordinates = []
-    for edge in document.edges:
-        if edge.kind not in ("road", "access") or edge.status == "closed":
-            continue
-        a, b = nodes[edge.source], nodes[edge.target]
-        if not a.available or not b.available:
-            continue
-        if a.lat is None or b.lat is None:
-            missing_coordinates.append(edge.id)
-            continue
-        km = haversine_km(a.lat, a.lng, b.lat, b.lng)
-        minutes = km / edge.speed_kph * 60 * (edge.multiplier if edge.status == "slow" else 1)
-        graph.add_edge(a.id, b.id, key=edge.id, weight=minutes, km=km)
-        if not edge.directed:
-            graph.add_edge(b.id, a.id, key=edge.id, weight=minutes, km=km)
-        if edge.kind == "road":
-            road_graph.add_edge(a.id, b.id, key=edge.id)
-    return graph, road_graph, missing_coordinates
-
-
 def has_supply(node: Node) -> bool:
     if not node.available:
         return False
     if node.logistics:
         return any(line.role == "supply" and line.quantity > 0 and line.dispatch_limit != 0 for line in node.logistics)
-    return node.kind in ("supply", "facility") and node.quantity > 0
+    return node.kind == "supply" and node.quantity > 0
 
 
-def analyze(document: GraphDocument, start: str | None = None, end: str | None = None) -> dict:
+def analyze(document: GraphDocument) -> dict:
     nodes = {n.id: n for n in document.nodes}
-    graph, road_graph, missing_coordinates = build_routing_graphs(document)
-    bridges = [next(iter(road_graph[a][b])) for a, b in nx.bridges(road_graph)]
-    supplies = [n.id for n in document.nodes if has_supply(n)]
-    reached = nx.multi_source_dijkstra_path_length(graph, supplies) if supplies else {}
+    active = {n.id for n in document.nodes if n.available}
+    graph = nx.Graph()
+    graph.add_nodes_from(active)
+    pair_edges: dict[tuple[str, str], list[str]] = {}
+    inactive_edges = []
+    for edge in document.edges:
+        if edge.status != "active" or edge.source not in active or edge.target not in active:
+            inactive_edges.append(edge.id)
+            continue
+        graph.add_edge(edge.source, edge.target)
+        pair = tuple(sorted((edge.source, edge.target)))
+        pair_edges.setdefault(pair, []).append(edge.id)
+    bridges = [pair_edges[tuple(sorted(pair))][0] for pair in nx.bridges(graph)
+               if len(pair_edges[tuple(sorted(pair))]) == 1]
+    unlinked = sorted(node_id for node_id, degree in graph.degree if degree == 0)
     people = [n for n in document.nodes if n.kind == "person" and n.available]
-    isolated = [n.id for n in people if n.id not in reached]
-    route = None
-    if start or end:
-        if start not in nodes or end not in nodes:
-            raise ValueError("請選擇有效的起點與終點")
-        route = {"reachable": False, "nodes": [], "edges": [], "minutes": None, "km": None}
-        if start in graph and end in graph and nx.has_path(graph, start, end):
-            path = nx.shortest_path(graph, start, end, weight="weight")
-            chosen = [min(graph[a][b].items(), key=lambda item: item[1]["weight"]) for a, b in zip(path, path[1:])]
-            route = {"reachable": True, "nodes": path, "edges": [key for key, _ in chosen],
-                     "minutes": round(sum(v["weight"] for _, v in chosen), 2),
-                     "km": round(sum(v["km"] for _, v in chosen), 3)}
+    demands = [n for n in document.nodes if n.properties.get("db") == "need"
+               and n.properties.get("status") in ("open", "suggested")]
     return {
         "metrics": {"nodes": len(nodes), "edges": len(document.edges), "people": len(people),
-                    "supply_quantity": sum(n.quantity for n in document.nodes if n.kind == "supply" and n.available),
-                    "road_components": nx.number_connected_components(road_graph),
-                    "critical_roads": len(bridges), "unreachable_people": len(isolated)},
-        "critical_edges": bridges, "articulation_nodes": list(nx.articulation_points(road_graph)),
-        "unreachable_people": isolated, "route": route,
-        "ignored_edges": missing_coordinates,
-        "assumptions": ["可達性依道路與接駁連線計算，遵守單行方向；供應與指派關係不視為道路。",
-                        "僅分析已匯入的路網；範圍外道路未納入，邊界可能截斷可達路徑。",
-                        "瓶頸為忽略方向後的橋接邊與割點；不代表真實道路損壞機率。",
-                        "物資可達不等於足量或品項相符，未執行配給；接駁為人工假設。",
-                        "時間依端點距離、路速與延遲倍率估算，未接入即時交通。"],
+                    "available_supplies": sum(has_supply(n) for n in document.nodes),
+                    "open_demands": len(demands),
+                    "components": nx.number_connected_components(graph) if graph else 0,
+                    "unlinked_objects": len(unlinked), "inactive_relations": len(inactive_edges)},
+        "critical_edges": bridges,
+        "articulation_nodes": sorted(nx.articulation_points(graph)),
+        "unlinked_objects": unlinked,
+        "inactive_relations": inactive_edges,
+        "assumptions": ["關聯分析只使用目前工作區內、啟用中的物件與關係。",
+                        "橋接關係與關鍵物件表示資料圖上的單點依賴，不代表道路、通訊或現場一定中斷。",
+                        "未連結物件可能是資料尚未補齊，也可能本來就應獨立存在，需由操作人員確認。",
+                        "分析不會修改正式資料、扣除庫存、建立派遣或發送通知。"],
     }

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""開放資料工作區與平台資料庫的連接：資料庫 → 地圖 → 分配試算 → 派遣建議 → 管理員確認。"""
+"""事件工作區與平台資料庫的連接：資料庫 → 關聯圖 → 分配試算 → 派遣建議 → 管理員確認。"""
 import pytest
 from fastapi.testclient import TestClient
 
@@ -38,17 +38,15 @@ def world(db):
     return elder, vol, res, need, point
 
 
-def road_graph():
-    """Two road nodes joined by a road, placed so each object is closest to one end."""
+def event_graph():
     return {"nodes": [
-        {"id": "r1", "label": "路口A", "kind": "road_node", "lat": 24.0000, "lng": 120.6000},
-        {"id": "r2", "label": "路口B", "kind": "road_node", "lat": 24.0100, "lng": 120.6100}],
-        "edges": [{"id": "e1", "source": "r1", "target": "r2", "kind": "road", "label": "道路", "speed_kph": 40}]}
+        {"id": "incident", "label": "停水事件", "kind": "incident", "lat": 24.0050, "lng": 120.6050},
+        {"id": "command", "label": "協調窗口", "kind": "custom", "lat": 24.0060, "lng": 120.6060}],
+        "edges": [{"id": "e1", "source": "incident", "target": "command", "kind": "related", "label": "協調"}]}
 
 
-def access(source, target, edge_id):
-    return {"id": edge_id, "source": source, "target": target, "kind": "access", "label": "估計接駁",
-            "speed_kph": 5, "multiplier": 2.5}
+def relation(source, target, edge_id):
+    return {"id": edge_id, "source": source, "target": target, "kind": "related", "label": "事件關聯"}
 
 
 # ── 資料庫 → 工作區物件 ──
@@ -66,7 +64,7 @@ def test_database_objects_become_workspace_nodes_with_matching_items(db):
     assert supply.kind == "supply" and supply.logistics[0].quantity == 20, "「20箱」要取出 20"
     assert (supply.logistics[0].item, supply.logistics[0].unit) == (demand.item, demand.unit), "供應與需求品項單位要一致才配得到"
     assert by_id[f"db:point:{point.id}"].kind == "facility"
-    assert counts == {"elders": 1, "demands": 1, "supplies": 1, "points": 1}
+    assert counts == {"elders": 1, "volunteers": 1, "demands": 1, "supplies": 1, "points": 1}
 
 
 def test_sos_matched_and_cancelled_needs_are_not_demand(db):
@@ -92,42 +90,42 @@ def test_people_without_coordinates_are_included_but_unlocated_and_inactive_user
 
 
 # ── 就地同步 ──
-def test_merge_is_in_place_and_keeps_layout_manual_objects_and_access_edges(db):
+def test_merge_is_in_place_and_keeps_layout_manual_objects_and_relations(db):
     elder, vol, res, need, point = world(db)
     base = GraphDocument.model_validate({
-        **road_graph(),
-        "nodes": road_graph()["nodes"] + [{"id": "manual", "label": "手動加的", "kind": "custom", "lat": 24.02, "lng": 120.62}]})
+        **event_graph(),
+        "nodes": event_graph()["nodes"] + [{"id": "manual", "label": "手動加的", "kind": "custom", "lat": 24.02, "lng": 120.62}]})
     first, counts = merge_database(base, db)
     assert counts["added"] == 5 and counts["updated"] == 0 and counts["removed"] == 0
     person_id = f"db:person:{elder.id}"
     first.nodes = [n if n.id != person_id else n.model_copy(update={"properties": {**n.properties, "_layout": {"x": 5, "y": 9}}})
                    for n in first.nodes]
-    first.edges.append(type(first.edges[0]).model_validate(access(person_id, "r2", "acc1")))
+    first.edges.append(type(first.edges[0]).model_validate(relation(person_id, "incident", "rel1")))
     elder.name = "王奶奶（已改名）"
     db.commit()
     second, counts = merge_database(first, db)
     assert counts["added"] == 0 and counts["updated"] == 5 and counts["removed"] == 0
     person = next(n for n in second.nodes if n.id == person_id)
     assert person.label == "王奶奶（已改名）" and person.properties["_layout"] == {"x": 5, "y": 9}
-    assert any(e.id == "acc1" for e in second.edges), "接駁連線不能因為同步而消失"
+    assert any(e.id == "rel1" for e in second.edges), "手動關係不能因為同步而消失"
     assert any(n.id == "manual" for n in second.nodes)
 
 
 def test_objects_deleted_from_the_database_leave_the_map_with_their_edges(db):
     elder, vol, res, need, point = world(db)
-    graph, _ = merge_database(GraphDocument.model_validate(road_graph()), db)
+    graph, _ = merge_database(GraphDocument.model_validate(event_graph()), db)
     supply_id = f"db:res:{res.id}"
-    graph.edges.append(type(graph.edges[0]).model_validate(access(supply_id, "r1", "acc-s")))
+    graph.edges.append(type(graph.edges[0]).model_validate(relation(supply_id, "incident", "rel-s")))
     db.delete(db.query(CommunityResource).filter(CommunityResource.id == res.id).one()); db.commit()
     merged, counts = merge_database(graph, db)
     assert counts["removed"] == 1
-    assert all(n.id != supply_id for n in merged.nodes) and all(e.id != "acc-s" for e in merged.edges)
-    assert any(n.id == "r1" for n in merged.nodes), "路網不能被誤刪"
+    assert all(n.id != supply_id for n in merged.nodes) and all(e.id != "rel-s" for e in merged.edges)
+    assert any(n.id == "incident" for n in merged.nodes), "手動事件物件不能被誤刪"
 
 
 def test_merge_endpoint_returns_a_valid_graph(db, api):
     world(db)
-    r = api.post("/api/workspaces/database-merge", json={"graph": road_graph()})
+    r = api.post("/api/workspaces/database-merge", json={"graph": event_graph()})
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["counts"]["supplies"] == 1 and len(body["graph"]["nodes"]) == 7
@@ -137,9 +135,8 @@ def test_merge_endpoint_returns_a_valid_graph(db, api):
 # ── 整條迴路：資料庫 → 試算 → 派遣建議 → 確認 ──
 def _plan(api, db):
     elder, vol, res, need, point = world(db)
-    merged = api.post("/api/workspaces/database-merge", json={"graph": road_graph()}).json()["graph"]
-    merged["edges"] += [access(f"db:need:{need.id}", "r2", "a1"), access(f"db:res:{res.id}", "r1", "a2")]
-    plan = api.post("/api/workspaces/allocate", json={"graph": merged, "item": "飲用水", "unit": "箱", "max_minutes": 240})
+    merged = api.post("/api/workspaces/database-merge", json={"graph": event_graph()}).json()["graph"]
+    plan = api.post("/api/workspaces/allocate", json={"graph": merged, "item": "飲用水", "unit": "箱", "max_distance_km": 60})
     assert plan.status_code == 200, plan.text
     return elder, vol, res, need, plan.json()
 
@@ -223,6 +220,8 @@ def test_projection_has_unique_identities_care_ownership_and_separate_need_locat
     db.add(DailyCheckin(elderly_id=elder.id, date=date.today(), status="help_needed", note="需要送水"))
     db.commit()
     first = api.get("/api/workspaces/operational-data").json()
+    assert first["counts"]["volunteers"] == 1
+    assert first["owners"] == [{"id": str(vol.id), "name": vol.name}]
     second = api.post("/api/workspaces/database-merge", json={"graph": first["graph"]}).json()
     graph = GraphDocument.model_validate(second["graph"])
     assert second["counts"]["added"] == second["counts"]["removed"] == 0
@@ -240,9 +239,7 @@ def test_unit_mismatch_and_unknown_quantity_never_become_allocatable_stock(db, a
     elder, vol, res, need, point = world(db)
     need.quantity = "5瓶"
     db.commit()
-    graph, _ = merge_database(GraphDocument.model_validate(road_graph()), db)
-    graph.edges += [type(graph.edges[0]).model_validate(access(f"db:need:{need.id}", "r2", "a1")),
-                    type(graph.edges[0]).model_validate(access(f"db:res:{res.id}", "r1", "a2"))]
+    graph, _ = merge_database(GraphDocument.model_validate(event_graph()), db)
     plan = api.post("/api/workspaces/allocate", json={"graph": graph.model_dump(), "item": "飲用水", "unit": "瓶"}).json()
     assert plan["after"]["summary"]["allocated"] == 0
     res.quantity = "約20箱（每箱24瓶）"
@@ -312,6 +309,18 @@ def test_promoting_same_scenario_object_twice_creates_one_resource(db, api):
     body["changes"][0]["creation_key"] = "356cbf84-3e29-4dc9-89cb-61d087de1d68"
     assert api.post("/api/workspaces/database-push", json=body).status_code == 200
     assert db.query(CommunityResource).count() == 3
+
+
+def test_workspace_cannot_register_resident_as_resource_provider(db, api):
+    elder, vol, res, need, point = world(db)
+    before = db.query(CommunityResource).count()
+    body = {"changes": [{"node_id": "resident-stock", "operation": "create", "owner_id": str(elder.id),
+                         "creation_key": "f191c8aa-6b76-41e2-b690-654407f26331",
+                         "resource_type": "water", "values": {"name": "飲用水", "quantity": "2箱"}}]}
+    response = api.post("/api/workspaces/database-push", json=body)
+    assert response.status_code == 400
+    assert "志工或管理員" in response.json()["error"]
+    assert db.query(CommunityResource).count() == before
 
 
 def test_reserved_resource_cannot_be_reenabled_or_recounted_by_workspace(db, api):

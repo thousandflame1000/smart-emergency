@@ -1,10 +1,10 @@
 'use strict';
 let allocationRequest=0, allocationPicker=null;
-const ALLOCATION_REASONS={destination_unavailable:'需求物件未納入分析',missing_coordinates:'需求缺少座標',no_stock:'同品項與單位沒有庫存',no_dispatch_capacity:'供應停用、未定位或出貨上限為零',unreachable:'道路無法到達',travel_limit:'超過單程時間上限',capacity_or_priority:'受庫存、出貨上限或優先級限制'};
+const ALLOCATION_REASONS={destination_unavailable:'需求物件未納入分析',missing_coordinates:'需求缺少座標',no_stock:'同品項與單位沒有庫存',no_dispatch_capacity:'供應停用、未定位或出貨上限為零',distance_limit:'超過直線距離上限',capacity_or_priority:'受庫存、出貨上限或優先級限制'};
 function logisticsRows(role){return state.graph.nodes.flatMap(node=>(node.logistics||[]).filter(line=>!role||line.role===role).map(line=>({node,line})));}
 function nodeHasSupply(n){return n.available&&((n.logistics||[]).length?n.logistics.some(l=>l.role==='supply'&&l.quantity>0&&l.dispatch_limit!==0):['supply','facility'].includes(n.kind)&&n.quantity>0);}
 function allocationMessage(text,error=false){$('allocation-status').textContent=text;$('allocation-status').classList.toggle('error',error);}
-function invalidateAllocation(){allocationRequest++;state.allocation=null;state.allocationInputs=null;$('allocation-export').disabled=true;$('run-allocation').disabled=false;$('allocation-result').replaceChildren();allocationMessage('目前資料尚未試算');if(state.report?.allocation){state.report=null;renderCanvas();$('route-result').textContent='';}}
+function invalidateAllocation(){allocationRequest++;state.allocation=null;state.allocationInputs=null;$('allocation-export').disabled=true;$('run-allocation').disabled=false;$('allocation-result').replaceChildren();allocationMessage('目前資料尚未試算');}
 function renderMaterials(){
   const previous=$('allocation-material').value,pairs=new Map();
   for(const {line} of logisticsRows())if(line.item.trim()&&line.unit.trim())pairs.set(JSON.stringify([line.item.trim(),line.unit.trim()]),line.item.trim()+' / '+line.unit.trim());
@@ -32,7 +32,7 @@ function renderAllocationRows(){
 function openAllocationPicker(context){allocationPicker=context;$('allocation-node-query').value='';renderAllocationPicker();$('allocation-node-dialog').showModal();}
 function renderAllocationPicker(){
   const query=$('allocation-node-query').value.toLowerCase();
-  const nodes=state.graph.nodes.filter(n=>(n.label+' '+n.id).toLowerCase().includes(query)).sort((a,b)=>(a.kind==='road_node')-(b.kind==='road_node')).slice(0,50);
+  const nodes=state.graph.nodes.filter(n=>(n.label+' '+n.id).toLowerCase().includes(query)).slice(0,50);
   $('allocation-node-results').innerHTML=nodes.map(n=>`<button data-allocation-node="${escapeHtml(n.id)}"><span class="swatch" style="background:${COLORS[n.kind]}"></span><span>${escapeHtml(n.label)}<small class="muted"> ${TYPES[n.kind]} · ${escapeHtml(n.id)}</small></span></button>`).join('')||'<p class="muted">沒有符合的物件</p>';
   $('allocation-node-results').querySelectorAll('button').forEach(button=>button.onclick=()=>{
     const node=nodeById(button.dataset.allocationNode);if((node.logistics||[]).length>=30||(!allocationPicker.id&&logisticsRows().length>=2000)){$('allocation-node-results').insertAdjacentHTML('afterbegin','<p role="alert">物資紀錄上限：每個物件 30 筆、工作區共 2,000 筆。</p>');return;}
@@ -41,12 +41,12 @@ function renderAllocationPicker(){
     $('allocation-node-dialog').close();renderAllocationRows();
   });
 }
-function openAllocation(){if(!state.graph.nodes.length)throw Error('請先載入道路與物件位置');renderAllocationRows();$('allocation-dialog').showModal();}
+function openAllocation(){if(!state.graph.nodes.length)throw Error('請先讀取平台現況或匯入物件');renderAllocationRows();$('allocation-dialog').showModal();}
 async function runAllocation(){
   for(const input of $('allocation-dialog').querySelectorAll('input,select'))if(!input.reportValidity())return;
   const pair=JSON.parse($('allocation-material').value),token=++allocationRequest,version=state.editVersion;
-  const inputs={graph:structuredClone(state.graph),baseline:$('allocation-compare').checked?structuredClone(state.baseline?.graph||null):null,item:pair[0],unit:pair[1],max_minutes:Number($('allocation-minutes').value)};
-  state.allocation=null;state.allocationInputs=null;$('allocation-result').replaceChildren();$('allocation-export').disabled=true;$('run-allocation').disabled=true;allocationMessage('正在計算道路與容量限制下的分配…');
+  const inputs={graph:structuredClone(state.graph),baseline:$('allocation-compare').checked?structuredClone(state.baseline?.graph||null):null,item:pair[0],unit:pair[1],max_distance_km:Number($('allocation-distance').value)};
+  state.allocation=null;state.allocationInputs=null;$('allocation-result').replaceChildren();$('allocation-export').disabled=true;$('run-allocation').disabled=true;allocationMessage('正在依優先級、庫存與直線距離計算分配…');
   try{const result=await api('/allocate',inputs);if(token!==allocationRequest||version!==state.editVersion)return;state.allocation=result;state.allocationInputs=inputs;renderAllocationResult();$('allocation-export').disabled=false;allocationMessage('試算完成 · 未扣庫存、未建立派遣');}
   catch(e){if(token===allocationRequest)allocationMessage(e.message,true);}finally{if(token===allocationRequest)$('run-allocation').disabled=false;}
 }
@@ -56,13 +56,13 @@ function renderAllocationResult(){
   const labels={stock:'填報庫存',dispatch_capacity:'可出貨上限',requested:'需求量',allocated:'分配量',unmet:'未滿足量'};
   html+=table(r.before?['指標','基準','目前','差異']:['指標','目前'],Object.entries(labels).map(([key,label])=>`<tr><th>${label}（${unit}）</th>${r.before?`<td>${r.before.summary[key]}</td>`:''}<td>${after.summary[key]}</td>${r.before?`<td>${deltaText(r.comparison.deltas[key])}</td>`:''}</tr>`).join(''));
   if(r.comparison)html+=`<p class="muted">需求紀錄：新增 ${r.comparison.entered_demands.length}、移除 ${r.comparison.exited_demands.length}、需求量或優先級變更 ${r.comparison.changed_demands.length}；需求減少不代表完成配送。</p>`;
-  html+='<section class="comparison-section"><h3>分配建議</h3>'+(after.assignments.length?table(['供應 → 需求','數量','單程估計','路線'],after.assignments.map((a,i)=>`<tr><td>${escapeHtml(a.source_label)} → ${escapeHtml(a.target_label)}</td><td>${a.quantity} ${unit}</td><td>${a.route.minutes} 分鐘<br>${a.route.km} 公里</td><td><button data-allocation-route="${i}" title="顯示試算配送路線" aria-label="顯示試算配送路線"><i data-lucide="route"></i></button></td></tr>`).join('')):'<p class="muted">沒有可分配的配送組合</p>')+'</section>';
+  html+='<section class="comparison-section"><h3>分配建議</h3>'+(after.assignments.length?table(['供應 → 需求','數量','直線距離','位置'],after.assignments.map((a,i)=>`<tr><td>${escapeHtml(a.source_label)} → ${escapeHtml(a.target_label)}</td><td>${a.quantity} ${unit}</td><td>${a.distance.km} 公里</td><td><button data-allocation-location="${i}" title="查看供應與需求位置" aria-label="查看供應與需求位置"><i data-lucide="locate-fixed"></i></button></td></tr>`).join('')):'<p class="muted">沒有可分配的組合</p>')+'</section>';
   html+='<section class="comparison-section"><h3>需求與缺口</h3>'+table(['需求位置','優先級','分配／需求','缺口原因'],after.demands.map(d=>`<tr><td>${escapeHtml(d.label)}</td><td>${d.priority}</td><td>${d.allocated} / ${d.requested} ${unit}</td><td>${d.reason?ALLOCATION_REASONS[d.reason]:'已滿足試算需求'}</td></tr>`).join(''))+'</section>';
   html+='<section class="comparison-section"><h3>供應餘額</h3>'+table(['供應位置','庫存／出貨上限','本次分配','預估餘額'],after.inventory.map(s=>`<tr><td>${escapeHtml(s.label)}</td><td>${s.stock} / ${s.dispatch_capacity}</td><td>${s.allocated}</td><td>${s.remaining}</td></tr>`).join(''))+'</section>';
-  html+=`<details><summary>計算依據與限制</summary><ul>${r.assumptions.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul><p>缺座標而未納入路徑的連線：${after.ignored_edges.length}</p><p>${escapeHtml(r.solver)} · ${escapeHtml(r.model)}<br>${escapeHtml(r.generated_at)}</p><p>資料 SHA-256：${escapeHtml(after.fingerprint)}</p></details>`;
+  html+=`<details><summary>計算依據與限制</summary><ul>${r.assumptions.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul><p>${escapeHtml(r.solver)} · ${escapeHtml(r.model)}<br>${escapeHtml(r.generated_at)}</p><p>資料 SHA-256：${escapeHtml(after.fingerprint)}</p></details>`;
   const dbCount=after.assignments.filter(a=>a.supply_id.startsWith('db:')&&a.demand_id.startsWith('db:')).length;
   if(dbCount)html=`<section class="comparison-section"><h3>送到調度</h3><p class="muted">其中 ${dbCount} 筆來自平台資料庫。送出後會在後台「調度」出現為「待確認」建議、並保留該份物資；不會通知志工，須管理員確認才會派遣。</p><button id="send-allocation" class="primary"><i data-lucide="send"></i>送到調度（待確認）</button><div id="send-allocation-result" role="status"></div></section>`+html;
-  $('allocation-result').innerHTML=html;$('allocation-result').querySelectorAll('[data-allocation-route]').forEach(b=>b.onclick=()=>showAllocationRoute(+b.dataset.allocationRoute));if($('send-allocation'))$('send-allocation').onclick=sendAllocationToDispatch;icons();
+  $('allocation-result').innerHTML=html;$('allocation-result').querySelectorAll('[data-allocation-location]').forEach(b=>b.onclick=()=>showAllocationLocation(+b.dataset.allocationLocation));if($('send-allocation'))$('send-allocation').onclick=sendAllocationToDispatch;icons();
 }
 async function sendAllocationToDispatch(){
   const result=$('send-allocation-result'),button=$('send-allocation');
@@ -78,13 +78,12 @@ async function sendAllocationToDispatch(){
     $('review-dispatch').onclick=async()=>{$('allocation-dialog').close();try{await refreshOperations();operationStage='suggested';setCatalog('tasks');renderOperations();}catch(e){message(e.message,true);}};icons();
   }catch(e){result.textContent=e.message;result.classList.add('error');button.disabled=false;}
 }
-function showAllocationRoute(index){
+function showAllocationLocation(index){
   const a=state.allocation?.after.assignments[index];if(!a)return;$('allocation-dialog').close();$('mode').value='select';
-  for(const id of a.route.nodes)state.hidden.delete(nodeById(id).kind);
-  state.report={allocation:true,route:{reachable:true,...a.route},metrics:{},critical_edges:[]};state.selected=null;render();
-  $('route-start').value=a.source;$('route-end').value=a.target;$('route-result').textContent=`${a.quantity} ${state.allocation.unit} · 約 ${a.route.minutes} 分鐘`;
-  if(state.view==='map')map.fitBounds(a.route.nodes.map(id=>{const n=nodeById(id);return [n.lat,n.lng];}),{maxZoom:17,padding:[35,35]});else if(cy)cy.fit(cy.nodes().filter(n=>a.route.nodes.includes(n.data('nodeId'))),50);
-  message('目前顯示試算配送路線，尚未派遣');
+  const ids=[a.source,a.target];for(const id of ids)state.hidden.delete(nodeById(id).kind);
+  state.selected={type:'node',id:a.target};render();
+  if(state.view==='map')map.fitBounds(ids.map(id=>{const n=nodeById(id);return [n.lat,n.lng];}),{maxZoom:17,padding:[35,35]});else if(cy)cy.fit(cy.nodes().filter(n=>ids.includes(n.data('nodeId'))),50);
+  message(`顯示供應與需求位置 · 直線距離 ${a.distance.km} 公里，尚未派遣`);
 }
 function exportAllocation(){if(!state.allocation)return;const data={format:'smart-emergency-allocation-v1',workspace:{id:state.id,name:$('workspace-name').value,revision:state.revision,unsaved:state.dirty},inputs:state.allocationInputs,report:state.allocation};const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=document.createElement('a');a.href=url;a.download='物資分配試算.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function saveAllocation(copy){for(const input of $('allocation-dialog').querySelectorAll('input,select'))if(!input.reportValidity())return;try{await save(copy);allocationMessage(copy?'已另存物資情境，未建立派遣':'工作區與物資紀錄已儲存，未扣庫存');}catch(e){allocationMessage(e.message,true);}}
@@ -93,7 +92,7 @@ function initAllocation(){
   $('close-allocation').onclick=()=>{$('allocation-dialog').close();allocationRequest++;$('run-allocation').disabled=false;};$('allocation-dialog').addEventListener('cancel',()=>{allocationRequest++;$('run-allocation').disabled=false;});
   $('close-allocation-node').onclick=()=>$('allocation-node-dialog').close();$('allocation-node-query').oninput=renderAllocationPicker;
   $('add-stock').onclick=()=>openAllocationPicker({role:'supply'});$('add-demand').onclick=()=>openAllocationPicker({role:'demand'});
-  for(const id of ['allocation-material','allocation-minutes','allocation-compare'])$(id).oninput=invalidateAllocation;
+  for(const id of ['allocation-material','allocation-distance','allocation-compare'])$(id).oninput=invalidateAllocation;
   run('allocation-copy',()=>saveAllocation(true));run('allocation-save',()=>saveAllocation(false));
-  run('allocation-baseline',()=>{for(const input of $('allocation-dialog').querySelectorAll('input,select'))if(!input.reportValidity())return;if(!confirm('將目前路網、品項庫存與需求固定為比較基準？'))return;checkpoint();state.baseline=currentBaseline();changed();renderMaterials();});
+  run('allocation-baseline',()=>{for(const input of $('allocation-dialog').querySelectorAll('input,select'))if(!input.reportValidity())return;if(!confirm('將目前物件、關係、品項庫存與需求固定為比較基準？'))return;checkpoint();state.baseline=currentBaseline();changed();renderMaterials();});
 }

@@ -58,7 +58,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.services.hungarian import min_cost_assignment
-from app.services import road_network
+from app.services.geo import haversine_km
 from app.services.proposal_workflow import ProposalService
 
 from app.database import SessionLocal
@@ -208,9 +208,8 @@ ISOLATION_PTS = {0: 6.0, 1: 3.0}   # 主動關懷聯絡人數 → 孤立加權
 
 def _vulnerability_pts(requester_id, db: Session) -> float:
     """
-    平時照顧、災時派遣的串接點。基礎是 UNDRR 災害風險框架
-    Risk = Hazard × Exposure × Vulnerability / Capacity（見
-    app/services/hazard.py）——這裡算的是 Vulnerability 那一項。
+    平時照顧、災時派遣的串接點。這裡只計算需求者的脆弱度訊號，
+    不宣稱包含即時 hazard、exposure 或道路風險模型。
 
     依三項已在系統中持續累積的關懷資料算出加權（0–28 分）：
       checkin_pts   = min(近 7 天「未回應/求助」打卡次數 × 4, 12)
@@ -264,30 +263,15 @@ def _vulnerability_pts(requester_id, db: Session) -> float:
 def _haversine(lat1, lng1, lat2, lng2) -> float:
     if None in (lat1, lng1, lat2, lng2):
         return float("inf")
-    R = 6371.0
-    d_lat = math.radians(lat2 - lat1)
-    d_lng = math.radians(lng2 - lng1)
-    a = (math.sin(d_lat / 2) ** 2
-         + math.cos(math.radians(lat1))
-         * math.cos(math.radians(lat2))
-         * math.sin(d_lng / 2) ** 2)
-    return R * 2 * math.asin(math.sqrt(a))
+    return haversine_km(lat1, lng1, lat2, lng2)
 
 
 def _distance_km(lat1, lng1, lat2, lng2, db: Session | None = None) -> float:
+    """Straight-line estimate used only for candidate ranking.
+
+    The platform does not claim live road conditions. Operators must confirm
+    access before approving a dispatch.
     """
-    Real road-network distance where available (app/services/road_network.py
-    — currently covers the Hua-Dong/east-coast corridor), falling back to
-    straight-line haversine everywhere else (e.g. Taichung, where no road
-    graph is built). Straight-line distance across mountainous terrain
-    systematically understates real travel distance/time; using the real
-    road graph where we have one is a materially more honest number to
-    score dispatch decisions on, not just to display.
-    """
-    if None not in (lat1, lng1, lat2, lng2):
-        road_d = road_network.road_distance_km(lat1, lng1, lat2, lng2, db=db)
-        if road_d is not None:
-            return road_d
     return _haversine(lat1, lng1, lat2, lng2)
 
 

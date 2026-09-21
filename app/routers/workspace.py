@@ -1,8 +1,6 @@
 import json
 from datetime import UTC, datetime
 from urllib.error import URLError
-from urllib.parse import urlencode
-from urllib.request import Request as URLRequest, urlopen
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -21,13 +19,6 @@ from app.services.workspace_inventory import (InventoryCommand, InventoryConflic
 
 router = APIRouter()
 
-OVERPASS_SERVICES = (
-    ("VK Maps", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"),
-    ("FOSSGIS", "https://overpass-api.de/api/interpreter"),
-    ("Private.coffee", "https://overpass.private.coffee/api/interpreter"),
-)
-
-
 class WorkspaceWrite(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     graph: GraphDocument = Field(default_factory=GraphDocument)
@@ -37,8 +28,6 @@ class WorkspaceWrite(BaseModel):
 
 class AnalysisRequest(BaseModel):
     graph: GraphDocument
-    start: str | None = None
-    end: str | None = None
 
 
 class ComparisonRequest(AnalysisRequest):
@@ -61,15 +50,6 @@ class ApplyAllocationRequest(BaseModel):
     assignments: list[AssignmentIn] = Field(max_length=500)
 
 
-class BoundsRequest(BaseModel):
-    south: float = Field(ge=-85, le=85, allow_inf_nan=False)
-    north: float = Field(ge=-85, le=85, allow_inf_nan=False)
-    west: float = Field(ge=-180, le=180, allow_inf_nan=False)
-    east: float = Field(ge=-180, le=180, allow_inf_nan=False)
-    base: GraphDocument = Field(default_factory=GraphDocument)
-    include_facilities: bool = False
-
-
 def timestamp():
     return datetime.now(UTC).isoformat()
 
@@ -79,9 +59,12 @@ def serialize(row, detail=True):
     if detail:
         document = json.loads(row.document)
         if "graph" in document:
-            result.update(graph=document["graph"], baseline=document.get("baseline"))
+            graph = GraphDocument.model_validate(document["graph"]).model_dump(mode="json")
+            baseline = (ComparisonBaseline.model_validate(document["baseline"]).model_dump(mode="json")
+                        if document.get("baseline") is not None else None)
+            result.update(graph=graph, baseline=baseline)
         else:
-            result.update(graph=document, baseline=None)
+            result.update(graph=GraphDocument.model_validate(document).model_dump(mode="json"), baseline=None)
     return result
 
 
@@ -111,51 +94,15 @@ def preview_import(body: ImportRequest):
 @router.post("/analyze")
 def analyze_graph(body: AnalysisRequest):
     try:
-        return analyze(body.graph, body.start, body.end)
+        return analyze(body.graph)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
-
-
-@router.post("/openstreetmap")
-def openstreetmap(body: BoundsRequest):
-    if not (0 < body.north - body.south <= 0.12 and 0 < body.east - body.west <= 0.12):
-        raise HTTPException(400, "請放大地圖：單次範圍的經度與緯度跨度須小於 0.12 度，可分區追加")
-    bbox = f"{body.south},{body.west},{body.north},{body.east}"
-    query = f'[out:json][timeout:15];way["highway"~"^(motorway|trunk|primary|secondary|tertiary|residential|unclassified|service|living_street|.*_link)$"]({bbox});(._;>;);out body;'
-    if body.include_facilities:
-        query += (
-            f'(nwr["amenity"~"^(hospital|clinic|pharmacy|fire_station|police|school|community_centre|social_facility|shelter)$"]({bbox});'
-            f'nwr["shop"~"^(supermarket|convenience)$"]({bbox}););out center;'
-        )
-    data = None
-    provider = None
-    for service_name, endpoint in OVERPASS_SERVICES:
-        request = URLRequest(endpoint, data=urlencode({"data": query}).encode(),
-                             headers={"User-Agent": "SmartEmergency/1.0", "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json"})
-        try:
-            with urlopen(request, timeout=22) as response:
-                data = response.read(5_000_001)
-            provider = service_name
-            break
-        except (URLError, TimeoutError):
-            continue
-    if data is None:
-        raise HTTPException(502, "OpenStreetMap 暫時無法回應，可稍後重試或匯入本機檔案")
-    try:
-        if len(data) > 5_000_000:
-            raise ValueError("資料過大，請縮小地圖範圍")
-        result = import_document(ImportRequest(format="osm", content=data.decode("utf-8"), base=body.base,
-                                              source=f"OpenStreetMap contributors / ODbL / {provider} / {timestamp()}"))
-        result["provider"] = provider
-        return result
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError) as exc:
-        raise HTTPException(400, str(exc)) from exc
 
 
 @router.post("/compare")
 def compare_graphs(body: ComparisonRequest):
     try:
-        return compare(body.baseline, body.graph, body.start, body.end)
+        return compare(body.baseline, body.graph)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
 

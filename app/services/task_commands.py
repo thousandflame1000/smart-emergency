@@ -326,48 +326,6 @@ class TaskCommandService:
             {"reason": reason},
         )
 
-    def block_task_for_road_change(
-        self,
-        task_id: str,
-        expected_version: int,
-        *,
-        road_segment_id: str,
-        observation_id: str,
-    ) -> Task:
-        """System command used only by the road-impact coordinator."""
-        try:
-            task = (
-                self.db.query(Task)
-                .filter(Task.id == task_id)
-                .with_for_update()
-                .first()
-            )
-            if not task:
-                raise TaskNotFoundError("Task not found")
-            if task.status == TaskStatus.BLOCKED.value:
-                return task
-            self._validate_transition(task.status, TaskStatus.BLOCKED.value)
-            self._require_expected_version(task, expected_version)
-            new_version = self._transition(
-                task,
-                expected_version,
-                TaskStatus.BLOCKED.value,
-            )
-            self._event(
-                task,
-                new_version,
-                "ROAD_BLOCKED",
-                None,
-                {
-                    "road_segment_id": road_segment_id,
-                    "observation_id": observation_id,
-                },
-            )
-            return self._commit_and_get(task.id)
-        except Exception:
-            self.db.rollback()
-            raise
-
     def cancel_task(
         self,
         task_id: str,

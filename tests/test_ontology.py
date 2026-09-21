@@ -66,24 +66,17 @@ def test_schema_exposes_ontology_primitives():
     assert "Person" in schema["object_types"]
     assert "ResourceRequest" in schema["object_types"]
     assert "DecisionEvent" in schema["object_types"]
-    assert "RoadNode" in schema["object_types"]
-    assert "RoadEdge" in schema["object_types"]
     assert any(link["id"] == "MATCHED_TO" for link in schema["link_types"])
     assert any(link["id"] == "ACTION_ON" for link in schema["link_types"])
-    assert any(link["id"] == "ROAD_CONNECTS" for link in schema["link_types"])
     assert any(action["id"] == "confirm_dispatch" for action in schema["actions"])
-    assert any(action["id"] == "mutate_road_topology" for action in schema["actions"])
     assert any(action["id"] == "inspect_operational_risks" for action in schema["actions"])
     assert any(action["id"] == "generate_operational_playbook" for action in schema["actions"])
-    assert any(action["id"] == "compare_courses_of_action" for action in schema["actions"])
-    assert any(action["id"] == "dry_run_course_of_action" for action in schema["actions"])
     assert any(action["id"] == "task_delivered" for action in schema["actions"])
     assert any(action["id"] == "task_decline" for action in schema["actions"])
     assert any(fn["id"] == "batch_assignment" for fn in schema["functions"])
     assert any(fn["id"] == "operational_reasoning" for fn in schema["functions"])
     assert any(fn["id"] == "operational_playbook" for fn in schema["functions"])
-    assert any(fn["id"] == "courses_of_action" for fn in schema["functions"])
-    assert any(fn["id"] == "course_of_action_dry_run" for fn in schema["functions"])
+    assert any(fn["id"] == "candidate_distance" for fn in schema["functions"])
 
 
 def test_graph_links_people_requests_resources_and_alerts(db):
@@ -103,8 +96,6 @@ def test_graph_links_people_requests_resources_and_alerts(db):
     assert f"CARE_CONTACT:Person:{elder.id}->Person:{contact.id}" in edge_ids
     assert f"ACTION_ON:DecisionEvent:{event.id}->ResourceRequest:{need.id}" in edge_ids
     assert f"ACTION_RESOURCE:DecisionEvent:{event.id}->Resource:{resource.id}" in edge_ids
-    assert "RoadNode:yuli" in node_ids
-    assert any(edge.startswith("ROAD_CONNECTS:RoadEdge:changbin__yuli") for edge in edge_ids)
     assert graph["metrics"]["active_alerts"] == 1
     assert graph["metrics"]["decision_events"] == 1
 

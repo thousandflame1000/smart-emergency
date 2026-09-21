@@ -6,7 +6,7 @@ from pydantic import ValidationError
 
 from app.main import app
 from app.models.workspace import TopologyWorkspace
-from app.services.workspace import Edge, GraphDocument, ImportRequest, LogisticsRecord, Node, analyze, import_document
+from app.services.workspace import GraphDocument, ImportRequest, LogisticsRecord, Node, import_document
 from app.services.workspace_allocation import AllocationRequest, plan_allocation
 
 
@@ -14,16 +14,12 @@ def record(id, role, quantity=1, **kwargs):
     return LogisticsRecord(id=id, role=role, item="飲用水", unit="箱", quantity=quantity, **kwargs)
 
 
-def network():
+def event_inventory():
     return GraphDocument(nodes=[
-        Node(id="s1", label="第一供應點", kind="supply", lat=25, lng=121, logistics=[record("stock1", "supply")]),
-        Node(id="s2", label="第二供應點", kind="supply", lat=25.01, lng=121, logistics=[record("stock2", "supply")]),
-        Node(id="d1", label="需求一", kind="person", lat=25, lng=121.001, logistics=[record("demand1", "demand")]),
-        Node(id="d2", label="需求二", kind="person", lat=25, lng=121.01, logistics=[record("demand2", "demand")]),
-    ], edges=[
-        Edge(id="near", source="s1", target="d1", kind="access", directed=True),
-        Edge(id="far", source="s1", target="d2", kind="access", directed=True),
-        Edge(id="limited", source="s2", target="d1", kind="access", directed=True),
+        Node(id="s1", label="第一供應點", kind="supply", lat=25, lng=121.01, logistics=[record("stock1", "supply")]),
+        Node(id="s2", label="第二供應點", kind="supply", lat=25, lng=121.019, logistics=[record("stock2", "supply")]),
+        Node(id="d1", label="需求一", kind="custom", lat=25, lng=121.018, logistics=[record("demand1", "demand")]),
+        Node(id="d2", label="需求二", kind="custom", lat=25, lng=121.001, logistics=[record("demand2", "demand")]),
     ])
 
 
@@ -32,17 +28,17 @@ def plan(graph, **kwargs):
 
 
 def test_global_flow_avoids_greedy_nearest_assignment_trap_without_mutating():
-    graph = network()
+    graph = event_inventory()
     before = graph.model_dump()
-    result = plan(graph)
+    result = plan(graph, max_distance_km=1.5)
     assert result["after"]["summary"] == {"stock":2, "dispatch_capacity":2, "requested":2, "allocated":2, "unmet":0}
     assert {(a["source"], a["target"]) for a in result["after"]["assignments"]} == {("s1","d2"),("s2","d1")}
     assert graph.model_dump() == before
-    assert all(a["route"]["edges"] for a in result["after"]["assignments"])
+    assert all(a["distance"]["method"] == "straight_line" for a in result["after"]["assignments"])
 
 
 def test_priority_outweighs_distance_and_dispatch_limit_is_not_stock():
-    graph = network()
+    graph = event_inventory()
     graph.nodes[0].logistics[0].quantity = 10
     graph.nodes[0].logistics[0].dispatch_limit = 2
     graph.nodes[1].available = False
@@ -60,31 +56,29 @@ def test_priority_outweighs_distance_and_dispatch_limit_is_not_stock():
     assert all(d["reason"] == "capacity_or_priority" for d in result["demands"])
 
 
-@pytest.mark.parametrize("change,reason", [("closed","unreachable"),("reverse","unreachable"),("slow","travel_limit"),("unlocated","missing_coordinates"),("unavailable","destination_unavailable"),("limit","no_dispatch_capacity")])
-def test_real_graph_constraints_and_deficit_reasons(change, reason):
-    graph = network()
+@pytest.mark.parametrize("change,reason", [
+    ("far", "distance_limit"), ("unlocated", "missing_coordinates"),
+    ("unavailable", "destination_unavailable"), ("limit", "no_dispatch_capacity"),
+])
+def test_candidate_constraints_and_deficit_reasons(change, reason):
+    graph = event_inventory()
     graph.nodes[1].logistics = []
     graph.nodes[2].logistics = []
-    if change == "closed":
-        graph.edges[1].status = "closed"
-    elif change == "reverse":
-        graph.edges[1].source, graph.edges[1].target = "d2", "s1"
-    elif change == "slow":
-        graph.edges[1].status = "slow"
-        graph.edges[1].multiplier = 100
+    if change == "far":
+        graph.nodes[3].lng = 122
     elif change == "unlocated":
         graph.nodes[3].lat = graph.nodes[3].lng = None
     elif change == "unavailable":
         graph.nodes[3].available = False
     else:
         graph.nodes[0].logistics[0].dispatch_limit = 0
-    result = plan(graph, max_minutes=10)["after"]
+    result = plan(graph, max_distance_km=1)["after"]
     assert result["summary"]["allocated"] == 0
     assert result["demands"][0]["reason"] == reason
 
 
 def test_missing_supply_coordinates_and_exact_item_unit_matching():
-    graph = network()
+    graph = event_inventory()
     graph.nodes[0].logistics[0].unit = "瓶"
     graph.nodes[1].logistics[0].item = "食品"
     result = plan(graph)["after"]
@@ -97,28 +91,23 @@ def test_missing_supply_coordinates_and_exact_item_unit_matching():
     assert all(d["reason"] == "no_dispatch_capacity" for d in result["demands"])
 
 
-def test_unknown_osm_stock_is_never_invented_and_no_demand_is_valid():
+def test_facility_quantity_is_not_silently_treated_as_stock():
     graph = GraphDocument(nodes=[Node(id="f", kind="facility", lat=25, lng=121, quantity=1000)])
     assert plan(graph)["after"]["summary"] == {"stock":0, "dispatch_capacity":0, "requested":0, "allocated":0, "unmet":0}
     graph.nodes[0].logistics = [record("s", "supply", 10)]
     assert plan(graph)["after"]["inventory"][0]["remaining"] == 10
 
 
-def test_zero_distance_colocated_flow_and_supply_analysis_consistency():
+def test_zero_distance_colocated_flow_is_explicit():
     graph = GraphDocument(nodes=[Node(id="f", kind="facility", lat=25, lng=121, quantity=0,
         logistics=[record("s", "supply", 10), record("d", "demand", 4)])])
     result = plan(graph)["after"]
     assert result["summary"]["allocated"] == 4
-    assert result["assignments"][0]["route"] == {"nodes":["f"],"edges":[],"km":0,"minutes":0}
-    graph.nodes.append(Node(id="p", kind="person", lat=25, lng=121.001))
-    graph.edges.append(Edge(id="route", source="f", target="p", kind="access"))
-    assert analyze(graph)["unreachable_people"] == []
-    graph.nodes[0].logistics[0].quantity = 0
-    assert analyze(graph)["unreachable_people"] == ["p"]
+    assert result["assignments"][0]["distance"] == {"km":0.0, "method":"straight_line"}
 
 
 def test_deleted_or_changed_demands_are_explicit_in_baseline_comparison():
-    baseline = network()
+    baseline = event_inventory()
     graph = baseline.model_copy(deep=True)
     graph.nodes[2].logistics = []
     graph.nodes[3].logistics[0].quantity = 5
@@ -126,7 +115,7 @@ def test_deleted_or_changed_demands_are_explicit_in_baseline_comparison():
     assert result["comparison"]["exited_demands"] == ["demand1"]
     assert result["comparison"]["changed_demands"] == ["demand2"]
     assert result["before"]["summary"]["allocated"] == 2
-    assert result["after"]["summary"]["unmet"] == 4
+    assert result["after"]["summary"]["unmet"] == 3
 
 
 @pytest.mark.parametrize("value", [True, 1.5, -1, 1_000_001, float("nan")])
@@ -149,23 +138,22 @@ def test_csv_explicit_inventory_and_workspace_roundtrip(db):
 
 
 def test_records_unique_validation_api_nonmutation_and_invalid_limits(db):
-    graph = network()
+    graph = event_inventory()
     graph.nodes[1].logistics[0].id = "stock1"
     with pytest.raises(ValidationError):
         GraphDocument.model_validate(graph.model_dump())
     client = TestClient(app)
-    body = {"graph":network().model_dump(),"item":"飲用水","unit":"箱"}
+    body = {"graph":event_inventory().model_dump(),"item":"飲用水","unit":"箱"}
     assert client.post('/api/workspaces/allocate', json=body).status_code == 200
-    body["max_minutes"] = 0
+    body["max_distance_km"] = 0
     assert client.post('/api/workspaces/allocate', json=body).status_code == 422
     assert db.query(TopologyWorkspace).count() == 0
 
 
 def test_input_reordering_is_deterministic():
-    base = network()
+    base = event_inventory()
     changed = base.model_copy(deep=True)
     changed.nodes.reverse()
-    changed.edges.reverse()
     assert plan(base)["after"] == plan(changed)["after"]
 
 
@@ -176,7 +164,7 @@ def test_supply_limit_is_explicit_and_does_not_silently_drop_rows():
 
 
 def test_record_order_is_not_a_data_change_and_import_priority_zero_is_rejected():
-    base = network()
+    base = event_inventory()
     base.nodes[0].logistics.append(record("extra", "demand", 2))
     changed = base.model_copy(deep=True)
     changed.nodes[0].logistics.reverse()

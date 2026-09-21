@@ -1,21 +1,25 @@
 """Browser verification against serve_integrated_workspace.py only."""
 import json
+import os
 import tempfile
 from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
+BASE_URL = os.getenv("WORKSPACE_PREVIEW_URL", "http://127.0.0.1:8766").rstrip("/")
+
 
 def main():
     from serve_integrated_workspace import initialize
-    initialize(reset=True)
+    if "WORKSPACE_PREVIEW_URL" not in os.environ:
+        initialize(reset=True)
     artifacts = Path(tempfile.gettempdir()) / "smart-emergency-workspace"
     artifacts.mkdir(exist_ok=True)
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True, channel="msedge")
         context = browser.new_context(viewport={"width": 1440, "height": 1000})
         context.route("**/*", lambda route: route.abort() if route.request.method not in ("GET", "HEAD")
-                      and not route.request.url.startswith("http://127.0.0.1:8766/") else route.continue_())
+                      and not route.request.url.startswith(BASE_URL + "/") else route.continue_())
         page = context.new_page()
         errors, uploads, failed_requests = [], [], []
         page.on("requestfailed", lambda request: failed_requests.append({"url": request.url, "failure": request.failure}))
@@ -23,7 +27,7 @@ def main():
         page.on("dialog", lambda dialog: dialog.accept())
         page.on("request", lambda request: uploads.append({"url": request.url, "bytes": len(request.post_data or "")})
                 if request.method in ("POST", "PUT", "PATCH") else None)
-        page.goto("http://127.0.0.1:8766/", wait_until="networkidle")
+        page.goto(BASE_URL + "/", wait_until="networkidle")
         frame = page.frame_locator('iframe[data-view="/workspace"]')
         workspace = next(f for f in page.frames if "/workspace" in f.url)
         try:
@@ -33,9 +37,9 @@ def main():
             print(json.dumps({"errors": errors, "failed_requests": failed_requests,
                               "status": frame.locator("#status").inner_text()}, ensure_ascii=True))
             raise
-        choices = page.request.get("http://127.0.0.1:8766/api/workspaces").json()
+        choices = page.request.get(BASE_URL + "/api/workspaces").json()
         frame.locator("#workspace-list").select_option(choices[0]["id"])
-        workspace.wait_for_function("state.graph.edges.some(e=>e.id==='road-main')")
+        workspace.wait_for_function("state.graph.edges.some(e=>e.id==='incident-focus')")
         frame.locator("#sync-db").click()
         workspace.wait_for_function("!operationRequest")
         assert not uploads, uploads
@@ -81,15 +85,17 @@ def main():
         workspace.wait_for_function("cy && cy.nodes().length > 0")
         page.screenshot(path=str(artifacts / "desktop-graph.png"), full_page=True)
         assert frame.locator("#graph canvas").count() > 0
-        workspace.evaluate("select('edge','road-main')")
-        frame.locator("#edit-status").select_option("closed")
+        workspace.evaluate("select('edge','incident-focus')")
+        frame.locator("#edit-label").fill("事件追蹤（已檢視）")
         frame.locator('#edit-form button[type="submit"]').click()
         page.get_by_role("button", name="總覽", exact=True).click()
-        page.get_by_role("button", name="營運工作區", exact=True).click()
-        assert workspace.evaluate("state.graph.edges.find(e=>e.id==='road-main').status") == "closed"
+        page.locator('iframe[data-view="/view/dashboard"]').wait_for(state="visible")
+        page.screenshot(path=str(artifacts / "desktop-overview.png"), full_page=True)
+        page.get_by_role("button", name="事件處置工作區", exact=True).click()
+        assert workspace.evaluate("state.graph.edges.find(e=>e.id==='incident-focus').label") == "事件追蹤（已檢視）"
         assert "embed=1" in workspace.url and workspace.evaluate("state.dirty")
         frame.locator("#undo").click()
-        assert workspace.evaluate("state.graph.edges.find(e=>e.id==='road-main').status") == "normal"
+        assert workspace.evaluate("state.graph.edges.find(e=>e.id==='incident-focus').label") == "事件追蹤"
 
         frame.locator('[data-stage="open"]').click()
         water_need = workspace.evaluate("operationalNodes().find(n=>n.properties.need_type==='water'&&n.properties.status==='open')?.id")

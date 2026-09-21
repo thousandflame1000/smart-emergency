@@ -35,49 +35,25 @@ def _changes(before, after):
     return {"added": added, "removed": removed, "updated": updated}
 
 
-def compare(baseline: GraphDocument, graph: GraphDocument,
-            start: str | None = None, end: str | None = None) -> dict:
-    if bool(start) != bool(end):
-        raise ValueError("路徑比較須同時選擇起點與終點")
-    all_ids = {n.id for n in baseline.nodes + graph.nodes}
-    if start and (start not in all_ids or end not in all_ids):
-        raise ValueError("路徑端點不在基準或目前情境中")
-
+def compare(baseline: GraphDocument, graph: GraphDocument) -> dict:
     def report(document):
         document = GraphDocument(nodes=sorted(document.nodes, key=lambda n: n.id),
                                  edges=sorted(document.edges, key=lambda e: e.id))
-        ids = {n.id for n in document.nodes}
-        if start and (start not in ids or end not in ids):
-            result = analyze(document)
-            result["route"] = {"reachable": False, "nodes": [], "edges": [], "minutes": None,
-                               "km": None, "reason": "endpoint_missing"}
-            return result
-        return analyze(document, start, end)
+        return analyze(document)
 
     before, after = report(baseline), report(graph)
-    eligible_before = {n.id for n in baseline.nodes if n.kind == "person" and n.available}
-    eligible_after = {n.id for n in graph.nodes if n.kind == "person" and n.available}
-    # A deleted or disabled person is no longer comparable, not a successful rescue.
+    eligible_before = {n.id for n in baseline.nodes if n.available}
+    eligible_after = {n.id for n in graph.nodes if n.available}
     common = eligible_before & eligible_after
-    old_isolated, new_isolated = set(before["unreachable_people"]), set(after["unreachable_people"])
-    route_delta = None
-    if start:
-        old, new = before["route"], after["route"]
-        both = old["reachable"] and new["reachable"]
-        status = ("changed" if old != new else "unchanged") if both else (
-            "lost" if old["reachable"] else "restored" if new["reachable"] else "unavailable")
-        route_delta = {"status": status,
-                       "minutes": round(new["minutes"] - old["minutes"], 2) if both else None,
-                       "km": round(new["km"] - old["km"], 3) if both else None}
+    old_unlinked, new_unlinked = set(before["unlinked_objects"]), set(after["unlinked_objects"])
     return {
-        "model": "topology-comparison-v2", "generated_at": datetime.now(UTC).isoformat(),
+        "model": "relation-comparison-v1", "generated_at": datetime.now(UTC).isoformat(),
         "baseline_fingerprint": fingerprint(baseline), "scenario_fingerprint": fingerprint(graph),
         "before": before, "after": after,
         "metric_deltas": {key: after["metrics"][key] - value for key, value in before["metrics"].items()},
         "changes": {"nodes": _changes(baseline.nodes, graph.nodes), "edges": _changes(baseline.edges, graph.edges)},
-        "newly_unreachable_people": sorted(common & (new_isolated - old_isolated)),
-        "restored_people": sorted(common & (old_isolated - new_isolated)),
-        "entered_people": sorted(eligible_after - eligible_before),
-        "exited_people": sorted(eligible_before - eligible_after),
-        "route_delta": route_delta,
+        "newly_unlinked_objects": sorted(common & (new_unlinked - old_unlinked)),
+        "newly_linked_objects": sorted(common & (old_unlinked - new_unlinked)),
+        "entered_objects": sorted(eligible_after - eligible_before),
+        "exited_objects": sorted(eligible_before - eligible_after),
     }
