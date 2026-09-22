@@ -157,7 +157,8 @@ def test_allocation_over_real_data_becomes_a_pending_suggestion_an_admin_can_con
     db.expire_all()
     n = db.query(CommunityNeed).filter(CommunityNeed.id == need.id).one()
     assert n.status == "suggested" and str(n.matched_resource_id) == str(res.id)
-    assert db.query(CommunityResource).filter(CommunityResource.id == res.id).one().is_available is False
+    reserved = db.query(CommunityResource).filter(CommunityResource.id == res.id).one()
+    assert reserved.reserved_amount == 5 and reserved.is_available is True
 
     confirmed = api.post(f"/api/resources/needs/{need.id}/confirm_dispatch")
     assert confirmed.status_code == 200, confirmed.text
@@ -345,7 +346,7 @@ def test_stale_approval_and_decline_do_not_change_a_new_suggestion(db, api, line
     for action in ("confirm_dispatch", "decline_suggestion"):
         assert api.post(f"/api/resources/needs/{need.id}/{action}", params={"expected_version": version}).status_code == 409
     db.refresh(need); db.refresh(res)
-    assert need.status == "suggested" and not res.is_available and not line_outbox.sent
+    assert need.status == "suggested" and res.reserved_amount == 5 and not line_outbox.sent
 
 
 def test_partial_or_stale_allocation_never_creates_full_dispatch(db, api, line_outbox):
@@ -425,7 +426,7 @@ def test_automatic_dispatch_cannot_reuse_a_resource_claimed_after_its_plan(db, m
         result = plan(needs, session)
         assert result
         with SessionLocal() as other_session:
-            other = CommunityNeed(requester_id=elder_id, need_type="water", quantity="5箱", status="open")
+            other = CommunityNeed(requester_id=elder_id, need_type="water", quantity="20箱", status="open")
             other_session.add(other); other_session.commit()
             assert not dispatch.propose_manual(str(other.id), resource_id, other_session).get("error")
         return result

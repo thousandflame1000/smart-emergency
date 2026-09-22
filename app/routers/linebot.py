@@ -588,6 +588,8 @@ def _register_resource(event, db, user, rest: str) -> None:
 def save_resource(db, user, detected_type: str, quantity, explicit_address, resource_name=None) -> tuple[str, bool]:
     """Create or update this person's resource. Returns (reply text, whether to ask for a location)."""
     from app.models.resource import CommunityResource
+    from app.models.need import CommunityNeed
+    from app.services.inventory import set_quantity_fields
     address = explicit_address or (user.address or None)
 
     coords = _resolve_coordinates(user, explicit_address)
@@ -600,10 +602,16 @@ def save_resource(db, user, detected_type: str, quantity, explicit_address, reso
         CommunityResource.resource_type == detected_type,
         CommunityResource.is_available == True,
     ).first()
+    if existing and db.query(CommunityNeed.id).filter(
+        CommunityNeed.matched_resource_id == existing.id,
+        CommunityNeed.status.in_(("suggested", "matched")),
+    ).first():
+        existing = None
     label = RES_TYPE_ZH.get(detected_type, "物資")
     if existing:
         if quantity:
-            existing.quantity = quantity
+            set_quantity_fields(existing, quantity)
+            existing.inventory_version = int(existing.inventory_version or 1) + 1
         if address:
             existing.address = address
         if resource_name:
@@ -613,11 +621,13 @@ def save_resource(db, user, detected_type: str, quantity, explicit_address, reso
         existing.last_updated = now_utc()
         verb = "已更新"
     else:
-        db.add(CommunityResource(
+        resource = CommunityResource(
             owner_id=user.id, resource_type=detected_type,
-            name=resource_name or f"{user.name}提供的{label}", quantity=quantity, address=address,
+            name=resource_name or f"{user.name}提供的{label}", address=address,
             lat=lat, lng=lng, is_available=True,
-        ))
+        )
+        set_quantity_fields(resource, quantity)
+        db.add(resource)
         verb = "登記成功"
     db.commit()
 

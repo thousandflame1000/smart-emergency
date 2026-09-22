@@ -31,7 +31,17 @@ from app.services import admin_session
 # /f/ 是機器人發給民眾與志工的網頁表單，身分由連結上的簽章保證，不能要求他們輸入展演密碼。
 # /admin/login 是管理員用 LINE 連結換取登入 cookie 的入口，本身用簽章保護。
 # /join 是公開的掃碼加入頁：只有兩個 QR Code，沒有任何資料，讓現場的人可以直接掃碼試用。
-_EXEMPT_PREFIXES = ("/webhook", "/health", "/f/", "/admin/login", "/join")
+_EXEMPT_PREFIXES = (
+    "/webhook",
+    "/health",
+    "/f/",
+    "/admin/login",
+    "/admin/logout",
+    "/join",
+    "/api/system/security",
+    "/api/rag/query",
+    "/api/rag/stats",
+)
 
 _CACHE_SECONDS = 30
 _cache: dict = {}
@@ -68,7 +78,7 @@ def _admin_by_id(user_id: str):
 
 def line_login_enforced() -> bool:
     """Production with at least one admin bound to LINE: the console needs a LINE-issued login.
-    With no such admin nobody could ever sign in, so it stays open (and the banner says so)."""
+    With no such admin the production middleware fails closed until a demo password is set."""
     if not settings.ADMIN_LINE_LOGIN or settings.APP_ENV != "production":
         return False
 
@@ -87,7 +97,9 @@ def line_login_enforced() -> bool:
 def auth_mode() -> str:
     if settings.DEMO_PASSWORD:
         return "password"
-    return "line-admin" if line_login_enforced() else "open"
+    if line_login_enforced():
+        return "line-admin"
+    return "locked" if settings.APP_ENV == "production" else "open"
 
 
 def _basic_password_ok(request: Request, password: str) -> bool:
@@ -104,25 +116,32 @@ def _basic_password_ok(request: Request, password: str) -> bool:
 
 class DemoAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path.startswith(_EXEMPT_PREFIXES):
-            return await call_next(request)
+        exempt = request.url.path.startswith(_EXEMPT_PREFIXES)
 
         admin = None
         cookie = request.cookies.get(admin_session.COOKIE_NAME)
         if cookie:
             uid = admin_session.verify_session(cookie)
             admin = _admin_by_id(uid) if uid else None
+        password = settings.DEMO_PASSWORD
+        if not admin and password and _basic_password_ok(request, password):
+            admin = {"id": None, "name": "demo-password", "auth": "basic"}
         marker = admin_session.current_admin.set(admin)
         try:
-            password = settings.DEMO_PASSWORD
-            if admin or (password and _basic_password_ok(request, password)):
+            if exempt or admin:
                 return await call_next(request)
-            if not password and not line_login_enforced():
+            mode = auth_mode()
+            if mode == "open":
                 return await call_next(request)
             headers = {"WWW-Authenticate": 'Basic realm="linri-finals"'} if password else {}
-            message = ("需要登入才能存取。管理員請在 LINE 傳「後台」取得登入連結。"
-                       if not password else "需要密碼才能存取（決賽展演期間的臨時保護）")
-            return Response(status_code=401, headers=headers, content=message,
+            message = (
+                "Production administration is locked until an administrator login or demo password is configured."
+                if mode == "locked"
+                else "需要登入才能存取。管理員請在 LINE 傳「後台」取得登入連結。"
+                if not password
+                else "需要密碼才能存取（決賽展演期間的臨時保護）"
+            )
+            return Response(status_code=503 if mode == "locked" else 401, headers=headers, content=message,
                             media_type="text/plain; charset=utf-8")
         finally:
             admin_session.current_admin.reset(marker)

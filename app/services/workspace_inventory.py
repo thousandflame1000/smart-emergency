@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, UTC
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -12,19 +11,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.dispatch_event import DispatchEvent
+from app.models.inventory import InventoryEvent
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.resource_point import ResourcePoint
 from app.models.user import User
 from app.services.record_version import row_predicates, row_version
-
-
-def quantity_parts(value: str | None) -> tuple[int, str] | None:
-    # A count without a unit uses the legacy "份". Never equate boxes with bottles.
-    match = re.fullmatch(r"\s*(\d+)\s*([^\d\s,，/／+＋()（）]{0,20})\s*", value or "")
-    if not match or int(match[1]) > 1_000_000:
-        return None
-    return int(match[1]), match[2] or "份"
+from app.services.inventory import quantity_parts, set_quantity_fields
 
 
 def editable_values(row) -> dict:
@@ -93,8 +86,14 @@ def _prepare(change: InventoryChange, db: Session):
                     and all(editable_values(row).get(k) == v for k, v in values.items())):
                 return row, {}, {}, "already_applied"
             raise InventoryConflict("這個物件已登記到資料庫，請重新同步")
-        row = CommunityResource(id=key, owner_id=change.owner_id, resource_type=change.resource_type,
-                                is_available=True, **{k: v for k, v in values.items() if k != "is_available"})
+        row = CommunityResource(
+            id=key,
+            owner_id=change.owner_id,
+            resource_type=change.resource_type,
+            is_available=True,
+            **{k: v for k, v in values.items() if k not in ("is_available", "quantity")},
+        )
+        set_quantity_fields(row, values.get("quantity"))
         row.is_available = values.get("is_available", True)
         before = {}
     else:
@@ -144,6 +143,10 @@ def apply_inventory(command: InventoryCommand, db: Session, actor: dict | None =
     try:
         prepared = [(change, *_prepare(change, db)) for change in command.changes]
         for change, row, before, values, action in prepared:
+            is_resource = isinstance(row, CommunityResource)
+            quantity_before = row.quantity_amount if is_resource else None
+            unit_before = row.quantity_unit if is_resource else None
+            version_before = int(row.inventory_version or 1) if is_resource else None
             if action == "create":
                 db.add(row)
                 db.flush()
@@ -152,10 +155,38 @@ def apply_inventory(command: InventoryCommand, db: Session, actor: dict | None =
                 # Compare every column as well as timestamps; older writers do not all bump timestamps.
                 predicates = row_predicates(row)
                 timestamp_key = "last_updated" if isinstance(row, CommunityResource) else "updated_at"
+                update_values = {**values, timestamp_key: datetime.now(UTC).replace(tzinfo=None)}
+                if is_resource and "quantity" in values:
+                    parsed = quantity_parts(values["quantity"])
+                    update_values.update(
+                        quantity_amount=parsed[0] if parsed else None,
+                        quantity_unit=parsed[1] if parsed else None,
+                        inventory_version=version_before + 1,
+                    )
                 count = db.query(model).filter(*predicates).update(
-                    {**values, timestamp_key: datetime.now(UTC).replace(tzinfo=None)}, synchronize_session=False)
+                    update_values, synchronize_session=False)
                 if count != 1:
                     raise InventoryConflict("寫入期間資料已變動，整批變更未套用")
+            if is_resource and (action == "create" or "quantity" in values):
+                parsed_after = quantity_parts(values.get("quantity", row.quantity))
+                amount_after = parsed_after[0] if parsed_after else None
+                unit_after = parsed_after[1] if parsed_after else None
+                version_after = 1 if action == "create" else version_before + 1
+                db.add(InventoryEvent(
+                    resource_id=row.id,
+                    event_type="ADJUST",
+                    quantity=abs((amount_after or 0) - (quantity_before or 0)) or None,
+                    unit=unit_after or unit_before,
+                    on_hand_before=0 if action == "create" else quantity_before,
+                    on_hand_after=amount_after,
+                    reserved_before=0,
+                    reserved_after=0,
+                    resource_version=version_after,
+                    actor_id=actor["id"] if actor else None,
+                    actor_label=actor["name"] if actor else "workspace",
+                    details_json=json.dumps({"operation": action, "quantity_text": values.get("quantity", row.quantity)},
+                                            ensure_ascii=False),
+                ))
             if values:
                 db.add(DispatchEvent(action="workspace_inventory", outcome=action,
                                      resource_id=row.id if isinstance(row, CommunityResource) else None,

@@ -257,7 +257,7 @@ def test_me_page_shows_volunteer_resources_and_tasks_and_can_withdraw(db, webcli
     assert me["resources"][0]["available"] is True and me["tasks"] == []
     dispatch.manual_dispatch(str(need.id), str(res.id), db)
     me = webclient.get("/f/api/me", params={"t": t}).json()
-    assert me["tasks"][0]["report_url"].startswith("http") and me["resources"][0]["available"] is False
+    assert me["tasks"][0]["report_url"].startswith("http") and me["resources"][0]["available"] is True
     assert webclient.post("/f/api/withdraw_resource", json={"t": t, "target_id": str(res.id)}).status_code == 409
     other = mk(db, "民眾", ["elderly"], "U-x")
     assert webclient.post("/f/api/withdraw_resource", json={"t": form_token.make_token("U-x"), "target_id": str(res.id)}
@@ -295,10 +295,11 @@ def enforced(monkeypatch):
     demo_auth.reset_cache()
 
 
-def test_console_is_open_until_an_admin_is_bound_to_line(db, enforced, webclient):
+def test_console_is_locked_until_an_admin_is_bound_to_line(db, enforced, webclient):
     mk(db, "沒綁 LINE 的管理員", ["admin"], None)
-    assert webclient.get("/api/dashboard/users").status_code == 200
-    assert webclient.get("/api/system/security").json()["public_admin"] is True
+    assert webclient.get("/api/dashboard/users").status_code == 503
+    sec = webclient.get("/api/system/security").json()
+    assert sec["public_admin"] is False and sec["locked"] is True
 
 
 def test_console_requires_line_login_once_an_admin_is_bound(db, enforced, webclient, line_outbox):
@@ -658,14 +659,14 @@ def test_join_page_degrades_gracefully_without_the_bot_id(monkeypatch, webclient
     assert page.status_code == 200 and "暫時查不到官方帳號資訊" in page.text
 
 
-def test_console_needs_no_login_by_default_even_with_a_bound_admin(db, monkeypatch, webclient):
+def test_console_is_locked_by_default_in_production_without_a_password(db, monkeypatch, webclient):
     from app import demo_auth
     monkeypatch.setattr(settings, "APP_ENV", "production")
     monkeypatch.setattr(settings, "DEMO_PASSWORD", "")
     demo_auth.reset_cache()
     assert settings.ADMIN_LINE_LOGIN is False
     mk(db, "管理員", ["admin"], "U-adm")
-    assert webclient.get("/admin").status_code == 200
-    assert webclient.get("/api/dashboard/users").status_code == 200
-    assert webclient.get("/").status_code == 200
+    assert webclient.get("/admin").status_code == 503
+    assert webclient.get("/api/dashboard/users").status_code == 503
+    assert webclient.get("/").status_code == 503
     demo_auth.reset_cache()

@@ -204,7 +204,8 @@ def security_status():
     return {
         "app_env": _settings.APP_ENV,
         "auth_mode": mode,
-        "auth_enabled": mode != "open",
+        "auth_enabled": mode in ("password", "line-admin"),
+        "locked": mode == "locked",
         "public_admin": _settings.APP_ENV == "production" and mode == "open",
         "admin": admin["name"] if admin else None,
     }

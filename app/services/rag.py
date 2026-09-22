@@ -30,6 +30,8 @@ def query(question: str) -> dict:
         return {
             "answer":     "❌ 系統內無相關資料，請聯繫專業人員或撥打 1966。",
             "sources":    [],
+            "references": [],
+            "retrieval_confidence": None,
             "has_answer": False,
         }
 
@@ -56,13 +58,26 @@ def query(question: str) -> dict:
             + results[0]["content"][:600]
         )
 
-    sources = list({r["source"] for r in results})
+    sources = sorted({r["source"] for r in results})
+    references = [
+        {
+            "chunk_id": result["id"],
+            "source": result["source"],
+            "version": result["version"],
+            "category": result["category"],
+            "similarity": round(result["similarity"], 4),
+        }
+        for result in results
+    ]
 
     return {
         "answer":     answer,
         "sources":    sources,
+        "references": references,
+        "retrieval_confidence": round(max(r["similarity"] for r in results), 4),
         "has_answer": True,
         "chunks_used": len(results),
+        "safety": "資訊輔助，非醫療診斷；生命危急請撥打 119。",
     }
 
 
@@ -146,8 +161,10 @@ def _search(query_embedding: list[float]) -> list[dict]:
                               (np.linalg.norm(q_vec) * np.linalg.norm(c_vec) + 1e-9))
                 if sim >= SIMILARITY_THRESHOLD:
                     scored.append({
+                        "id":          str(c.id),
                         "content":    c.content,
                         "source":     c.source,
+                        "version":    c.version,
                         "category":   c.category,
                         "similarity": sim,
                     })

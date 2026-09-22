@@ -26,6 +26,36 @@ def ensure_additive_schema(engine: Engine) -> None:
             with engine.begin() as connection:
                 connection.exec_driver_sql("ALTER TABLE knowledge_base ADD COLUMN version TEXT")
 
+    if "community_resources" in inspector.get_table_names():
+        resource_columns = {column["name"] for column in inspector.get_columns("community_resources")}
+        additions = {
+            "quantity_amount": "INTEGER",
+            "quantity_unit": "TEXT",
+            "reserved_amount": "INTEGER NOT NULL DEFAULT 0",
+            "inventory_version": "INTEGER NOT NULL DEFAULT 1",
+        }
+        with engine.begin() as connection:
+            for name, sql_type in additions.items():
+                if name not in resource_columns:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE community_resources ADD COLUMN {name} {sql_type}"
+                    )
+
+    if "community_needs" in inspector.get_table_names():
+        need_columns = {column["name"] for column in inspector.get_columns("community_needs")}
+        additions = {
+            "quantity_amount": "INTEGER",
+            "quantity_unit": "TEXT",
+            "reserved_quantity_amount": "INTEGER NOT NULL DEFAULT 0",
+            "fulfilled_quantity_amount": "INTEGER NOT NULL DEFAULT 0",
+        }
+        with engine.begin() as connection:
+            for name, sql_type in additions.items():
+                if name not in need_columns:
+                    connection.exec_driver_sql(
+                        f"ALTER TABLE community_needs ADD COLUMN {name} {sql_type}"
+                    )
+
     if engine.dialect.name == "postgresql":
         _ensure_postgresql_append_only_triggers(engine)
 
@@ -45,6 +75,7 @@ def _ensure_postgresql_append_only_triggers(engine: Engine) -> None:
         for table_name, trigger_name in (
             ("approvals", "approvals_append_only"),
             ("task_events", "task_events_append_only"),
+            ("inventory_events", "inventory_events_append_only"),
         ):
             connection.exec_driver_sql(
                 f"DROP TRIGGER IF EXISTS {trigger_name} ON {table_name}"

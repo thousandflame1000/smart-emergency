@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Text, Float, Integer, ForeignKey, TIMESTAMP
+from sqlalchemy import Column, Text, Float, Integer, ForeignKey, TIMESTAMP, text
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -13,6 +13,10 @@ class CommunityNeed(Base):
     need_type           = Column(Text, nullable=False)
     description         = Column(Text, nullable=True)
     quantity            = Column(Text, nullable=True)
+    quantity_amount     = Column(Integer, nullable=True)
+    quantity_unit       = Column(Text, nullable=True)
+    reserved_quantity_amount = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    fulfilled_quantity_amount = Column(Integer, nullable=False, default=0, server_default=text("0"))
     lat                 = Column(Float, nullable=True)
     lng                 = Column(Float, nullable=True)
     address             = Column(Text, nullable=True)
