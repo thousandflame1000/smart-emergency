@@ -515,13 +515,12 @@ def test_webhook_swallows_handler_errors_instead_of_500(monkeypatch):
     assert res.status_code == 200
 
 
-def test_security_status_flags_locked_production(monkeypatch):
+def test_security_status_flags_public_production(monkeypatch):
     from app.config import settings
     from app.main import app as real_app
     monkeypatch.setattr(settings, "APP_ENV", "production")
     monkeypatch.setattr(settings, "DEMO_PASSWORD", "")
-    sec = TestClient(real_app).get("/api/system/security").json()
-    assert sec["public_admin"] is False and sec["locked"] is True
+    assert TestClient(real_app).get("/api/system/security").json()["public_admin"] is True
     monkeypatch.setattr(settings, "DEMO_PASSWORD", "secret")
     assert TestClient(real_app).get("/api/system/security", auth=("x", "secret")).json()["public_admin"] is False
 
@@ -916,8 +915,7 @@ def test_claiming_matches_the_need_notifies_everyone_and_marks_it_accepted(db, l
     db.expire_all()
     n = db.query(CommunityNeed).filter(CommunityNeed.id == need.id).one()
     assert n.status == "matched" and str(n.matched_resource_id) == str(res.id)
-    matched = db.query(CommunityResource).filter(CommunityResource.id == res.id).one()
-    assert matched.reserved_amount == 1 and matched.is_available is True
+    assert db.query(CommunityResource).filter(CommunityResource.id == res.id).one().is_available is False
     assert any("接單成功" in t for t in replies(line_outbox))
     assert any("志工" in t for t in sent_to(line_outbox, "U-cr")), "求助的人要知道有人接了"
     assert any("自行接單" in t for t in sent_to(line_outbox, "U-adm"))
@@ -992,8 +990,6 @@ def test_task_card_has_accept_button(db, line_outbox):
 
 def test_claim_list_tells_a_volunteer_whose_stock_is_all_in_use(db, line_outbox):
     vol, req, res, need = _claim_world(db)
-    res.quantity = "1"                                            # 只登記了一份，保留後就沒有庫存了
-    db.commit()
     dispatch.manual_dispatch(str(need.id), str(res.id), db)      # 唯一一份水已被保留
     say("U-cv", "接單")
     assert any("都已派出或保留中" in t for t in replies(line_outbox))

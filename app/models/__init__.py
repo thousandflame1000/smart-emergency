@@ -10,4 +10,3 @@ from app.models.dispatch_event import DispatchEvent
 from app.models.volunteer_application import VolunteerApplication
 from app.models.task_workflow import Approval, Proposal, Task, TaskAssignment, TaskEvent
 from app.models.outbox import OutboxMessage
-from app.models.inventory import InventoryEvent

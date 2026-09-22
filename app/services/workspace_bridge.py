@@ -15,8 +15,7 @@ from app.models.resource import CommunityResource
 from app.models.resource_point import ResourcePoint
 from app.models.user import User
 from app.services.workspace import Edge, GraphDocument, LogisticsRecord, Node
-from app.services.inventory import available_amount, quantity_parts, structured_quantity
-from app.services.workspace_inventory import editable_values, row_version
+from app.services.workspace_inventory import editable_values, quantity_parts, row_version
 
 PREFIX = "db:"
 ITEM_ZH = {"water": "飲用水", "demo_water": "飲用水", "food": "食物", "first_aid": "急救用品", "shelter": "庇護所",
@@ -89,24 +88,14 @@ def operational_snapshot(db: Session) -> dict:
     for resource in resources:
         node_id = f"db:res:{resource.id}"
         owner_id = person(resource.owner_id)
-        total_quantity = structured_quantity(resource)
-        available_quantity = available_amount(resource)
-        quantity = ((available_quantity, total_quantity[1])
-                    if total_quantity is not None and available_quantity is not None
-                    else quantity_parts(resource.quantity))
+        quantity = quantity_parts(resource.quantity)
         nodes[node_id] = Node(id=node_id, label=resource.name, kind="supply", **_location(resource),
-                             quantity=quantity[0] if quantity else 0,
-                             available=bool(resource.is_available and (quantity is None or quantity[0] > 0)),
+                             quantity=quantity[0] if quantity else 0, available=bool(resource.is_available),
                              source="平台物資登記", properties={"db": "resource", "owner_id": str(resource.owner_id),
                                  "owner": users[str(resource.owner_id)].name if str(resource.owner_id) in users else "已移除",
                                  "resource_type": resource.resource_type, "version": row_version(resource),
                                  "base_values": editable_values(resource), "observed_at": stamp,
-                                 "quantity_verified": quantity is not None, "quantity_text": resource.quantity or "",
-                                 "quantity_on_hand": total_quantity[0] if total_quantity else None,
-                                 "quantity_reserved": int(resource.reserved_amount or 0),
-                                 "quantity_available": available_quantity,
-                                 "quantity_unit": total_quantity[1] if total_quantity else None,
-                                 "inventory_version": int(resource.inventory_version or 1)},
+                                 "quantity_verified": quantity is not None, "quantity_text": resource.quantity or ""},
                              logistics=[LogisticsRecord(id=node_id, role="supply", item=_item(resource.resource_type),
                                          unit=quantity[1], quantity=quantity[0], source="平台物資登記")] if quantity else [])
         relation("owner:" + str(resource.id), owner_id, node_id, "持有", "supplies")
@@ -116,7 +105,7 @@ def operational_snapshot(db: Session) -> dict:
             continue
         node_id = f"db:need:{need.id}"
         requester = users[str(need.requester_id)]
-        quantity = structured_quantity(need) or quantity_parts(need.quantity)
+        quantity = quantity_parts(need.quantity)
         pending = need.status in DEMAND_STATUSES and need.need_type != "sos"
         resource_id = f"db:res:{need.matched_resource_id}" if need.matched_resource_id else None
         properties = {"db": "need", "need_type": need.need_type, "status": need.status,

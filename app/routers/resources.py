@@ -15,9 +15,7 @@ from app.models.need import CommunityNeed
 from app.models.user import User
 from app.models.resource_point import ResourcePoint, POINT_TYPES, POINT_SUPPLY_TYPES
 from app.models.dispatch_event import DispatchEvent
-from app.models.inventory import InventoryEvent
 from app.services.record_version import row_predicates
-from app.services.inventory import available_amount, quantity_parts, set_quantity_fields
 
 router = APIRouter()
 
@@ -26,38 +24,6 @@ def _unreserved(resource, db):
     if db.query(CommunityNeed.id).filter(CommunityNeed.matched_resource_id == resource.id,
                                          CommunityNeed.status.in_(("suggested", "matched"))).first():
         raise ApiError(409, "物資已被待核准或執行中的任務保留，請先處理任務")
-
-
-@router.get("/{resource_id}/inventory-events")
-def list_inventory_events(resource_id: str, limit: int = 100, db: Session = Depends(get_db)):
-    if not db.query(CommunityResource.id).filter(CommunityResource.id == resource_id).first():
-        raise HTTPException(status_code=404, detail="Resource not found")
-    rows = (
-        db.query(InventoryEvent)
-        .filter(InventoryEvent.resource_id == resource_id)
-        .order_by(InventoryEvent.resource_version.desc(), InventoryEvent.created_at.desc())
-        .limit(max(1, min(limit, 500)))
-        .all()
-    )
-    return [
-        {
-            "id": str(event.id),
-            "resource_id": str(event.resource_id),
-            "need_id": str(event.need_id) if event.need_id else None,
-            "event_type": event.event_type,
-            "quantity": event.quantity,
-            "unit": event.unit,
-            "on_hand_before": event.on_hand_before,
-            "on_hand_after": event.on_hand_after,
-            "reserved_before": event.reserved_before,
-            "reserved_after": event.reserved_after,
-            "resource_version": event.resource_version,
-            "actor_id": str(event.actor_id) if event.actor_id else None,
-            "actor_label": event.actor_label,
-            "created_at": str(event.created_at),
-        }
-        for event in rows
-    ]
 
 
 # ──────────────────────────────────────────────
@@ -83,11 +49,6 @@ def list_resources(
             "resource_type": r.resource_type,
             "name":          r.name,
             "quantity":      r.quantity,
-            "quantity_amount": r.quantity_amount,
-            "quantity_unit": r.quantity_unit,
-            "reserved_amount": r.reserved_amount,
-            "available_amount": available_amount(r),
-            "inventory_version": r.inventory_version,
             "address":       r.address,
             "lat":           r.lat,
             "lng":           r.lng,
@@ -131,12 +92,12 @@ def create_resource(
         owner_id=owner.id,
         resource_type=resource_type,
         name=name,
+        quantity=quantity,
         address=address,
         lat=lat,
         lng=lng,
         note=note,
     )
-    set_quantity_fields(resource, quantity)
     db.add(resource)
     db.commit()
     db.refresh(resource)
@@ -165,13 +126,6 @@ def update_resource(
         name = check_name(name, what="物資名稱")
     values = {key: value for key, value in {"name": name, "quantity": quantity, "address": address,
               "note": note, "lat": lat, "lng": lng, "is_available": is_available}.items() if value is not None}
-    if quantity is not None:
-        parsed = quantity_parts(quantity)
-        values.update(
-            quantity_amount=parsed[0] if parsed else None,
-            quantity_unit=parsed[1] if parsed else None,
-            inventory_version=int(r.inventory_version or 1) + 1,
-        )
     changed = db.query(CommunityResource).filter(*row_predicates(r)).update(
         {**values, "last_updated": now_utc()}, synchronize_session=False)
     if changed != 1:
@@ -243,10 +197,6 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
             "need_type":   n.need_type,
             "description": n.description,
             "quantity":    n.quantity,
-            "quantity_amount": n.quantity_amount,
-            "quantity_unit": n.quantity_unit,
-            "reserved_quantity_amount": n.reserved_quantity_amount,
-            "fulfilled_quantity_amount": n.fulfilled_quantity_amount,
             "address":     n.address,
             "lat":         n.lat,
             "lng":         n.lng,
@@ -319,12 +269,12 @@ def create_need(
         requester_id=requester.id,
         need_type=need_type,
         description=description,
+        quantity=quantity,
         address=address,
         lat=lat,
         lng=lng,
         urgency=urgency,
     )
-    set_quantity_fields(need, quantity)
     db.add(need)
     db.commit()
     db.refresh(need)

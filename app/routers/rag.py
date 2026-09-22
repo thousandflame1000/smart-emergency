@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.services import rag as rag_svc
-from app.security import require_admin
 
 router = APIRouter()
 
@@ -22,7 +21,6 @@ class ChunkUpdateRequest(BaseModel):
     content: str | None = None
     source: str | None = None
     category: str | None = None
-    version: str | None = None
 
 
 @router.post("/query")
@@ -38,7 +36,7 @@ def query_rag(req: QueryRequest):
 
 
 @router.post("/ingest")
-def ingest(req: IngestRequest, _admin: dict = Depends(require_admin)):
+def ingest(req: IngestRequest):
     """
     載入文件到知識庫（管理員用）
     """
@@ -55,7 +53,7 @@ def ingest(req: IngestRequest, _admin: dict = Depends(require_admin)):
 
 
 @router.post("/sync")
-def sync_builtin(_admin: dict = Depends(require_admin)):
+def sync_builtin():
     """只補上資料庫缺少的預設文件，不刪除也不覆蓋（重新載入會清空後台編輯過的內容）。"""
     return rag_svc.sync_builtin_documents()
 
@@ -63,7 +61,7 @@ def sync_builtin(_admin: dict = Depends(require_admin)):
 _ingest_status = {"running": False, "done": False, "chunks": 0, "error": None}
 
 @router.post("/ingest_all")
-def ingest_all(_admin: dict = Depends(require_admin)):
+def ingest_all():
     """載入所有內建 SOP 知識庫（背景執行，立即回傳）"""
     import threading
 
@@ -166,7 +164,6 @@ def get_chunk(chunk_id: str):
         return {
             "id": str(c.id), "content": c.content,
             "source": c.source, "category": c.category,
-            "version": c.version,
             "created_at": str(c.created_at),
         }
     finally:
@@ -174,7 +171,7 @@ def get_chunk(chunk_id: str):
 
 
 @router.put("/chunks/{chunk_id}")
-def update_chunk(chunk_id: str, req: ChunkUpdateRequest, _admin: dict = Depends(require_admin)):
+def update_chunk(chunk_id: str, req: ChunkUpdateRequest):
     """
     更新一筆知識庫內容（管理員後台用）。
     若內容有變更會重新向量化，確保搜尋結果與最新文字一致。
@@ -197,8 +194,6 @@ def update_chunk(chunk_id: str, req: ChunkUpdateRequest, _admin: dict = Depends(
             c.source = req.source.strip()
         if req.category is not None and req.category.strip():
             c.category = req.category.strip()
-        if req.version is not None and req.version.strip():
-            c.version = req.version.strip()
 
         db.commit()
         return {"message": "更新成功", "id": chunk_id, "re_embedded": content_changed}
@@ -207,7 +202,7 @@ def update_chunk(chunk_id: str, req: ChunkUpdateRequest, _admin: dict = Depends(
 
 
 @router.delete("/chunks/{chunk_id}")
-def delete_chunk(chunk_id: str, _admin: dict = Depends(require_admin)):
+def delete_chunk(chunk_id: str):
     """刪除一筆知識庫內容（管理員後台用）"""
     from app.database import SessionLocal
     from app.models.knowledge import KnowledgeChunk

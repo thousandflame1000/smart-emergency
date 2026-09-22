@@ -31,12 +31,10 @@ def client():
 
 
 @pytest.fixture(autouse=True)
-def restore_demo_auth_settings():
-    original = (settings.DEMO_PASSWORD, settings.APP_ENV, settings.ADMIN_LINE_LOGIN)
-    settings.APP_ENV = "development"
-    settings.ADMIN_LINE_LOGIN = False
+def restore_demo_password():
+    original = settings.DEMO_PASSWORD
     yield
-    settings.DEMO_PASSWORD, settings.APP_ENV, settings.ADMIN_LINE_LOGIN = original
+    settings.DEMO_PASSWORD = original
 
 
 def test_disabled_by_default_does_not_block_anything(client):
@@ -84,16 +82,3 @@ def test_webhook_and_health_stay_exempt_even_when_enabled(client, db):
     # 密碼閘擋下（不會是 401）
     r = client.post("/webhook/line", content=b"{}")
     assert r.status_code != 401
-
-
-def test_production_without_auth_fails_closed_but_keeps_diagnostics_public(client):
-    settings.APP_ENV = "production"
-    settings.DEMO_PASSWORD = ""
-    settings.ADMIN_LINE_LOGIN = False
-    assert client.get("/").status_code == 503
-    security = client.get("/api/system/security")
-    assert security.status_code == 200
-    assert security.json()["auth_mode"] == "locked"
-    assert security.json()["locked"] is True
-    assert security.json()["public_admin"] is False
-    assert client.get("/api/rag/stats").status_code == 200
