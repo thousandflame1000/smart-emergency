@@ -1162,3 +1162,15 @@ def test_every_rich_menu_label_works_when_typed(db, line_outbox, monkeypatch):
         if any("傳「幫助」可查看可用指令" in t for t in replies(line_outbox)):
             unheard.append(label)
     assert not unheard, f"這些按鈕上的字，打出來系統聽不懂：{unheard}"
+
+
+def test_first_message_does_not_ask_for_location_twice(db, line_outbox):
+    """新用戶第一句有內容的話，會收到「處理結果」和「歡迎詞」兩則訊息。
+
+    兩則都以同一段「請分享位置」結尾時，使用者等於連著看到兩次一樣的話
+    （Nielsen #8：簡潔）。已經問過就不要再問一次。
+    """
+    say("Udup", "需要水")
+    everything = replies(line_outbox) + sent_to(line_outbox, "Udup")
+    asked = sum(t.count("我們還不知道您在哪裡") for t in everything)
+    assert asked == 1, f"同一段位置提示出現 {asked} 次：{everything}"

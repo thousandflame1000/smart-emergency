@@ -144,19 +144,19 @@ def _is_staff(user) -> bool:
     return bool(user.roles) and any(r in user.roles for r in STAFF_ROLES)
 
 
-def _welcome_text(name: str) -> str:
+def _welcome_text(name: str, with_location_hint: bool = True) -> str:
     from app.labels import is_placeholder_name
     # 取不到 LINE 顯示名稱時不要拿佔位字當稱呼——叫人「用戶_4f8a2c」比不叫名字更糟。
     greeting = "👋 歡迎加入鄰里守望！" if is_placeholder_name(name) else f"👋 {name}，歡迎加入鄰里守望！"
-    return (
+    body = (
         f"{greeting}\n\n"
         "您已自動註冊。先從下方「居民服務」開始：\n"
         "・有危險：選「緊急求助」或傳「需要幫忙」\n"
         "・物資或生活需求：選「申請需求」一次填寫\n"
         "・每天早上會問您平安，按「我很好」就可以\n"
-        "・「居民中心」有家屬綁定、紀錄與完整說明\n\n"
-        f"{LOCATION_HINT}"
+        "・「居民中心」有家屬綁定、紀錄與完整說明"
     )
+    return f"{body}\n\n{LOCATION_HINT}" if with_location_hint else body
 
 
 def _register_user(db, line_uid: str) -> User:
@@ -1014,7 +1014,8 @@ def handle_text(event: MessageEvent):
         if handled:
             from app.services.line_notify import send_text
             try:
-                send_text(line_uid, _welcome_text(user.name))
+                # 剛才那則回覆若已經請對方分享位置，歡迎詞不要再貼一次同一段話。
+                send_text(line_uid, _welcome_text(user.name, with_location_hint=user.lat is not None))
             except Exception:
                 logger.exception("[linebot] 歡迎訊息推播失敗")
         else:
