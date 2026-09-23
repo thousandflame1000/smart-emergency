@@ -102,6 +102,11 @@
     <p id="allocation-status" role="status"></p><div id="allocation-result"></div>
   </dialog>
   <dialog id="allocation-node-dialog" aria-labelledby="allocation-node-title"><div class="dialog-heading"><h2 id="allocation-node-title">選擇物件位置</h2><button id="close-allocation-node" aria-label="關閉物件選擇"><i data-lucide="x"></i></button></div><input id="allocation-node-query" type="search" placeholder="名稱、識別碼" aria-label="搜尋物件位置"><div id="allocation-node-results" class="object-list"></div></dialog>
+  <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title">
+    <div class="dialog-heading"><h2 id="confirm-dialog-title">確認</h2><button id="close-confirm-dialog" aria-label="關閉"><i data-lucide="x"></i></button></div>
+    <div id="confirm-dialog-body" class="muted"></div>
+    <div class="dialog-actions"><button id="confirm-dialog-cancel">取消</button><button id="confirm-dialog-ok" class="primary">確認</button></div>
+  </dialog>
   <dialog id="comparison-dialog" aria-labelledby="comparison-title">
     <div class="dialog-heading"><h2 id="comparison-title">情境影響比較</h2><button id="close-comparison" aria-label="關閉情境比較"><i data-lucide="x"></i></button></div>
     <div class="comparison-baseline"><div><span class="muted">固定比較基準</span><strong id="baseline-name"></strong><span id="baseline-time" class="muted"></span></div><button id="capture-baseline" title="將目前拓樸設為新基準" aria-label="將目前拓樸設為新基準"><i data-lucide="flag"></i></button></div>

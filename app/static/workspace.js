@@ -8,10 +8,28 @@ const STATUS = {active:'啟用', inactive:'停用'};
 const state = {id:null, revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
   undo:[], redo:[], hidden:new Set(), report:null, connect:null, preview:null, editVersion:0, documentVersion:0, importVersion:0};
 let map, mapLayers, cy;
+let principalRoles = ['admin']; // 保守預設：拿到真正的角色前先當作管理員，載入完成後 init() 會校正。
+function isAdmin() { return principalRoles.includes('admin'); }
 function rememberWorkspace(id){try{if(id)localStorage.setItem('emergency:last-workspace',id);else localStorage.removeItem('emergency:last-workspace');}catch(e){}}
 function lastWorkspace(){try{return localStorage.getItem('emergency:last-workspace');}catch(e){return null;}}
 function icons() { if (window.lucide) lucide.createIcons(); }
 function message(text, error=false) { $('status').textContent=text; $('status').classList.toggle('error',error); }
+// Promise-based confirm dialog — replaces confirm() so the prompt can show which
+// volunteer/resource an action actually affects, not just a generic yes/no question.
+function askConfirm(title, bodyHtml, okLabel='確認') {
+  return new Promise(resolve => {
+    $('confirm-dialog-title').textContent = title;
+    $('confirm-dialog-body').innerHTML = bodyHtml;
+    $('confirm-dialog-ok').textContent = okLabel;
+    const dialog = $('confirm-dialog');
+    const cleanup = result => { dialog.close(); okBtn.onclick = null; cancelBtn.onclick = null; resolve(result); };
+    const okBtn = $('confirm-dialog-ok'), cancelBtn = $('confirm-dialog-cancel');
+    okBtn.onclick = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    dialog.addEventListener('cancel', () => resolve(false), {once:true});
+    dialog.showModal();
+  });
+}
 async function api(path, body, method='POST') {
   const response = await fetch('/api/workspaces'+path, body === undefined ? {} : {method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const data = await response.json();
@@ -111,7 +129,7 @@ function renderSelection() {
     else {Object.assign(patch,{source:$('edit-source').value,target:$('edit-target').value,status:$('edit-status').value,directed:$('edit-directed').checked});if(patch.source===patch.target){message('起點與終點不能相同',true);return;}}
     mutate(()=>Object.assign(item,patch));message('已更新，分析結果待重算');};
   $('delete-selected').onclick=()=>mutate(()=>{if(isNode){state.graph.nodes=state.graph.nodes.filter(n=>n.id!==item.id);state.graph.edges=state.graph.edges.filter(e=>e.source!==item.id&&e.target!==item.id);}else state.graph.edges=state.graph.edges.filter(e=>e.id!==item.id);state.selected=null;});
-  if(isNode&&item.kind==='supply'){const button=document.createElement('button');button.type='button';button.textContent='登記到物資資料庫';button.onclick=()=>editInventory(item);el.append(button);}
+  if(isNode&&(item.kind==='supply'||item.kind==='facility')){const button=document.createElement('button');button.type='button';button.textContent=item.kind==='facility'?'登記到資源點資料庫':'登記到物資資料庫';button.onclick=()=>editInventory(item);el.append(button);}
 }
 function renderCanvas() {
   if(!map)return;
@@ -182,6 +200,8 @@ async function previewImport(event){event.preventDefault();$('preview-import').d
 function exportDocument(){const data={format:'smart-emergency-workspace-v1',name:$('workspace-name').value,graph:state.graph,baseline:state.baseline||null};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=($('workspace-name').value||'工作區')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function init(){
   if(!window.L||!window.cytoscape||!window.Papa){message('地圖元件載入失敗，請檢查網路後重新整理',true);return;}
+  try{const security=await fetch('/api/system/security').then(r=>r.json());principalRoles=security.roles||[];}
+  catch(e){/* 查不到身分就維持保守預設（管理員），不擋任何操作——伺服器端還是會照角色擋 */}
   map=L.map('map',{preferCanvas:true}).setView([23.7,121],7);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
   mapLayers=L.layerGroup().addTo(map);map.on('click',e=>addNode(e.latlng));

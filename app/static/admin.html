@@ -262,6 +262,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .notice.warning { background: rgba(244,183,64,.08); color: var(--warning); border-color: rgba(244,183,64,.35); }
 .notice-icon { flex-shrink: 0; font-size: 13px; }
 
+/* ── Toast stack: replaces blocking alert() so an action doesn't freeze the page ── */
+.toast-stack {
+  position: fixed; top: 16px; right: 16px; z-index: 999;
+  display: flex; flex-direction: column; gap: 8px; width: 340px; pointer-events: none;
+}
+.toast-stack .notice {
+  margin-bottom: 0; box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  opacity: 0; transform: translateX(12px); transition: opacity .18s, transform .18s;
+  pointer-events: auto;
+}
+.toast-stack .notice.show { opacity: 1; transform: translateX(0); }
+
+/* ── Inline candidate summary next to 確認派遣／否決, so confirming isn't a blind click ── */
+.cand-summary { font-size: 12px; color: var(--muted); margin-bottom: 6px; min-height: 16px; }
+.cand-summary strong { color: var(--text); }
+
 /* ── KB stats ── */
 
 /* ── Category chips ── */
@@ -507,6 +523,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <div style="display:flex;gap:8px">
             <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增志工</button>
             <button class="btn btn-ghost btn-sm"   onclick="openUserModal('family')">＋ 新增家屬</button>
+            <button class="btn btn-ghost btn-sm"   onclick="openUserModal('field_staff')">＋ 新增基層員工</button>
           </div>
         </div>
         <div class="table-wrap">
@@ -1125,9 +1142,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <option value="elderly">長者</option>
             <option value="volunteer">志工</option>
             <option value="family">家屬</option>
+            <option value="field_staff">基層員工</option>
             <option value="admin">管理員</option>
           </select>
-          <span class="form-hint">編輯既有使用者時也可以在這裡修正角色</span>
+          <span class="form-hint">基層員工可在網頁新增／編輯物資與資源點，不能確認派遣或管理使用者；編輯既有使用者時也可以在這裡修正角色</span>
         </div>
       </div>
       <div class="form-row col-2">
@@ -1363,13 +1381,28 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   </div>
 </div>
 
+<div class="modal-overlay" id="modal-confirm" onclick="closeOnOverlay(event,'modal-confirm')">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title" id="confirm-title">確認</span>
+      <button class="modal-close" onclick="closeModal('modal-confirm')">✕</button>
+    </div>
+    <div class="modal-body" id="confirm-body"></div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="confirm-cancel-btn">取消</button>
+      <button class="btn btn-success" id="confirm-ok-btn">確認</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-stack" id="toast-stack"></div>
 
 <script>
 // ════════════════════════════════════════════════
 // Constants
 // ════════════════════════════════════════════════
-const ROLE_LABEL = { elderly:'長者', volunteer:'志工', family:'家屬', admin:'管理員' };
-const ROLE_BADGE = { elderly:'badge-blue', volunteer:'badge-green', family:'badge-amber', admin:'badge-red' };
+const ROLE_LABEL = { elderly:'長者', volunteer:'志工', family:'家屬', admin:'管理員', field_staff:'基層員工' };
+const ROLE_BADGE = { elderly:'badge-blue', volunteer:'badge-green', family:'badge-amber', admin:'badge-red', field_staff:'badge-purple' };
 const RES_ICON   = { water:'💧', food:'🍱', first_aid:'🩹', shelter:'🏠', vehicle:'🚗', tool:'🔧', other:'📦' };
 const PAGE_TITLE = {
   'page-elderly':   '長者管理',
@@ -1574,6 +1607,47 @@ function showNotice(elId, type, msg) {
 }
 
 // ════════════════════════════════════════════════
+// Toast — replaces alert() so a confirmed action doesn't block the page with
+// a native popup the admin has to dismiss before they can see the updated list.
+// ════════════════════════════════════════════════
+function toast(type, msg, ms = 4200) {
+  const stack = document.getElementById('toast-stack');
+  const icons = { info:'ℹ️', success:'✅', danger:'❌', warning:'⚠️' };
+  const el = document.createElement('div');
+  el.className = `notice ${type}`;
+  el.innerHTML = `<span class="notice-icon">${icons[type]||''}</span><span>${msg}</span>`;
+  stack.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 220);
+  }, ms);
+}
+
+// ════════════════════════════════════════════════
+// Confirm modal — replaces confirm() so the dialog can show which volunteer /
+// resource an action actually affects, not just a generic yes/no question.
+// ════════════════════════════════════════════════
+function askConfirm(title, bodyHtml, okLabel = '確認', okClass = 'btn-success') {
+  return new Promise(resolve => {
+    document.getElementById('confirm-title').textContent = title;
+    document.getElementById('confirm-body').innerHTML = bodyHtml;
+    const okBtn = document.getElementById('confirm-ok-btn');
+    const cancelBtn = document.getElementById('confirm-cancel-btn');
+    okBtn.className = `btn ${okClass}`;
+    okBtn.textContent = okLabel;
+    const cleanup = (result) => {
+      closeModal('modal-confirm');
+      okBtn.onclick = null; cancelBtn.onclick = null;
+      resolve(result);
+    };
+    okBtn.onclick = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    openModal('modal-confirm');
+  });
+}
+
+// ════════════════════════════════════════════════
 // Load all users + resources
 // ════════════════════════════════════════════════
 async function loadAll() {
@@ -1588,7 +1662,7 @@ async function loadAll() {
     // 自助申請核准後仍保留 elderly 角色）——改成明確列出這頁該顯示
     // 的角色，跟長者管理頁分流靠的是「有沒有志工/家屬/管理員身份」，
     // 不是「不是長者」。
-    renderVolunteers(users.filter(u => ['volunteer', 'family', 'admin'].some(r => u.roles.includes(r))));
+    renderVolunteers(users.filter(u => ['volunteer', 'family', 'admin', 'field_staff'].some(r => u.roles.includes(r))));
     renderResources(resources);
     populateOwnerSelect(users.filter(u => u.roles.includes('volunteer') || u.roles.includes('admin')));
   } catch(e) {
@@ -1640,11 +1714,13 @@ function renderElderly(data) {
 function renderVolunteers(data) {
   const volCount = data.filter(u => u.roles.includes('volunteer')).length;
   const famCount = data.filter(u => u.roles.includes('family')).length;
+  const staffCount = data.filter(u => u.roles.includes('field_staff')).length;
   const bound = data.filter(u => u.line_uid).length;
   document.getElementById('volunteers-stats').innerHTML = `
     <div class="stat-tile"><div class="stat-tile-label">總人數</div><div class="stat-tile-value">${data.length}</div></div>
     <div class="stat-tile"><div class="stat-tile-label">志工</div><div class="stat-tile-value">${volCount}</div></div>
     <div class="stat-tile"><div class="stat-tile-label">家屬</div><div class="stat-tile-value">${famCount}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">基層員工</div><div class="stat-tile-value">${staffCount}</div></div>
     <div class="stat-tile"><div class="stat-tile-label">已綁定 LINE</div><div class="stat-tile-value ok">${bound}</div></div>`;
 
   const tbody = document.getElementById('volunteers-tbody');
@@ -2417,8 +2493,41 @@ const STATUS_BADGE = {
 
 let allNeeds = [];
 let needStatusFilter = '';
+const candidateCache = {};
 
 const REPORT_LABEL = { delivered: '已送達', cannot_go: '無法前往', issue: '現場遇到狀況' };
+
+// ════════════════════════════════════════════════
+// Candidate summary shown inline next to 確認派遣／否決 — previously the admin
+// had to click a separate "詳情" toggle before knowing who they were confirming
+// for, so the button itself was a blind click. Fetched once per need id and
+// cached; a status filter re-render reuses the cache instead of refetching.
+// ════════════════════════════════════════════════
+function renderCandSummary(needId, data) {
+  const el = document.getElementById(`cand-summary-${needId}`);
+  if (!el) return;
+  const top = (data.candidates || [])[0];
+  if (!top) { el.innerHTML = '<span class="badge badge-red">⚠️ 無候選資源，確認派遣會失敗</span>'; return; }
+  const notifyHtml = top.notify_channel === 'auto'
+    ? '<span class="badge badge-gray">🏢 自動完成</span>'
+    : top.notify_channel === 'line'
+    ? '<span class="badge badge-green">📱 會發 LINE</span>'
+    : '<span class="badge badge-red" title="這位志工還沒綁定 LINE，確認派遣後系統不會發出任何通知，需要您自行聯繫">⚠️ 未綁定 LINE</span>';
+  el.innerHTML = `➜ <strong>${esc(top.vol)}</strong>（${esc(top.name)}・${top.score}分`
+    + `${top.dist_km != null ? '・' + top.dist_km + 'km' : ''}） ${notifyHtml}`;
+}
+
+async function loadCandidateSummaries(needs) {
+  const suggested = needs.filter(n => n.status === 'suggested');
+  await Promise.all(suggested.map(async n => {
+    if (candidateCache[n.id]) { renderCandSummary(n.id, candidateCache[n.id]); return; }
+    try {
+      const data = await fetch(`/api/resources/needs/${n.id}/candidates`).then(r => r.json());
+      candidateCache[n.id] = data;
+      renderCandSummary(n.id, data);
+    } catch (e) { /* leave the "載入中" placeholder; not fatal */ }
+  }));
+}
 
 async function loadNeeds() {
   try {
@@ -2444,6 +2553,7 @@ async function loadNeeds() {
     if (lbl) lbl.textContent =
       `待媒合 ${open.length} 筆 · 待確認 ${suggested.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆 · 已取消 ${cancelled.length} 筆`;
     renderNeeds(allNeeds);
+    loadCandidateSummaries(allNeeds);
   } catch(e) {
     document.getElementById('needs-tbody').innerHTML =
       `<tr><td colspan="8" style="color:var(--danger);padding:16px">載入失敗：${e.message}</td></tr>`;
@@ -2456,6 +2566,7 @@ function filterNeeds(btn, status) {
   needStatusFilter = status;
   const filtered = status ? allNeeds.filter(n => n.status === status) : allNeeds;
   renderNeeds(filtered);
+  loadCandidateSummaries(filtered);
 }
 
 function openNeedModal() {
@@ -2529,9 +2640,10 @@ function renderNeeds(data) {
           : n.status === 'open'
           ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">查看詳情</button>`
           : n.status === 'suggested'
-          ? `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">詳情</button>
+          ? `<div class="cand-summary" id="cand-summary-${n.id}"><span class="muted">載入候選中…</span></div>
              <button class="btn btn-success btn-sm" onclick="confirmDispatch('${n.id}')">✅ 確認派遣</button>
-             <button class="btn btn-ghost-danger btn-sm" onclick="declineSuggestion('${n.id}')">否決</button>`
+             <button class="btn btn-ghost-danger btn-sm" onclick="declineSuggestion('${n.id}')">否決</button>
+             <button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">其他候選</button>`
           : `<button class="btn btn-ghost btn-sm" onclick="showCandidates('${n.id}')">紀錄</button>`}
       </td>
       <td>
@@ -2554,19 +2666,24 @@ function renderNeeds(data) {
 }
 
 async function confirmDispatch(needId) {
-  if (!confirm('確認採用系統建議的媒合？\n這一步才會真正發 LINE 通知志工。')) return;
+  const top = candidateCache[needId] && candidateCache[needId].candidates && candidateCache[needId].candidates[0];
+  const detail = top
+    ? `將派給 <strong>${esc(top.vol)}</strong>（${esc(top.name)}），系統評分 ${top.score} 分${top.dist_km != null ? '，距離 ' + top.dist_km + ' km' : ''}。<br>這一步才會真正發 LINE 通知志工。`
+    : '這一步才會真正發 LINE 通知志工。';
+  if (!await askConfirm('確認派遣？', detail, '✅ 確認派遣', 'btn-success')) return;
   const res  = await fetch(`/api/resources/needs/${needId}/confirm_dispatch`, { method: 'POST' });
   const data = await res.json();
-  if (data.error) { alert('確認失敗：' + data.error); return; }
-  alert(data.volunteer_notified ? '✅ 已確認派遣，志工已收到 LINE 通知' : '✅ 已確認派遣（志工未綁定 LINE，請自行聯繫）');
+  if (data.error) { toast('danger', '確認失敗：' + esc(data.error)); return; }
+  toast('success', data.volunteer_notified ? '已確認派遣，志工已收到 LINE 通知' : '已確認派遣（志工未綁定 LINE，請自行聯繫）');
   loadNeeds();
 }
 
 async function declineSuggestion(needId) {
-  if (!confirm('否決此建議？物資會恢復可用，需求退回待媒合。')) return;
+  if (!await askConfirm('否決此建議？', '物資會恢復可用，需求退回待媒合。', '否決', 'btn-danger')) return;
   const res  = await fetch(`/api/resources/needs/${needId}/decline_suggestion`, { method: 'POST' });
   const data = await res.json();
-  if (data.error) { alert('操作失敗：' + data.error); return; }
+  if (data.error) { toast('danger', '操作失敗：' + esc(data.error)); return; }
+  toast('info', '已否決，需求退回待媒合');
   loadNeeds();
 }
 
@@ -2655,34 +2772,36 @@ function renderNeedEvents(events) {
 }
 
 async function matchNeed(needId, resourceId) {
-  if (!confirm('確定以此物資手動媒合？')) return;
+  if (!await askConfirm('手動媒合？', '確定以此物資手動媒合？這一步會立即發 LINE 通知志工，不經過待確認關卡。', '媒合', 'btn-success')) return;
   const res  = await fetch(`/api/resources/needs/${needId}/match?resource_id=${resourceId}`, { method: 'POST' });
   const data = await res.json();
-  if (data.error) { alert('媒合失敗：' + data.error); return; }
-  alert(`✅ 媒合成功！距離 ${data.dist_km ?? '?'} km\n${data.volunteer_notified ? '已 LINE 通知志工' : '（無 LINE 綁定）'}`);
+  if (data.error) { toast('danger', '媒合失敗：' + esc(data.error)); return; }
+  toast('success', `媒合成功！距離 ${data.dist_km ?? '?'} km · ${data.volunteer_notified ? '已 LINE 通知志工' : '（無 LINE 綁定）'}`);
   loadNeeds();
 }
 
 async function cancelNeed(needId) {
-  if (!confirm('確定取消此需求？')) return;
-  // PUT status=cancelled
+  if (!await askConfirm('取消此需求？', '需求會標記為已取消並保留紀錄。', '取消需求', 'btn-danger')) return;
   await fetch(`/api/resources/needs/${needId}?status=cancelled`, { method: 'PUT' }).catch(() => {});
+  toast('info', '已取消此需求');
   loadNeeds();
 }
 
 async function resolveSos(needId) {
-  if (!confirm('確認已經聯繫到當事人、事件處理完畢？\n（當事人會收到 LINE 通知）')) return;
+  if (!await askConfirm('標記已處理？', '確認已經聯繫到當事人、事件處理完畢？當事人會收到 LINE 通知。', '✅ 已聯繫處理', 'btn-success')) return;
   const res = await fetch(`/api/resources/needs/${encodeURIComponent(needId)}/resolve_sos`, { method: 'POST' });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { alert('操作失敗：' + (data.error || res.status)); return; }
+  if (!res.ok) { toast('danger', '操作失敗：' + esc(data.error || res.status)); return; }
+  toast('success', '已標記處理完畢');
   loadNeeds();
 }
 
 async function deleteNeed(needId) {
-  if (!confirm('永久刪除這筆需求？此動作無法復原。')) return;
+  if (!await askConfirm('永久刪除？', '此動作無法復原，只有還沒進入派遣流程的需求才能刪除。', '永久刪除', 'btn-danger')) return;
   const res = await fetch(`/api/resources/needs/${needId}`, { method: 'DELETE' });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { alert('刪除失敗：' + (data.detail || res.status)); return; }
+  if (!res.ok) { toast('danger', '刪除失敗：' + esc(data.detail || res.status)); return; }
+  toast('success', '已永久刪除');
   loadNeeds();
 }
 

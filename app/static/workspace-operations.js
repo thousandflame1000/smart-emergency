@@ -2,7 +2,10 @@
 const NEED_STATUS={open:'待處理',suggested:'待核准',matched:'執行中',fulfilled:'已完成',cancelled:'已取消'};
 const CHECKIN_STATUS={ok:'平安',safe:'平安',pending:'待回應',no_response:'未回應',help_needed:'需要協助',confirmed:'已確認'};
 const ROLE_NAMES={elderly:'長者',volunteer:'志工',family:'家屬',admin:'管理員'};
-const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'緯度',lng:'經度',address:'地址',is_available:'可用'};
+const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'緯度',lng:'經度',address:'地址',is_available:'可用',
+  capacity:'容量',phone:'電話',operating_hours:'開放時間'};
+const POINT_TYPE_LABELS={shelter:'避難收容所',community:'里民活動中心',hospital:'醫療院所',fire_station:'消防分隊',
+  police:'警察局/派出所',store:'物資分發點',warehouse:'物資倉庫',clinic:'衛生所',other:'其他'};
 const inventoryDrafts=new Map(), operationEvents=new Map();
 let operationOwners=[], operationRequest=null, operationStage='open', catalogTab='objects', inventoryReview=null;
 
@@ -49,11 +52,13 @@ function renderOperationalSelection(item,isNode){
   const fields=[];
   if(p.db==='user')fields.push(['角色',(p.roles||[]).map(r=>ROLE_NAMES[r]||r).join('、')],['最近打卡',p.checkin?(CHECKIN_STATUS[p.checkin.status]||p.checkin.status)+' · '+p.checkin.date:'尚無紀錄'],['打卡回覆',p.checkin?.note||'未提供'],['未解除警報',p.active_alerts],['脆弱度',p.vulnerability??'未評估']);
   if(p.db==='resource')fields.push(['擁有者',p.owner],['登記數量',p.quantity_text||'未知'],['可用狀態',item.available?'可用':'保留中或不可用']);
-  if(p.db==='point')fields.push(['收容容量',p.capacity??'未知'],['目前人數',p.current_load??'未知'],['庫存','未提供']);
+  if(p.db==='point')fields.push(['收容容量',p.capacity??'未知'],['目前人數',p.current_load??'未知'],['庫存','未提供'],
+    ['電話',p.base_values?.phone||'未提供'],['開放時間',p.base_values?.operating_hours||'未提供']);
   if(p.db==='need')fields.push(['狀態',NEED_STATUS[p.status]||p.status],['優先級',p.urgency],['登記數量',p.quantity_text||'未知'],['需求',p.description||'未填'],['定位依據',p.location_source]);
   if(isNode)fields.push(['地址',p.address||p.base_values?.address||'未提供'],['座標',item.lat===null?'未知':`${item.lat}, ${item.lng}`]);
   const related=isNode?state.graph.edges.filter(e=>e.id.startsWith('db:edge:')&&(e.source===item.id||e.target===item.id)):[];
   el.innerHTML=`<div class="object-heading"><strong>${escapeHtml(item.label)}</strong><span class="source-label">${escapeHtml(isNode?item.source:item.provenance)}</span></div><dl class="object-facts">${fields.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>${p.quantity_verified===false?'<p class="error">數量或單位待確認，未納入分配試算。</p>':''}
+    ${p.db==='need'&&p.status==='suggested'?'<div id="need-candidate-summary" class="muted">候選載入中…</div>':''}
     <div id="operational-actions" class="actions"></div>${related.length?'<h2>關聯物件</h2><div class="related-objects">'+related.map(e=>{const other=e.source===item.id?e.target:e.source;return `<button data-related="${escapeHtml(other)}"><span>${escapeHtml(e.label)}</span>${escapeHtml(nodeById(other)?.label||other)}</button>`;}).join('')+'</div>':''}
     ${p.db==='need'?'<h2 class="event-heading">任務紀錄</h2><div id="operation-events" class="muted">讀取中</div>':''}<p class="muted">${p.observed_at?escapeHtml(new Date(p.observed_at).toLocaleString('zh-TW')):''}</p><details><summary>來源識別碼</summary><pre>${escapeHtml(item.id)}</pre></details>`;
   el.querySelectorAll('[data-related]').forEach(b=>b.onclick=()=>focusOperational(b.dataset.related));
@@ -61,11 +66,33 @@ function renderOperationalSelection(item,isNode){
   function button(label,icon,fn,primary=false){const b=document.createElement('button');b.type='button';b.className=primary?'primary':'';b.innerHTML=`<i data-lucide="${icon}"></i>${label}`;b.onclick=fn;actions.append(b);}
   if(p.db==='resource'||p.db==='point')button('編輯正式資料','pencil',()=>editInventory(item));
   if(p.db==='need'){
-    if(p.status==='suggested'){button('核准派遣','check',()=>actOnNeed(item,'confirm_dispatch'),true);button('退回','undo-2',()=>actOnNeed(item,'decline_suggestion'));}
-    if(p.status==='open'&&p.need_type==='sos')button('確認已處理','check-check',()=>actOnNeed(item,'resolve_sos'),true);
+    if(p.status==='suggested'){
+      loadOperationCandidates(item);
+      if(isAdmin()){button('核准派遣','check',()=>actOnNeed(item,'confirm_dispatch'),true);button('退回','undo-2',()=>actOnNeed(item,'decline_suggestion'));}
+      else actions.insertAdjacentHTML('beforeend','<p class="muted">核准派遣僅限管理員，請聯絡管理員處理。</p>');
+    }
+    if(p.status==='open'&&p.need_type==='sos'){
+      if(isAdmin())button('確認已處理','check-check',()=>actOnNeed(item,'resolve_sos'),true);
+      else actions.insertAdjacentHTML('beforeend','<p class="muted">標記已處理僅限管理員。</p>');
+    }
     if(p.status==='open'&&p.need_type!=='sos')button('分配試算','package-check',()=>{try{openAllocation();}catch(e){message(e.message,true);}});
     loadOperationEvents(item);
   }
+}
+const operationCandidates=new Map();
+async function loadOperationCandidates(node){
+  const key=node.id+':'+node.properties.version;
+  try{
+    if(!operationCandidates.has(key))operationCandidates.set(key,resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/candidates'));
+    const data=await operationCandidates.get(key);
+    if(state.selected?.id!==node.id||!$('need-candidate-summary'))return;
+    const top=(data.candidates||[])[0];
+    if(!top){$('need-candidate-summary').innerHTML='<span class="error">⚠️ 無候選資源，核准派遣會失敗</span>';return;}
+    const notify=top.notify_channel==='auto'?'🏢 自動完成（不透過 LINE）'
+      :top.notify_channel==='line'?'📱 會發 LINE 任務卡'
+      :'⚠️ 未綁定 LINE，核准後需自行聯繫';
+    $('need-candidate-summary').innerHTML=`➜ 系統建議 <strong>${escapeHtml(top.vol)}</strong>（${escapeHtml(top.name)}・評分 ${top.score}${top.dist_km!=null?'・'+top.dist_km+' km':''}）<br>${notify}`;
+  }catch(e){operationCandidates.delete(key);if(state.selected?.id===node.id&&$('need-candidate-summary'))$('need-candidate-summary').textContent=e.message;}
 }
 async function resourceRequest(path,method='GET'){
   const r=await fetch('/api/resources'+path,{method});const data=await r.json();
@@ -82,8 +109,16 @@ async function loadOperationEvents(node){
   }catch(e){operationEvents.delete(key);if(state.selected?.id===node.id&&$('operation-events'))$('operation-events').textContent=e.message;}
 }
 async function actOnNeed(node,action){
-  const prompts={confirm_dispatch:'核准此建議並通知志工與需求者？',decline_suggestion:'退回此建議並釋放保留物資？',resolve_sos:'確認已聯繫並處理這筆求助？'};
-  if(!confirm(prompts[action]))return;
+  const titles={confirm_dispatch:'核准派遣？',decline_suggestion:'退回此建議？',resolve_sos:'確認已處理？'};
+  const okLabels={confirm_dispatch:'核准派遣',decline_suggestion:'退回',resolve_sos:'確認已處理'};
+  let body={confirm_dispatch:'核准後會真正通知志工與需求者。',decline_suggestion:'物資會恢復可用，需求退回待媒合。',resolve_sos:'當事人會收到已處理的 LINE 通知。'}[action];
+  if(action==='confirm_dispatch'){
+    const cached=operationCandidates.get(node.id+':'+node.properties.version);
+    const data=cached&&await cached.catch(()=>null);
+    const top=data&&(data.candidates||[])[0];
+    if(top)body=`將派給 <strong>${escapeHtml(top.vol)}</strong>（${escapeHtml(top.name)}），系統評分 ${top.score} 分${top.dist_km!=null?'，距離 '+top.dist_km+' km':''}。<br>核准後會真正通知志工與需求者。`;
+  }
+  if(!await askConfirm(titles[action]||'確認？',body,okLabels[action]))return;
   const buttons=[...$('operational-actions').querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
   try{const result=await resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/'+action+'?expected_version='+encodeURIComponent(node.properties.version),'POST');operationEvents.clear();await refreshOperations();message(result.message||'操作完成');}
   catch(e){message(e.message,true);}finally{buttons.forEach(b=>b.disabled=false);}
@@ -91,21 +126,35 @@ async function actOnNeed(node,action){
 function updateInventoryCount(){$('inventory-count').textContent=inventoryDrafts.size;inventoryReview=null;$('apply-inventory').disabled=true;}
 async function editInventory(node){
   const p=node.properties,create=!node.id.startsWith('db:');
+  const point=p.db==='point'||node.kind==='facility';
   if(create&&!p.inventory_key){checkpoint();p.inventory_key=crypto.randomUUID();changed();updateHistory();}
-  if(create&&!operationOwners.length){try{const snapshot=await api('/operational-data');operationOwners=snapshot.owners;}catch(e){message(e.message,true);return;}}
+  if(create&&!point&&!operationOwners.length){try{const snapshot=await api('/operational-data');operationOwners=snapshot.owners;}catch(e){message(e.message,true);return;}}
   const staged=inventoryDrafts.get(node.id);
-  const values={...(p.base_values||{name:node.label,quantity:node.quantity+'份',lat:node.lat,lng:node.lng,address:'',is_available:node.available}),...staged?.values};
-  const point=p.db==='point';
-  $('inventory-title').textContent=create?'登記物資':point?'更新資源點位置':'更新物資資料';
-  $('inventory-fields').innerHTML=(create?`<label>提供者<select id="inventory-owner" required><option value="">選擇志工或管理員</option>${operationOwners.map(o=>`<option value="${escapeHtml(o.id)}" ${staged?.owner_id===o.id?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select></label><label>品項<select id="inventory-type">${options({water:'飲用水',food:'食物',first_aid:'急救用品',shelter:'庇護所',vehicle:'交通工具',tool:'工具',other:'其他物資'},staged?.resource_type||'water')}</select></label>`:'')+
-    (!point?`<label>名稱<input id="inventory-name" maxlength="200" required value="${escapeHtml(values.name)}"></label><label>數量與單位<input id="inventory-quantity" maxlength="80" required value="${escapeHtml(values.quantity)}"></label>`:'')+
+  const fallback=point
+    ?{name:node.label,lat:node.lat,lng:node.lng,address:'',capacity:null,phone:'',operating_hours:''}
+    :{name:node.label,quantity:node.quantity+'份',lat:node.lat,lng:node.lng,address:'',is_available:node.available};
+  const values={...(p.base_values||fallback),...staged?.values};
+  $('inventory-title').textContent=create?(point?'新增資源點':'登記物資'):(point?'更新資源點資料':'更新物資資料');
+  $('inventory-fields').innerHTML=
+    (create&&!point?`<label>提供者<select id="inventory-owner" required><option value="">選擇志工或管理員</option>${operationOwners.map(o=>`<option value="${escapeHtml(o.id)}" ${staged?.owner_id===o.id?'selected':''}>${escapeHtml(o.name)}</option>`).join('')}</select></label><label>品項<select id="inventory-type">${options({water:'飲用水',food:'食物',first_aid:'急救用品',shelter:'庇護所',vehicle:'交通工具',tool:'工具',other:'其他物資'},staged?.resource_type||'water')}</select></label>`:'')+
+    (create&&point?`<label>資源點類型<select id="inventory-point-type">${options(POINT_TYPE_LABELS,staged?.point_type||'other')}</select></label>`:'')+
+    `<label>名稱<input id="inventory-name" maxlength="200" required value="${escapeHtml(values.name)}"></label>`+
+    (!point?`<label>數量與單位<input id="inventory-quantity" maxlength="80" required value="${escapeHtml(values.quantity)}"></label>`:'')+
     `<div class="form-grid"><label>緯度<input id="inventory-lat" type="number" min="-90" max="90" step="any" value="${values.lat??''}"></label><label>經度<input id="inventory-lng" type="number" min="-180" max="180" step="any" value="${values.lng??''}"></label></div><label>地址<input id="inventory-address" maxlength="500" value="${escapeHtml(values.address)}"></label>`+
-    (!point?`<label class="checkbox-label"><input id="inventory-available" type="checkbox" ${values.is_available?'checked':''}>物資可用</label>`:'');
+    (!point?`<label class="checkbox-label"><input id="inventory-available" type="checkbox" ${values.is_available?'checked':''}>物資可用</label>`
+      :`<div class="form-grid"><label>容量<input id="inventory-capacity" type="number" min="0" step="1" value="${values.capacity??''}"></label><label>電話<input id="inventory-phone" maxlength="40" value="${escapeHtml(values.phone||'')}"></label></div><label>開放時間<input id="inventory-hours" maxlength="100" value="${escapeHtml(values.operating_hours||'')}"></label>`);
   $('inventory-form').onsubmit=event=>{
-    event.preventDefault();const next={lat:$('inventory-lat').value===''?null:Number($('inventory-lat').value),lng:$('inventory-lng').value===''?null:Number($('inventory-lng').value),address:$('inventory-address').value};
-    if(!point)Object.assign(next,{name:$('inventory-name').value,quantity:$('inventory-quantity').value,is_available:$('inventory-available').checked});
+    event.preventDefault();
+    const next={name:$('inventory-name').value,lat:$('inventory-lat').value===''?null:Number($('inventory-lat').value),
+      lng:$('inventory-lng').value===''?null:Number($('inventory-lng').value),address:$('inventory-address').value};
+    if(point)Object.assign(next,{capacity:$('inventory-capacity').value===''?null:Number($('inventory-capacity').value),
+      phone:$('inventory-phone').value,operating_hours:$('inventory-hours').value});
+    else Object.assign(next,{quantity:$('inventory-quantity').value,is_available:$('inventory-available').checked});
     const changedValues=create?next:Object.fromEntries(Object.entries(next).filter(([k,v])=>p.base_values[k]!==v));
-    if(Object.keys(changedValues).length)inventoryDrafts.set(node.id,{node_id:node.id,operation:create?'create':'update',expected_version:staged?.expected_version||p.version||null,values:changedValues,...(create?{creation_key:p.inventory_key,owner_id:$('inventory-owner').value,resource_type:$('inventory-type').value}:{})});
+    if(Object.keys(changedValues).length)inventoryDrafts.set(node.id,{node_id:node.id,operation:create?'create':'update',
+      expected_version:staged?.expected_version||p.version||null,values:changedValues,
+      ...(create?(point?{creation_key:p.inventory_key,point_type:$('inventory-point-type').value}
+                       :{creation_key:p.inventory_key,owner_id:$('inventory-owner').value,resource_type:$('inventory-type').value}):{})});
     else inventoryDrafts.delete(node.id);
     updateInventoryCount();$('inventory-dialog').close();message('已更新待寫回清單');
   };

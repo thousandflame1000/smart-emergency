@@ -61,7 +61,7 @@ function renderAllocationResult(){
   html+='<section class="comparison-section"><h3>供應餘額</h3>'+table(['供應位置','庫存／出貨上限','本次分配','預估餘額'],after.inventory.map(s=>`<tr><td>${escapeHtml(s.label)}</td><td>${s.stock} / ${s.dispatch_capacity}</td><td>${s.allocated}</td><td>${s.remaining}</td></tr>`).join(''))+'</section>';
   html+=`<details><summary>計算依據與限制</summary><ul>${r.assumptions.map(a=>`<li>${escapeHtml(a)}</li>`).join('')}</ul><p>${escapeHtml(r.solver)} · ${escapeHtml(r.model)}<br>${escapeHtml(r.generated_at)}</p><p>資料 SHA-256：${escapeHtml(after.fingerprint)}</p></details>`;
   const dbCount=after.assignments.filter(a=>a.supply_id.startsWith('db:')&&a.demand_id.startsWith('db:')).length;
-  if(dbCount)html=`<section class="comparison-section"><h3>送到調度</h3><p class="muted">其中 ${dbCount} 筆來自平台資料庫。送出後會在後台「調度」出現為「待確認」建議、並保留該份物資；不會通知志工，須管理員確認才會派遣。</p><button id="send-allocation" class="primary"><i data-lucide="send"></i>送到調度（待確認）</button><div id="send-allocation-result" role="status"></div></section>`+html;
+  if(dbCount)html=`<section class="comparison-section"><h3>送到調度</h3><p class="muted">其中 ${dbCount} 筆來自平台資料庫。送出後會在後台「調度」出現為「待確認」建議、並保留該份物資；不會通知志工，須管理員確認才會派遣。</p>${isAdmin()?`<button id="send-allocation" class="primary"><i data-lucide="send"></i>送到調度（待確認）</button><div id="send-allocation-result" role="status"></div>`:'<p class="muted">送到調度僅限管理員。</p>'}</section>`+html;
   $('allocation-result').innerHTML=html;$('allocation-result').querySelectorAll('[data-allocation-location]').forEach(b=>b.onclick=()=>showAllocationLocation(+b.dataset.allocationLocation));if($('send-allocation'))$('send-allocation').onclick=sendAllocationToDispatch;icons();
 }
 async function sendAllocationToDispatch(){
