@@ -161,10 +161,11 @@ body {
   .rel-contact:hover .rel-tools, .rel-contact:focus-within .rel-tools { opacity: 1; }
 }
 .rel-tools .btn[disabled] { opacity: .25; }
-.risk-box { margin: 0 16px 12px; padding: 12px 14px; border: 1px solid rgba(201,54,75,.28);
+.risk-box { margin: 12px 16px 4px; padding: 10px 12px; border: 1px solid rgba(201,54,75,.28);
   background: rgba(201,54,75,.06); border-radius: var(--radius); }
-.risk-box .risk-title { font-size: 12px; font-weight: 700; color: var(--danger); margin-bottom: 8px; }
-.risk-names { display: flex; flex-wrap: wrap; gap: 6px; }
+.risk-box .risk-title { font-size: 12px; font-weight: 700; color: var(--danger); margin-bottom: 7px; }
+.risk-names { display: flex; flex-wrap: wrap; gap: 5px; }
+.risk-names .btn { padding: 3px 9px; font-size: 11.5px; text-transform: none; letter-spacing: 0; background: var(--card); }
 .viewseg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .viewseg button { border: 0; background: var(--card); color: var(--text-dim); padding: 6px 12px;
   font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all .12s; }
@@ -181,8 +182,6 @@ body {
 .relgraph .node:hover rect { stroke: var(--primary); }
 .relgraph .node text { font-size: 12px; fill: var(--text); dominant-baseline: middle; }
 .relgraph .node.elder rect { fill: var(--soft); }
-.relgraph .node.alone rect { fill: rgba(201,54,75,.07); stroke: rgba(201,54,75,.45); stroke-dasharray: 3 2; }
-.relgraph .node.alone text { fill: var(--danger); }
 .relgraph .col-label { font: 700 10px var(--mono); fill: var(--muted); letter-spacing: .1em; }
 .relgraph .order { font: 700 9.5px var(--mono); fill: var(--primary); }
 .relgraph .load { font: 700 9.5px var(--mono); fill: var(--warning); }
@@ -2136,12 +2135,13 @@ async function loadRelations() {
     // 沒有任何聯絡人的長者擺最上面，而且每個名字都能直接點去補設定——
     // 這才是這頁真正要處理的事，不該只是統計卡上的一個數字。
     const missing = elderly.filter(u => !coveredIds.has(u.id));
+    // 只有名字，不重複寫「＋ 設定聯絡人」——標題已經說了點一下就能設定，
+    // 每顆按鈕再寫一次會讓這一區膨脹成好幾行。
     document.getElementById('relations-risk').innerHTML = missing.length ? `
       <div class="risk-box">
-        <div class="risk-title">⚠ ${missing.length} 位長者還沒有任何緊急聯絡人</div>
-        <div style="font-size:12px;color:var(--text-dim);margin-bottom:9px">他們未回應時，系統找不到人可以通知。</div>
+        <div class="risk-title">⚠ ${missing.length} 位長者沒有緊急聯絡人<span style="font-weight:400;color:var(--text-dim)">　未回應時系統找不到人可通知，點名字直接設定</span></div>
         <div class="risk-names">${missing.map(u =>
-          `<button class="btn btn-ghost btn-sm" onclick="openRelationModal('${u.id}')">${esc(u.name)}　＋ 設定聯絡人</button>`).join('')}</div>
+          `<button class="btn btn-ghost btn-sm" onclick="openRelationModal('${u.id}')">${esc(u.name)}</button>`).join('')}</div>
       </div>` : '';
 
     renderRelationGraph(rels, elderly);
@@ -2231,11 +2231,11 @@ function renderRelationGraph(rels, elderly) {
 
   if (!elderRows.length && !alone.length) { host.innerHTML = ''; return; }
 
-  const GAP = 46, TOP = 34, BOXW = 150, BOXH = 30, LEFT = 24, RIGHT = 520;
-  const ALONE_COLS = 4, ALONE_GAP = 38;
-  const aloneRows = Math.ceil(alone.length / ALONE_COLS);
-  const rows = Math.max(elderRows.length, contactRows.length, alone.length ? 1 : 0);
-  const H = TOP + Math.max(rows, 1) * GAP + (alone.length ? aloneRows * ALONE_GAP + 34 : 0);
+  // 沒有任何連線的長者不畫進網絡圖——那不是「網絡」，而且上面的風險區
+  // 已經列過一次了，重複畫等於同一份資訊佔兩塊版面。
+  const GAP = 38, TOP = 30, BOXW = 150, BOXH = 28, LEFT = 24, RIGHT = 520;
+  const rows = Math.max(elderRows.length, contactRows.length);
+  const H = TOP + Math.max(rows, 1) * GAP + 10;
   const yOf = (list, id) => TOP + list.findIndex(n => n.id === id) * GAP + BOXH / 2;
 
   // 一個聯絡人被幾位長者指定 —— 掛太多人是單點風險，直接標在節點旁邊。
@@ -2262,20 +2262,12 @@ function renderRelationGraph(rels, elderly) {
     return box(n, RIGHT, y, 'contact', tag);
   }).join('');
 
-  const aloneTop = TOP + Math.max(rows, 1) * GAP + 18;
-  const aloneBoxes = alone.length
-    ? `<text class="col-label" x="${LEFT}" y="${aloneTop - 10}">沒有任何聯絡人 ${alone.length} 位 — 點一下直接設定</text>` +
-      alone.map((u, i) => box({ id: String(u.id), name: u.name },
-        LEFT + (i % ALONE_COLS) * (BOXW + 12),
-        aloneTop + Math.floor(i / ALONE_COLS) * ALONE_GAP + BOXH / 2, 'alone')).join('')
-    : '';
-
-  host.innerHTML = `<div class="relgraph">
+  host.innerHTML = elderRows.length ? `<div class="relgraph">
     <svg viewBox="0 0 ${RIGHT + BOXW + 24} ${H}" role="img" aria-label="照護關係網絡圖">
-      <text class="col-label" x="${LEFT}" y="18">長者</text>
-      <text class="col-label" x="${RIGHT}" y="18">聯絡人</text>
-      ${edges}${elderBoxes}${contactBoxes}${aloneBoxes}
-    </svg></div>`;
+      <text class="col-label" x="${LEFT}" y="16">長者</text>
+      <text class="col-label" x="${RIGHT}" y="16">聯絡人</text>
+      ${edges}${elderBoxes}${contactBoxes}
+    </svg></div>` : '';
 
   // 滑到節點時，把跟它無關的連線和節點壓暗，才看得出這個人到底連到誰。
   const wrap = host.querySelector('.relgraph');
@@ -2297,7 +2289,7 @@ function renderRelationGraph(rels, elderly) {
       wrap.classList.remove('dim');
       wrap.querySelectorAll('.lit').forEach(el => el.classList.remove('lit'));
     });
-    if (node.classList.contains('elder') || node.classList.contains('alone')) {
+    if (node.classList.contains('elder')) {
       node.addEventListener('click', () => openRelationModal(id));
     }
   });
