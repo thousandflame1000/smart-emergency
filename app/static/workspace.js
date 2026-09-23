@@ -260,7 +260,7 @@ async function init(){
   // Thousands of individual markers (e.g. legacy road-node meshes) get slow to render and
   // pan/zoom once on the map at once; cluster them so only nearby markers group into one
   // DOM element until you zoom in. Edges stay in mapLayers (lines aren't clusterable).
-  markerCluster=L.markerClusterGroup({chunkedLoading:true, maxClusterRadius:60, spiderfyOnMaxZoom:true}).addTo(map);
+  markerCluster=L.markerClusterGroup({chunkedLoading:true, maxClusterRadius:60, spiderfyOnMaxZoom:true, disableClusteringAtZoom:19}).addTo(map);
   map.on('click',e=>addNode(e.latlng));
   $('road-search-go').onclick=()=>searchRoad($('road-search-input').value);
   $('road-search-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchRoad($('road-search-input').value);}});
