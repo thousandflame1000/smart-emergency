@@ -1174,3 +1174,28 @@ def test_first_message_does_not_ask_for_location_twice(db, line_outbox):
     everything = replies(line_outbox) + sent_to(line_outbox, "Udup")
     asked = sum(t.count("我們還不知道您在哪裡") for t in everything)
     assert asked == 1, f"同一段位置提示出現 {asked} 次：{everything}"
+
+
+@pytest.mark.parametrize("typed,digits", [
+    ("綁定 12345", "6"), ("綁定 1234567", "6"), ("綁定 abcdef", "6"),
+    ("加入 123", "8"), ("加入 123456789", "8"),
+])
+def test_mistyped_code_says_what_the_format_is(db, line_outbox, typed, digits):
+    """位數打錯時要直接講格式，不要丟給「我聽不懂」的 fallback。
+
+    使用者顯然正在輸入綁定碼；回他「傳『幫助』可查看可用指令」等於要他
+    重猜一次（Nielsen #9：協助辨識與復原）。
+    """
+    mk(db, "居民", ["elderly"], "Ucode")
+    say("Ucode", typed)
+    text = " ".join(replies(line_outbox))
+    assert f"{digits} 位數字" in text, f"沒有說明格式：{text}"
+    assert "可用指令" not in text, f"落到了泛用 fallback：{text}"
+
+
+def test_admin_only_message_offers_a_way_forward(db, line_outbox):
+    """只說「不行」是死路；志工那則會告訴你怎麼申請，管理員這則也該有下一步。"""
+    mk(db, "居民", ["elderly"], "Uplain")
+    say("Uplain", "總覽")
+    text = " ".join(replies(line_outbox))
+    assert "僅限管理員" in text and "聯絡" in text, text

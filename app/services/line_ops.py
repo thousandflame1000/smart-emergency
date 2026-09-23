@@ -37,6 +37,8 @@ COMMAND_WORDS = (VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDEN
                  | ROLE_CENTER_COMMANDS | MAINTENANCE_COMMANDS)
 BIND_RE = re.compile(r"^綁定\s*(\d{6})$")
 JOIN_RE = re.compile(r"^加入\s*(\d{8})$")
+# 打錯位數或夾雜非數字時用這個攔下來，好告訴對方正確格式。
+NEAR_CODE_RE = re.compile(r"^(綁定|加入)\s*([0-9A-Za-z\-]{1,16})$")
 JOIN_TTL = timedelta(days=7)
 JOIN_TTL_ADMIN = timedelta(minutes=30)
 MAX_CODE_FAILURES = 5
@@ -172,7 +174,7 @@ def volunteer_center(event, db: Session, user: User) -> None:
 # ── 管理員 ───────────────────────────────────────────────────────────────────
 def _require_admin(event, user: User) -> bool:
     if not is_admin(user):
-        _say(event, "此功能僅限管理員使用。")
+        _say(event, "此功能僅限管理員使用。如果您負責社區調度，請聯絡現有管理員把您加入。")
         return False
     return True
 
@@ -574,7 +576,7 @@ def bind_family(event, db: Session, user: User, code: str) -> None:
             db.delete(row)
             db.commit()
         _record_failure(db, user.line_uid)
-        _say(event, "這個綁定碼無效或已過期，請請對方重新傳「邀請家人」取得新的。")
+        _say(event, "這個綁定碼無效或已過期，請對方重新傳「邀請家人」取得新的。")
         return
     elder = db.query(User).filter(User.id == info["elderly_id"]).first()
     if elder is None:
@@ -701,6 +703,15 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
     if m:
         join_member(event, db, user, m.group(1))
         return True
+    # 明顯是在輸入綁定碼但位數或字元不對時，要直接指出格式；
+    # 丟去「我聽不懂，請傳『幫助』」等於讓人重猜一次（Nielsen #9）。
+    near = NEAR_CODE_RE.match(text)
+    if near:
+        word, got = near.group(1), near.group(2)
+        digits = "6" if word == "綁定" else "8"
+        _say(event, f"「{word}」後面要接 {digits} 位數字，您輸入的是「{got}」。\n"
+                    f"請確認後重傳，例如：{word} {'1' * int(digits)}")
+        return True
     if text not in COMMAND_WORDS:
         return False
     if text == "居民中心":
@@ -751,7 +762,7 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
 def handle_postback(event, db: Session, user: User, action: str, data: dict) -> bool:
     if action.startswith("admin_"):
         if not is_admin(user):
-            _say(event, "此功能僅限管理員使用。")
+            _say(event, "此功能僅限管理員使用。如果您負責社區調度，請聯絡現有管理員把您加入。")
             return True
         _admin_postback(event, db, user, action, data)
         return True
