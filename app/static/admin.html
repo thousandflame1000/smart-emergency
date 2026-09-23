@@ -26,9 +26,9 @@
   --success:     #18765a;
   --danger:      #c9364b;
   --warning:     #9a6500;
-  --muted:       #68756e;
+  --muted:       #5f6c65;
   --text:        #17201c;
-  --text-dim:    #68756e;
+  --text-dim:    #5f6c65;
   --soft:        #e8f2ed;
   --radius:      6px;
   --mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
@@ -63,7 +63,7 @@ body {
 .sidebar-logo span { font-size: 10.5px; color: var(--on-dark-dim); margin-top: 3px; display: block;
                       font-family: var(--mono); letter-spacing: .06em; }
 .nav-section { padding: 18px 16px 6px; font-size: 9.5px; font-weight: 700;
-               color: #77847d; letter-spacing: .14em; text-transform: uppercase;
+               color: #909d95; letter-spacing: .14em; text-transform: uppercase;
                font-family: var(--mono); }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
@@ -165,7 +165,7 @@ body {
   background: rgba(201,54,75,.06); border-radius: var(--radius); }
 .risk-box .risk-title { font-size: 12px; font-weight: 700; color: var(--danger); margin-bottom: 7px; }
 .risk-names { display: flex; flex-wrap: wrap; gap: 5px; }
-.risk-names .btn { padding: 3px 9px; font-size: 11.5px; text-transform: none; letter-spacing: 0; background: var(--card); }
+.risk-names .btn { padding: 3px 11px; min-height: 26px; font-size: 11.5px; text-transform: none; letter-spacing: 0; background: var(--card); }
 .viewseg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .viewseg button { border: 0; background: var(--card); color: var(--text-dim); padding: 6px 12px;
   font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all .12s; }
@@ -204,7 +204,8 @@ body {
 .person-facts { margin-top: 11px; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
 .person-facts div { display: flex; gap: 7px; color: var(--text-dim); }
 .person-facts .k { flex-shrink: 0; width: 15px; text-align: center; opacity: .75; }
-.person-facts a { color: var(--primary); text-decoration: none; }
+.person-facts a { color: var(--primary); text-decoration: none;
+  display: inline-flex; align-items: center; min-height: 24px; }
 .person-facts a:hover { text-decoration: underline; }
 .person-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 5px; }
 .person .row-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px;
@@ -340,7 +341,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .modal-title { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .modal-close {
   background: none; border: none; cursor: pointer;
-  font-size: 18px; color: var(--muted); line-height: 1; padding: 2px;
+  font-size: 18px; color: var(--muted); line-height: 1;
+  /* WCAG 2.5.8 Target Size (Minimum)：可點目標至少 24x24 CSS px。 */
+  min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center;
 }
 .modal-close:hover { color: var(--text); }
 .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
@@ -560,7 +563,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 長者管理                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page active" id="page-elderly">
-      <div class="stat-strip" id="elderly-stats"></div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -585,7 +587,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 志工 / 家屬                                     -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-volunteers">
-      <div class="stat-strip" id="volunteers-stats"></div>
       <div class="card is-hidden" id="volunteer-applications-card">
         <div class="card-header">
           <div>
@@ -625,7 +626,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 照護關係                                        -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-relations">
-      <div class="stat-strip" id="relations-stats"></div>
       <div class="card">
         <div class="card-header">
           <div>
@@ -691,11 +691,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-body">
           <div class="form-row col-2" style="margin-bottom:12px">
             <div class="form-group">
-              <label class="form-label">來源名稱 <span class="req">*</span></label>
+              <label class="form-label" for="doc-source">來源名稱 <span class="req">*</span></label>
               <input type="text" id="doc-source" class="form-control" placeholder="例如：台中市急救手冊 v1.0">
             </div>
             <div class="form-group">
-              <label class="form-label">分類</label>
+              <label class="form-label" for="doc-category">分類</label>
               <select id="doc-category" class="form-select">
                 <option value="first_aid">🩹 急救</option>
                 <option value="eldercare">👴 長者照護</option>
@@ -706,7 +706,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             </div>
           </div>
           <div class="form-group" style="margin-bottom:10px">
-            <label class="form-label">文件內容 <span class="req">*</span></label>
+            <label class="form-label" for="doc-content">文件內容 <span class="req">*</span></label>
             <textarea id="doc-content" class="form-control" rows="7"
               placeholder="貼上 SOP、指引、注意事項等…&#10;系統將自動切段（每 400 字一段）並向量化。"></textarea>
           </div>
@@ -1095,7 +1095,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <div class="modal-body">
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">需求類型 <span class="req">*</span></label>
+          <label class="form-label" for="need-type">需求類型 <span class="req">*</span></label>
           <select class="form-select" id="need-type">
             <option value="water">💧 飲用水</option>
             <option value="food">🍱 食物</option>
@@ -1107,7 +1107,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">緊急度（1–5）</label>
+          <label class="form-label" for="need-urgency">緊急度（1–5）</label>
           <select class="form-select" id="need-urgency">
             <option value="5">5 — 極緊急（距離上限 2km）</option>
             <option value="4">4 — 緊急（5km）</option>
@@ -1118,26 +1118,26 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">說明</label>
+        <label class="form-label" for="need-desc">說明</label>
         <input type="text" class="form-control" id="need-desc" placeholder="例：一家 4 口，需要 3 天份食物">
       </div>
       <div class="form-group">
-        <label class="form-label">需求地址 <span class="req">*</span></label>
+        <label class="form-label" for="need-address">需求地址 <span class="req">*</span></label>
         <input type="text" class="form-control" id="need-address" placeholder="台中市南區崇倫街…" oninput="scheduleGeocode('need')" onblur="geocodeNow('need')">
         <span class="form-hint" id="need-geocode-status"></span>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
+          <label class="form-label" for="need-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="need-lat" placeholder="24.1234">
         </div>
         <div class="form-group">
-          <label class="form-label">經度</label>
+          <label class="form-label" for="need-lng">經度</label>
           <input type="number" step="0.0001" class="form-control" id="need-lng" placeholder="120.6789">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">登記人（選填）</label>
+        <label class="form-label" for="need-requester">登記人（選填）</label>
         <select class="form-select" id="need-requester">
           <option value="">— 不指定（系統自動選擇）—</option>
         </select>
@@ -1163,11 +1163,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <input type="hidden" id="chunk-id">
       <div class="form-row col-2" style="margin-bottom:12px">
         <div class="form-group">
-          <label class="form-label">來源名稱</label>
+          <label class="form-label" for="chunk-source">來源名稱</label>
           <input type="text" id="chunk-source" class="form-control">
         </div>
         <div class="form-group">
-          <label class="form-label">分類</label>
+          <label class="form-label" for="chunk-category">分類</label>
           <select id="chunk-category" class="form-select">
             <option value="first_aid">🩹 急救</option>
             <option value="eldercare">👴 長者照護</option>
@@ -1178,7 +1178,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">內容</label>
+        <label class="form-label" for="chunk-content">內容</label>
         <textarea id="chunk-content" class="form-control" rows="8"></textarea>
         <div style="font-size:11px;color:var(--muted);margin-top:4px">修改內容會自動重新向量化，確保搜尋結果與最新文字一致。</div>
       </div>
@@ -1203,11 +1203,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <input type="hidden" id="user-id">
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">姓名 <span class="req">*</span></label>
+          <label class="form-label" for="user-name">姓名 <span class="req">*</span></label>
           <input type="text" class="form-control" id="user-name" placeholder="王大明">
         </div>
         <div class="form-group">
-          <label class="form-label">角色 <span class="req">*</span></label>
+          <label class="form-label" for="user-role">角色 <span class="req">*</span></label>
           <select class="form-select" id="user-role">
             <option value="elderly">長者</option>
             <option value="volunteer">志工</option>
@@ -1220,17 +1220,17 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">電話</label>
+          <label class="form-label" for="user-phone">電話</label>
           <input type="text" class="form-control" id="user-phone" placeholder="0912345678">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">地址</label>
+        <label class="form-label" for="user-address">地址</label>
         <input type="text" class="form-control" id="user-address" placeholder="台中市南區…" oninput="scheduleGeocode('user')" onblur="geocodeNow('user')">
         <span class="form-hint" id="user-geocode-status"></span>
       </div>
       <div class="form-group">
-        <label class="form-label">LINE 綁定</label>
+        <div class="form-label">LINE 綁定</div>
         <div id="user-bind-status" class="form-hint"></div>
         <div id="user-bind-code" class="is-hidden" style="font-size:30px;font-weight:800;letter-spacing:3px;margin:8px 0"></div>
         <div id="user-bind-qr" class="is-hidden" style="margin:8px 0">
@@ -1245,11 +1245,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
+          <label class="form-label" for="user-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="user-lat" placeholder="24.1234">
         </div>
         <div class="form-group">
-          <label class="form-label">經度</label>
+          <label class="form-label" for="user-lng">經度</label>
           <input type="number" step="0.0001" class="form-control" id="user-lng" placeholder="120.6789">
         </div>
       </div>
@@ -1272,16 +1272,16 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     </div>
     <div class="modal-body">
       <div class="form-group">
-        <label class="form-label">長者 <span class="req">*</span></label>
+        <label class="form-label" for="rel-elderly-id">長者 <span class="req">*</span></label>
         <select class="form-select" id="rel-elderly-id"></select>
       </div>
       <div class="form-group">
-        <label class="form-label">聯絡人（家屬 / 志工）<span class="req">*</span></label>
+        <label class="form-label" for="rel-contact-id">聯絡人（家屬 / 志工）<span class="req">*</span></label>
         <select class="form-select" id="rel-contact-id"></select>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">關係類型</label>
+          <label class="form-label" for="rel-relation">關係類型</label>
           <select class="form-select" id="rel-relation">
             <option value="family">家屬</option>
             <option value="volunteer">志工</option>
@@ -1289,7 +1289,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </select>
         </div>
         <div class="form-group">
-          <label class="form-label">通知順序（1 = 最先）</label>
+          <label class="form-label" for="rel-order">通知順序（1 = 最先）</label>
           <input type="number" min="1" max="10" class="form-control" id="rel-order" value="1">
         </div>
       </div>
@@ -1318,11 +1318,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <input type="hidden" id="pt-id">
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">名稱 <span class="req">*</span></label>
+          <label class="form-label" for="pt-name">名稱 <span class="req">*</span></label>
           <input type="text" class="form-control" id="pt-name" placeholder="例：崇倫國小避難所">
         </div>
         <div class="form-group">
-          <label class="form-label">類型</label>
+          <label class="form-label" for="pt-type">類型</label>
           <select class="form-select" id="pt-type">
             <option value="shelter">🏠 避難收容所</option>
             <option value="community">🏘️ 里民活動中心</option>
@@ -1337,42 +1337,42 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">地址</label>
+        <label class="form-label" for="pt-address">地址</label>
         <input type="text" class="form-control" id="pt-address" placeholder="台中市南區…" oninput="scheduleGeocode('pt')" onblur="geocodeNow('pt')">
         <span class="form-hint" id="pt-geocode-status"></span>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
+          <label class="form-label" for="pt-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="pt-lat" placeholder="24.1234">
         </div>
         <div class="form-group">
-          <label class="form-label">經度</label>
+          <label class="form-label" for="pt-lng">經度</label>
           <input type="number" step="0.0001" class="form-control" id="pt-lng" placeholder="120.6789">
         </div>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">容量（人數）</label>
+          <label class="form-label" for="pt-capacity">容量（人數）</label>
           <input type="number" class="form-control" id="pt-capacity" placeholder="200">
         </div>
         <div class="form-group">
-          <label class="form-label">目前使用人數</label>
+          <label class="form-label" for="pt-load">目前使用人數</label>
           <input type="number" min="0" class="form-control" id="pt-load" placeholder="0">
         </div>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">電話</label>
+          <label class="form-label" for="pt-phone">電話</label>
           <input type="text" class="form-control" id="pt-phone" placeholder="04-22xxxxxx">
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">開放時間</label>
+        <label class="form-label" for="pt-hours">開放時間</label>
         <input type="text" class="form-control" id="pt-hours" placeholder="24h 或 08:00-22:00">
       </div>
       <div class="form-group">
-        <label class="form-label">備註</label>
+        <label class="form-label" for="pt-note">備註</label>
         <input type="text" class="form-control" id="pt-note">
       </div>
     </div>
@@ -1396,11 +1396,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <input type="hidden" id="res-id">
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">名稱 <span class="req">*</span></label>
+          <label class="form-label" for="res-name">名稱 <span class="req">*</span></label>
           <input type="text" class="form-control" id="res-name" placeholder="備用飲用水">
         </div>
         <div class="form-group">
-          <label class="form-label">類型</label>
+          <label class="form-label" for="res-type">類型</label>
           <select class="form-select" id="res-type">
             <option value="water">💧 飲用水</option>
             <option value="food">🍱 食物</option>
@@ -1414,32 +1414,32 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">數量</label>
+          <label class="form-label" for="res-quantity">數量</label>
           <input type="text" class="form-control" id="res-quantity" placeholder="約 50 公升">
         </div>
         <div class="form-group">
-          <label class="form-label">登記人（志工）</label>
+          <label class="form-label" for="res-owner-id">登記人（志工）</label>
           <select class="form-select" id="res-owner-id">
             <option value="">— 選擇 —</option>
           </select>
         </div>
       </div>
       <div class="form-group">
-        <label class="form-label">地址</label>
+        <label class="form-label" for="res-address">地址</label>
         <input type="text" class="form-control" id="res-address" oninput="scheduleGeocode('res')" onblur="geocodeNow('res')">
         <span class="form-hint" id="res-geocode-status"></span>
       </div>
       <div class="form-group">
-        <label class="form-label">備註</label>
+        <label class="form-label" for="res-note">備註</label>
         <input type="text" class="form-control" id="res-note">
       </div>
       <div class="form-row col-2">
         <div class="form-group">
-          <label class="form-label">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
+          <label class="form-label" for="res-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
           <input type="number" step="0.0001" class="form-control" id="res-lat">
         </div>
         <div class="form-group">
-          <label class="form-label">經度</label>
+          <label class="form-label" for="res-lng">經度</label>
           <input type="number" step="0.0001" class="form-control" id="res-lng">
         </div>
       </div>
@@ -1465,7 +1465,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   </div>
 </div>
 
-<div class="toast-stack" id="toast-stack"></div>
+<div class="toast-stack" id="toast-stack" role="status" aria-live="polite"></div>
 
 <script>
 // ════════════════════════════════════════════════
@@ -1796,14 +1796,6 @@ const ELDER_FILTERS = {
 function renderElderly(data) {
   if (data) elderlyAll = data;
   const all = elderlyAll;
-  const bound = all.filter(u => u.line_uid).length;
-  const active = all.filter(u => u.is_active).length;
-  document.getElementById('elderly-stats').innerHTML = `
-    <div class="stat-tile"><div class="stat-tile-label">總長者數</div><div class="stat-tile-value">${all.length}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">已綁定 LINE</div><div class="stat-tile-value ok">${bound}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">未綁定</div><div class="stat-tile-value">${all.length - bound}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">帳號啟用中</div><div class="stat-tile-value">${active}</div></div>`;
-
   document.getElementById('elderly-chips').innerHTML =
     [['', '全部', all.length], ...Object.entries(ELDER_FILTERS).map(([k, f]) => [k, f.label, all.filter(f.test).length])]
       .map(([k, label, n]) => `<button type="button" class="fchip ${elderlyFilter===k?'on':''}" data-echip="${k}">${esc(label)}<b>${n}</b></button>`).join('');
@@ -1832,13 +1824,6 @@ function renderVolunteers(data) {
   if (data) volunteersAll = data;
   const all = volunteersAll;
   const count = role => all.filter(u => u.roles.includes(role)).length;
-  const bound = all.filter(u => u.line_uid).length;
-  document.getElementById('volunteers-stats').innerHTML = `
-    <div class="stat-tile"><div class="stat-tile-label">總人數</div><div class="stat-tile-value">${all.length}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">志工</div><div class="stat-tile-value">${count('volunteer')}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">家屬</div><div class="stat-tile-value">${count('family')}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">基層員工</div><div class="stat-tile-value">${count('field_staff')}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">已綁定 LINE</div><div class="stat-tile-value ok">${bound}</div></div>`;
 
   document.getElementById('volunteers-chips').innerHTML =
     [['', '全部', all.length], ...['volunteer','family','field_staff'].map(r => [r, ROLE_LABEL[r] || r, count(r)])]
@@ -2125,12 +2110,6 @@ async function loadRelations() {
     const contacts = users.filter(u => !u.roles.includes('elderly'));
 
     const coveredIds = new Set(rels.map(r => r.elderly_id));
-    const isolated = elderly.filter(u => !coveredIds.has(u.id)).length;
-    document.getElementById('relations-stats').innerHTML = `
-      <div class="stat-tile"><div class="stat-tile-label">照護關係數</div><div class="stat-tile-value">${rels.length}</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">有聯絡人的長者</div><div class="stat-tile-value ok">${coveredIds.size}</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">零聯絡人（孤立風險）</div><div class="stat-tile-value ${isolated>0?'danger':''}">${isolated}</div></div>`;
-
     document.getElementById('rel-elderly-id').innerHTML =
       elderly.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join('');
     document.getElementById('rel-contact-id').innerHTML =

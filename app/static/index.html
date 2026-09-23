@@ -10,12 +10,12 @@
 <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;letter-spacing:0}
-:root{--bg:#f3f6f3;--surface:#fff;--ink:#17201c;--muted:#68756e;--line:#d7dfda;--nav:#181d1b;--nav-muted:#9aa69f;--accent:#13795b;--danger:#c9364b;--warning:#9a6500;--ok:#18765a;--soft:#e8f2ed;--radius:6px;--sans:Inter,"Noto Sans TC","Microsoft JhengHei",sans-serif;--mono:"SFMono-Regular",Consolas,monospace}
+:root{--bg:#f3f6f3;--surface:#fff;--ink:#17201c;--muted:#5f6c65;--line:#d7dfda;--nav:#181d1b;--nav-muted:#9aa69f;--accent:#13795b;--danger:#c9364b;--warning:#9a6500;--ok:#18765a;--soft:#e8f2ed;--radius:6px;--sans:Inter,"Noto Sans TC","Microsoft JhengHei",sans-serif;--mono:"SFMono-Regular",Consolas,monospace}
 html{color-scheme:light}.embed .sidebar { display: none !important; }.embed .main{width:100%}
 body{height:100vh;overflow:hidden;display:flex;background:var(--bg);color:var(--ink);font:14px var(--sans)}
 button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--nav);color:#eef4f0;display:flex;flex-direction:column;border-right:1px solid #303a35}
 .brand{padding:20px;border-bottom:1px solid #303a35}.brand strong{display:block;font-size:15px}.brand span{display:block;margin-top:4px;color:var(--nav-muted);font-size:11px}
-.nav-label{padding:18px 16px 6px;color:#77847d;font:700 10px var(--mono);text-transform:uppercase}
+.nav-label{padding:18px 16px 6px;color:#909d95;font:700 10px var(--mono);text-transform:uppercase}
 .nav-item{width:100%;height:40px;padding:0 16px;border:0;border-left:3px solid transparent;background:none;color:var(--nav-muted);display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer}
 .nav-item:hover{background:#202823;color:#fff}.nav-item.active{border-left-color:#77d6b5;background:#23322b;color:#9ae4c8}.nav-item svg{width:17px;height:17px}
 .nav-link{text-decoration:none}.sidebar-bottom{margin-top:auto;padding:12px;border-top:1px solid #303a35}
@@ -33,8 +33,6 @@ button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--n
 .empty{padding:36px 18px;text-align:center;color:var(--muted)}.page-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.page-heading h2{font-size:17px}.page-heading p{margin-top:4px;color:var(--muted);font-size:12px}
 .trend-table td:not(:first-child),.trend-table th:not(:first-child){text-align:right;font-family:var(--mono)}
 .ask{max-width:900px}.query-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:16px}.query-row input{height:40px;border:1px solid var(--line);border-radius:4px;padding:0 12px}.primary{height:40px;border:0;border-radius:4px;background:var(--accent);color:#fff;padding:0 18px;font-weight:700;cursor:pointer}.primary:disabled{opacity:.55;cursor:wait}.answer{padding:16px;border-top:1px solid var(--line);line-height:1.75;white-space:pre-wrap}.sources{padding:12px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
-.metric{background:var(--surface);padding:15px 16px;min-height:95px;border:0;width:100%;text-align:left;font:inherit;color:inherit}
-button.metric{cursor:pointer}button.metric:hover{background:var(--soft)}button.metric.on{background:var(--soft);box-shadow:inset 3px 0 0 var(--accent)}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .chip{height:30px;padding:0 11px;border:1px solid var(--line);border-radius:15px;background:var(--surface);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .chip:hover{border-color:var(--accent);color:var(--accent)}.chip.on{border-color:var(--accent);background:var(--accent);color:#fff}
@@ -71,7 +69,7 @@ tbody tr[data-row]{cursor:pointer}
 .scrim{position:fixed;inset:0;background:#17201c66;z-index:60}
 .scrim:not([hidden]){animation:fadein .14s ease}
 .drawer{position:fixed;top:0;right:0;bottom:0;width:min(400px,92vw);background:var(--surface);border-left:1px solid var(--line);z-index:61;display:flex;flex-direction:column;box-shadow:-8px 0 26px #17201c1f;animation:slidein .16s cubic-bezier(.2,.7,.3,1)}
-.mini,.chip,.icon-btn,.action,button.metric{transition:border-color .12s ease,color .12s ease,background .12s ease}
+.mini,.chip,.icon-btn,.action{transition:border-color .12s ease,color .12s ease,background .12s ease}
 @media(prefers-reduced-motion:reduce){*{animation:none !important;transition:none !important}}
 .drawer-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .drawer-head h3{font-size:16px}.drawer-head p{margin-top:5px;color:var(--muted);font-size:12px}
@@ -95,7 +93,7 @@ tbody tr[data-row]{cursor:pointer}
 .pcard-facts{margin-top:9px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
 .pcard-facts div{display:flex;gap:7px}
 .pcard-facts .k{width:14px;flex-shrink:0;text-align:center;opacity:.7}
-.pcard-facts a{color:var(--accent);text-decoration:none}
+.pcard-facts a{color:var(--accent);text-decoration:none;display:inline-flex;align-items:center;min-height:24px}
 .pcard-facts a:hover{text-decoration:underline}
 .pcard .row-actions{margin-top:10px;justify-content:flex-start}
 .pcard-when{font:11px var(--mono);color:var(--muted);margin-top:5px}
@@ -133,14 +131,14 @@ tbody tr[data-row]{cursor:pointer}
 <aside class="sidebar">
   <div class="brand"><strong>鄰里守望</strong><span>照護現況</span></div>
   <div class="nav-label">現況</div>
-  <button class="nav-item active" data-page="overview"><i data-lucide="layout-dashboard"></i><span>總覽</span></button>
-  <button class="nav-item" data-page="elderly"><i data-lucide="heart-pulse"></i><span>長者狀態</span></button>
-  <button class="nav-item" data-page="analytics-page"><i data-lucide="chart-line"></i><span>趨勢分析</span></button>
+  <button class="nav-item active" data-page="overview" aria-label="總覽"><i data-lucide="layout-dashboard"></i><span>總覽</span></button>
+  <button class="nav-item" data-page="elderly" aria-label="長者狀態"><i data-lucide="heart-pulse"></i><span>長者狀態</span></button>
+  <button class="nav-item" data-page="analytics-page" aria-label="趨勢分析"><i data-lucide="chart-line"></i><span>趨勢分析</span></button>
   <div class="nav-label">知識</div>
-  <button class="nav-item" data-page="ai-page"><i data-lucide="messages-square"></i><span>AI 助手</span></button>
+  <button class="nav-item" data-page="ai-page" aria-label="AI 助手"><i data-lucide="messages-square"></i><span>AI 助手</span></button>
   <div class="nav-label">處置</div>
-  <a class="nav-item nav-link" href="/workspace"><i data-lucide="network"></i><span>事件處置工作區</span></a>
-  <div class="sidebar-bottom"><button id="mode" class="mode"><span id="mode-text">日常模式</span></button></div>
+  <a class="nav-item nav-link" href="/workspace" aria-label="事件處置工作區"><i data-lucide="network"></i><span>事件處置工作區</span></a>
+  <div class="sidebar-bottom"><button id="mode" class="mode" aria-label="切換系統模式"><span id="mode-text">日常模式</span></button></div>
 </aside>
 <main class="main">
   <header class="topbar">
@@ -150,9 +148,9 @@ tbody tr[data-row]{cursor:pointer}
   <div class="content">
     <section class="page active" id="page-overview">
       <div class="metrics">
-        <button type="button" class="metric ok" data-filter="ok"><span>今日平安</span><strong id="m-ok">-</strong><small>點擊篩選名單</small></button>
-        <button type="button" class="metric danger" data-filter="risk"><span>需要關注</span><strong id="m-risk">-</strong><small>未回應或求助</small></button>
-        <button type="button" class="metric warning" data-filter="pending"><span>等待回覆</span><strong id="m-pending">-</strong><small>今日待確認</small></button>
+        <div class="metric ok"><span>今日平安</span><strong id="m-ok">-</strong><small>已完成打卡</small></div>
+        <div class="metric danger"><span>需要關注</span><strong id="m-risk">-</strong><small>未回應或求助</small></div>
+        <div class="metric warning"><span>等待回覆</span><strong id="m-pending">-</strong><small>今日待確認</small></div>
         <div class="metric danger"><span>未解警報</span><strong id="m-alerts">-</strong><small>待聯繫處理</small></div>
         <div class="metric"><span>待處理需求</span><strong id="m-needs">-</strong><small>事件處置工作區</small></div>
         <div class="metric"><span>可用物資</span><strong id="m-resources">-</strong><small>正式登記資料</small></div>
@@ -203,7 +201,7 @@ tbody tr[data-row]{cursor:pointer}
     <div class="modal-foot"><button class="mini" id="cm-cancel">取消</button><button class="danger-btn" id="cm-ok">確認</button></div>
   </div>
 </div>
-<div class="toast-stack" id="toasts"></div>
+<div class="toast-stack" id="toasts" role="status" aria-live="polite"></div>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -233,7 +231,7 @@ function skeletonRows(count,cols){return Array.from({length:count},()=>`<tr>${Ar
 const GROUPS={ok:['ok','safe','confirmed_safe'],risk:['no_response','help_needed'],pending:['pending'],not_sent:['not_sent']};
 const GROUP_LABEL={ok:'平安',risk:'需要關注',pending:'等待回覆',not_sent:'未發送'};
 function inGroup(row,group){return !group||(GROUPS[group]||[]).includes(row.today_status||'not_sent');}
-let overviewFilter='',elderFilter='',relationsCache=null;
+let elderFilter='',relationsCache=null;
 function elderById(id){return elders.find(e=>String(e.id)===String(id));}
 function showPage(id){if(!pageTitles[id])id='overview';document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+id));document.querySelectorAll('[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===id));$('title').textContent=pageTitles[id];if(id==='analytics-page')loadTrends();if(history.replaceState)history.replaceState(null,'','#'+id);}
 // 只剩總覽的「今日打卡」用這張表：姓名／狀態／回覆時間，長者名單那頁走卡片。
@@ -315,10 +313,9 @@ function renderElderMap(rows){
     .map(([k,label])=>`<span><i style="background:${PIN[k]}"></i>${label}</span>`).join('')
     +(missing?`<span style="margin-left:auto">${missing} 位沒有座標，不會出現在地圖上</span>`:'');
 }
-function applyOverviewFilter(){
+function renderOverviewList(){
   const q=$('overview-search').value;
-  renderElders('overview-elderly',elders.filter(r=>inGroup(r,overviewFilter)&&r.name.includes(q)));
-  document.querySelectorAll('[data-filter]').forEach(el=>el.classList.toggle('on',el.dataset.filter===overviewFilter));
+  renderElders('overview-elderly',elders.filter(r=>r.name.includes(q)));
 }
 function renderAlerts(rows){
   $('alert-count').textContent=rows.length+' 筆';
@@ -369,7 +366,7 @@ async function openDrawer(elderlyId){
 }
 async function loadAll(){
   if(!elders.length){$('overview-elderly').innerHTML=skeletonRows(5,4);$('elderly-list-panel').innerHTML=Array.from({length:6},()=>'<article class="pcard"><span class="skel" style="width:60%"></span><span class="skel" style="margin-top:12px"></span></article>').join('');$('alerts').innerHTML='<div style="padding:14px 16px">'+Array.from({length:3},()=>'<span class="skel" style="margin-bottom:14px"></span>').join('')+'</div>';}
-  try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();applyOverviewFilter();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
+  try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();renderOverviewList();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
 const SERIES=[{key:'checkin_ok',label:'平安',color:'#18765a'},{key:'checkin_no_response',label:'未回應',color:'#c9364b'},{key:'checkin_help_needed',label:'求助',color:'#d9822b'},{key:'alerts',label:'警報',color:'#8f52a8'},{key:'needs',label:'需求',color:'#2c7fad'}];
 let trendDays=14;
 // 手畫 SVG 折線圖，不引進圖表函式庫：外部 CDN 被擋掉時整張圖就沒了，這頁的重點就是那張圖。
@@ -413,9 +410,8 @@ function renderTrendRange(){
 }
 async function loadTrends(){const body=$('trends-body');body.innerHTML=skeletonRows(6,8);$('trend-chart').innerHTML='<span class="skel" style="height:200px;margin:8px 0"></span>';try{const data=await fetch('/api/dashboard/trends?days='+trendDays).then(r=>r.json());renderChart(data.days);body.innerHTML=data.days.slice().reverse().map(row=>`<tr><td>${esc(row.date)}</td><td>${row.checkin_ok}</td><td>${row.checkin_no_response}</td><td>${row.checkin_help_needed}</td><td>${row.checkin_pending}</td><td>${row.alerts}</td><td>${row.needs}</td><td>${row.needs_fulfilled}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">目前沒有資料</td></tr>';}catch(error){body.innerHTML='<tr><td colspan="8" class="empty">趨勢讀取失敗</td></tr>';$('trend-chart').innerHTML='<p class="empty">圖表讀取失敗</p>';}}
 document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>showPage(el.dataset.page)));
-$('overview-search').addEventListener('input',applyOverviewFilter);
+$('overview-search').addEventListener('input',renderOverviewList);
 $('elderly-search').addEventListener('input',applyElderFilters);
-document.querySelectorAll('[data-filter]').forEach(el=>el.addEventListener('click',()=>{overviewFilter=overviewFilter===el.dataset.filter?'':el.dataset.filter;applyOverviewFilter();}));
 document.querySelectorAll('#elder-view [data-elderview]').forEach(b=>b.addEventListener('click',()=>setElderView(b.dataset.elderview)));
 $('d-close').addEventListener('click',closeDrawer);
 $('scrim').addEventListener('click',closeDrawer);
