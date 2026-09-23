@@ -85,8 +85,22 @@ tbody tr[data-row]{cursor:pointer}
 .chart-wrap{padding:16px}.chart-wrap svg{width:100%;height:230px;display:block}
 .legend{display:flex;flex-wrap:wrap;gap:14px;padding:0 16px 14px;font-size:12px;color:var(--muted)}
 .legend i{display:inline-block;width:11px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+/* 名單改成卡片：欄位常常是空的，排成六欄表格會整頁都是「-」，
+   而姓名欄撐到 300px 只為了裝三個字。 */
+.people-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:10px;align-items:start}
+.pcard{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 13px;transition:border-color .12s,box-shadow .12s;cursor:pointer}
+.pcard:hover{border-color:var(--accent);box-shadow:0 2px 10px #17201c14}
+.pcard-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+.pcard-name{font-size:14px;font-weight:700}
+.pcard-facts{margin-top:9px;display:flex;flex-direction:column;gap:4px;font-size:12.5px;color:var(--muted)}
+.pcard-facts div{display:flex;gap:7px}
+.pcard-facts .k{width:14px;flex-shrink:0;text-align:center;opacity:.7}
+.pcard-facts a{color:var(--accent);text-decoration:none}
+.pcard-facts a:hover{text-decoration:underline}
+.pcard .row-actions{margin-top:10px;justify-content:flex-start}
+.pcard-when{font:11px var(--mono);color:var(--muted);margin-top:5px}
 .viewseg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
-.viewseg button{border:0;background:var(--surface);color:var(--muted);padding:0 13px;height:31px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .12s}
+.viewseg button{border:0;background:var(--surface);color:var(--muted);padding:0 13px;height:31px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .12s;white-space:nowrap;flex-shrink:0}
 .viewseg button+button{border-left:1px solid var(--line)}
 .viewseg button:hover{background:var(--soft);color:var(--accent)}
 .viewseg button.on{background:var(--accent);color:#fff}
@@ -106,6 +120,8 @@ tbody tr[data-row]{cursor:pointer}
   .alert-row{grid-template-columns:10px 1fr auto;row-gap:8px}
   .alert-row .row-actions{grid-column:1/-1;justify-content:flex-start}
   .page-heading{flex-wrap:wrap;gap:10px}
+  .page-heading > div:last-child{flex:1 1 100%;flex-wrap:wrap}
+  .page-heading input{flex:1 1 140px;min-width:0}
   .panel-head{height:auto;padding:10px 12px;flex-wrap:wrap;gap:8px}
   .panel-head input{width:100%}
   .drawer{width:100%}
@@ -143,7 +159,7 @@ tbody tr[data-row]{cursor:pointer}
       </div>
       <div class="grid">
         <article class="panel"><div class="panel-head"><h2>未解警報</h2><span class="badge b-muted" id="alert-count">0 筆</span></div><div class="alert-list" id="alerts"></div></article>
-        <article class="panel"><div class="panel-head"><h2>今日打卡</h2><input id="overview-search" placeholder="搜尋姓名" aria-label="搜尋姓名"></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>狀態</th><th>回覆時間</th></tr></thead><tbody id="overview-elderly"></tbody></table></div></article>
+        <article class="panel"><div class="panel-head"><h2>今日打卡</h2><input id="overview-search" placeholder="搜尋姓名" aria-label="搜尋姓名"></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="overview-elderly"></tbody></table></div></article>
       </div>
     </section>
     <section class="page" id="page-elderly">
@@ -154,7 +170,7 @@ tbody tr[data-row]{cursor:pointer}
         </div>
       </div>
       <div class="chips" id="elderly-chips"></div>
-      <article class="panel" id="elderly-list-panel"><div class="table-wrap"><table><thead><tr><th>姓名</th><th>電話</th><th>地址</th><th>今日狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="elderly-body"></tbody></table></div></article>
+      <div id="elderly-list-panel" class="people-grid" aria-label="長者名單"></div>
       <article class="panel" id="elderly-map-panel" hidden>
         <div id="elder-map"></div>
         <div class="map-foot" id="elder-map-foot"></div>
@@ -220,9 +236,9 @@ function inGroup(row,group){return !group||(GROUPS[group]||[]).includes(row.toda
 let overviewFilter='',elderFilter='',relationsCache=null;
 function elderById(id){return elders.find(e=>String(e.id)===String(id));}
 function showPage(id){if(!pageTitles[id])id='overview';document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+id));document.querySelectorAll('[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===id));$('title').textContent=pageTitles[id];if(id==='analytics-page')loadTrends();if(history.replaceState)history.replaceState(null,'','#'+id);}
-function renderElders(target,data,full=false){
-  const cols=full?6:4;
-  $(target).innerHTML=data.length?data.map(row=>`<tr data-row="${esc(row.id)}" tabindex="0"><td><strong>${esc(row.name)}</strong></td>${full?`<td class="muted">${esc(row.phone||'-')}</td><td class="muted">${esc(row.address||'-')}</td>`:''}<td>${badge(row.today_status)}</td><td class="muted">${clock(row.responded_at)}</td><td><div class="row-actions">${row.phone?`<a class="mini" href="tel:${esc(row.phone)}" title="撥號給 ${esc(row.name)}">撥號</a>`:''}<button class="mini" data-detail="${esc(row.id)}">詳情</button></div></td></tr>`).join(''):`<tr><td colspan="${cols}" class="empty">這個條件下沒有長者<br><span class="muted" style="font-size:12px">換個狀態或清掉搜尋字看看</span></td></tr>`;
+// 只剩總覽的「今日打卡」用這張表：姓名／狀態／回覆時間，長者名單那頁走卡片。
+function renderElders(target,data){
+  $(target).innerHTML=data.length?data.map(row=>`<tr data-row="${esc(row.id)}" tabindex="0"><td><strong>${esc(row.name)}</strong></td><td>${badge(row.today_status)}</td><td class="muted">${clock(row.responded_at)}</td><td><div class="row-actions">${row.phone?`<a class="mini" href="tel:${esc(row.phone)}" title="撥號給 ${esc(row.name)}">撥號</a>`:''}<button class="mini" data-detail="${esc(row.id)}">詳情</button></div></td></tr>`).join(''):`<tr><td colspan="4" class="empty">這個條件下沒有長者<br><span class="muted" style="font-size:12px">換個狀態或清掉搜尋字看看</span></td></tr>`;
   // 整列可點（含鍵盤 Enter），不用瞄準那顆小按鈕；列內的連結／按鈕自己處理，不重複觸發。
   $(target).querySelectorAll('tr[data-row]').forEach(tr=>{
     const open=()=>openDrawer(tr.dataset.row);
@@ -240,8 +256,29 @@ function renderElderChips(){
 function applyElderFilters(){
   const q=$('elderly-search').value;
   const rows=elders.filter(r=>inGroup(r,elderFilter)&&(r.name.includes(q)||(r.address||'').includes(q)));
-  renderElders('elderly-body',rows,true);
+  renderElderCards(rows);
   if(elderView==='map')renderElderMap(rows);
+}
+// 沒有值的欄位直接不畫，不要留一個「-」佔著位子。
+function renderElderCards(rows){
+  const host=$('elderly-list-panel');
+  if(!rows.length){host.innerHTML=`<p class="empty" style="grid-column:1/-1">${elders.length?'這個條件下沒有長者，換個狀態或清掉搜尋字':'尚未登記長者'}</p>`;return;}
+  host.innerHTML=rows.map(r=>{
+    const facts=[
+      r.phone?`<div><span class="k">☎</span><a href="tel:${esc(r.phone)}" onclick="event.stopPropagation()">${esc(r.phone)}</a></div>`:'',
+      r.address?`<div><span class="k">◎</span><span>${esc(r.address)}</span></div>`:'',
+    ].join('');
+    return `<article class="pcard" data-card="${esc(r.id)}" tabindex="0">
+      <div class="pcard-top"><span class="pcard-name">${esc(r.name)}</span>${badge(r.today_status)}</div>
+      ${facts?`<div class="pcard-facts">${facts}</div>`:''}
+      ${r.responded_at?`<div class="pcard-when">回覆 ${clock(r.responded_at)}</div>`:''}
+    </article>`;
+  }).join('');
+  host.querySelectorAll('[data-card]').forEach(card=>{
+    const open=()=>openDrawer(card.dataset.card);
+    card.onclick=event=>{if(!event.target.closest('a'))open();};
+    card.onkeydown=event=>{if(event.key==='Enter'){event.preventDefault();open();}};
+  });
 }
 // 狀態顏色：地圖上唯一的資訊就是位置＋顏色，所以跟清單的徽章用同一套語意。
 const PIN={ok:'#18765a',safe:'#18765a',confirmed_safe:'#18765a',no_response:'#c9364b',help_needed:'#c9364b',pending:'#9a6500',not_sent:'#9ca9a0'};
@@ -331,7 +368,7 @@ async function openDrawer(elderlyId){
   }catch(error){$('d-contacts').innerHTML=`<div class="sub">緊急聯絡人</div><p class="muted">讀取失敗</p>`;}
 }
 async function loadAll(){
-  if(!elders.length){$('overview-elderly').innerHTML=skeletonRows(5,4);$('elderly-body').innerHTML=skeletonRows(6,6);$('alerts').innerHTML='<div style="padding:14px 16px">'+Array.from({length:3},()=>'<span class="skel" style="margin-bottom:14px"></span>').join('')+'</div>';}
+  if(!elders.length){$('overview-elderly').innerHTML=skeletonRows(5,4);$('elderly-list-panel').innerHTML=Array.from({length:6},()=>'<article class="pcard"><span class="skel" style="width:60%"></span><span class="skel" style="margin-top:12px"></span></article>').join('');$('alerts').innerHTML='<div style="padding:14px 16px">'+Array.from({length:3},()=>'<span class="skel" style="margin-bottom:14px"></span>').join('')+'</div>';}
   try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();applyOverviewFilter();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
 const SERIES=[{key:'checkin_ok',label:'平安',color:'#18765a'},{key:'checkin_no_response',label:'未回應',color:'#c9364b'},{key:'checkin_help_needed',label:'求助',color:'#d9822b'},{key:'alerts',label:'警報',color:'#8f52a8'},{key:'needs',label:'需求',color:'#2c7fad'}];
 let trendDays=14;
