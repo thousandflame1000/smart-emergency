@@ -1058,3 +1058,28 @@ def test_claim_list_tells_a_volunteer_whose_stock_is_all_in_use(db, line_outbox)
     dispatch.manual_dispatch(str(need.id), str(res.id), db)      # 唯一一份水已被保留
     say("U-cv", "接單")
     assert any("都已派出或保留中" in t for t in replies(line_outbox))
+
+
+def test_user_facing_errors_do_not_leak_raw_status_codes(db):
+    """錯誤訊息是給人看的，不該把資料庫欄位值原樣嵌進中文句子。
+
+    先前 dispatch 會回「需求目前狀態為『suggested』」；狀態碼是內部表示，
+    使用者看不懂（Nielsen #2：系統要講使用者的語言）。
+    """
+    from app.services.dispatch import propose_manual
+    from app.models.resource import CommunityResource
+    elder = User(name="長輩", roles=["elderly"])
+    vol = User(name="志工", roles=["volunteer"])
+    db.add_all([elder, vol])
+    db.commit()
+    need = CommunityNeed(requester_id=elder.id, need_type="water", description="水",
+                         urgency=3, status="matched")
+    res = CommunityResource(owner_id=vol.id, resource_type="water", name="飲用水", quantity="10箱", is_available=True)
+    db.add_all([need, res])
+    db.commit()
+
+    result = propose_manual(str(need.id), str(res.id), db)
+    message = result.get("error", "")
+    assert message, "狀態不符時應該要有錯誤訊息"
+    assert "matched" not in message, f"原始狀態碼外洩到使用者訊息：{message}"
+    assert "已派遣" in message

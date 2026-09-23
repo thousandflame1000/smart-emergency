@@ -57,6 +57,7 @@ from typing import NamedTuple
 from sqlalchemy.orm import Session
 
 from app.config import settings
+from app.labels import need_status
 from app.services.hungarian import min_cost_assignment
 from app.services.geo import haversine_km
 from app.services.proposal_workflow import ProposalService
@@ -795,7 +796,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
     if not need or not resource:
         return {"error": "need or resource not found"}
     if need.status not in ("open", "suggested"):
-        return {"error": f"需求目前狀態為「{need.status}」，只有待媒合或待確認的需求可以手動指派。"}
+        return {"error": f"需求目前狀態為「{need_status(need.status)}」，只有待媒合或待確認的需求可以手動指派。"}
     if need.need_type == "sos":
         return {"error": "緊急求助是人身安全事件，不是物資需求，請直接聯絡當事人或撥打 119。"}
     if resource.owner_id == need.requester_id:
@@ -1011,7 +1012,7 @@ def resolve_sos(need_id: str, db: Session, *, actor_label: str = "manager") -> d
     if need.status == "fulfilled":
         return {"message": "already resolved", "need_id": need_id, "already_resolved": True}
     if need.status != "open":
-        return {"error": f"求助單目前狀態為「{need.status}」，不能標成已處理。"}
+        return {"error": f"求助單目前狀態為「{need_status(need.status)}」，不能標成已處理。"}
     previous_status = need.status
     need.status = "fulfilled"
     _log_dispatch_event(
@@ -1252,7 +1253,7 @@ def propose_manual(need_id: str, resource_id: str, db: Session, *, actor_id: str
     if need.need_type == "sos":
         return {"error": "緊急求助不是物資需求，不能建立派遣建議。"}
     if need.status != "open":
-        return {"error": f"需求目前狀態為「{need.status}」，只有待媒合的需求可以建立建議。"}
+        return {"error": f"需求目前狀態為「{need_status(need.status)}」，只有待媒合的需求可以建立建議。"}
     if resource.owner_id == need.requester_id:
         return {"error": "不能把需求者自己的物資指派給自己的需求。"}
     if not resource.is_available:

@@ -55,7 +55,9 @@ function renderOperationalSelection(item,isNode){
   if(p.db==='point')fields.push(['收容容量',p.capacity??'未知'],['目前人數',p.current_load??'未知'],['庫存','未提供'],
     ['電話',p.base_values?.phone||'未提供'],['開放時間',p.base_values?.operating_hours||'未提供']);
   if(p.db==='need')fields.push(['狀態',NEED_STATUS[p.status]||p.status],['優先級',p.urgency],['登記數量',p.quantity_text||'未知'],['需求',p.description||'未填'],['定位依據',p.location_source]);
-  if(isNode)fields.push(['地址',p.address||p.base_values?.address||'未提供'],['座標',item.lat===null?'未知':`${item.lat}, ${item.lng}`]);
+  // 原始經緯度是系統內部表示（而且會露出浮點誤差），摘要只講定位結果；
+  // 要精確數值的人是在編輯，那邊本來就有緯度／經度欄位。
+  if(isNode)fields.push(['地址',p.address||p.base_values?.address||'未提供'],['地圖定位',item.lat===null?'未定位':'已定位']);
   const related=isNode?state.graph.edges.filter(e=>e.id.startsWith('db:edge:')&&(e.source===item.id||e.target===item.id)):[];
   el.innerHTML=`<div class="object-heading"><strong>${escapeHtml(item.label)}</strong><span class="source-label">${escapeHtml(isNode?item.source:item.provenance)}</span></div><dl class="object-facts">${fields.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>${p.quantity_verified===false?'<p class="error">數量或單位待確認，未納入分配試算。</p>':''}
     ${p.db==='need'&&p.status==='suggested'?'<div id="need-candidate-summary" class="muted">候選載入中…</div>':''}

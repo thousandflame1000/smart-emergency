@@ -20,7 +20,7 @@ PAGE = """<!DOCTYPE html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>掃碼加入 鄰里守望</title>
 <style>
-  :root {{ --bg:#f4f6f8; --card:#fff; --text:#1c2833; --muted:#6b7785; --accent:#c0392b; --green:#06c755; }}
+  :root {{ --bg:#f4f6f8; --card:#fff; --text:#1c2833; --muted:#6b7785; --accent:#c0392b; --green:#038539; }}
   @media (prefers-color-scheme: dark) {{ :root {{ --bg:#12171c; --card:#1c242c; --text:#e8edf2; --muted:#98a4b0; }} }}
   * {{ box-sizing:border-box; }}
   body {{ margin:0; background:var(--bg); color:var(--text); font-family:system-ui,"Noto Sans TC","Microsoft JhengHei",sans-serif; }}

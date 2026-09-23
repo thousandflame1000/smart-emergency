@@ -6,7 +6,7 @@
 <title>鄰里守望 表單</title>
 <style>
   :root { --bg:#f4f6f8; --card:#fff; --text:#1c2833; --muted:#6b7785; --line:#d5dbe1;
-          --accent:#c0392b; --ok:#27ae60; }
+          --accent:#c0392b; --ok:#1b7a44; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#12171c; --card:#1c242c; --text:#e8edf2; --muted:#98a4b0; --line:#34414e; }
   }
@@ -26,9 +26,12 @@
   input:focus, select:focus, textarea:focus { outline:none; border-color:var(--accent); }
   textarea { min-height:96px; resize:vertical; }
   .checks { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:8px; }
+  @media (max-width:420px) { .checks { grid-template-columns:1fr; } }
   .checks label { display:flex; align-items:center; gap:8px; padding:12px; border:2px solid var(--line);
                   border-radius:10px; font-weight:600; }
-  .checks input { width:22px; height:22px; }
+  /* WCAG 2.5.8：勾選框本身也要 >=24px，居民多半在手機上單手點。 */
+  /* flex-shrink:0：不加的話窄螢幕會把勾選框壓扁，寧可讓標籤換行。 */
+  .checks input { width:26px; height:26px; flex-shrink:0; }
   button.go { width:100%; margin-top:22px; padding:16px; font-size:20px; font-weight:700; color:#fff;
               background:var(--ok); border:0; border-radius:12px; }
   button.go[disabled] { opacity:.6; }
@@ -41,8 +44,9 @@
   .task { background:var(--bg); border:2px solid var(--line); border-radius:10px; padding:12px; margin-top:4px; }
   .task strong { display:block; margin-bottom:2px; }
   .choices label { display:block; padding:12px; margin-top:8px; border:2px solid var(--line); border-radius:10px; font-weight:600; }
-  .choices small { display:block; font-weight:400; color:var(--muted); margin-left:26px; }
-  .choices input { width:20px; height:20px; margin-right:8px; vertical-align:middle; }
+  .choices small { display:block; font-weight:400; color:var(--muted); margin-left:34px; }
+  /* WCAG 2.5.8：單選鈕本身也要 >=24px，居民多半在手機上單手點。 */
+  .choices input { width:26px; height:26px; margin-right:8px; vertical-align:middle; }
   .me-sec { margin-top:20px; }
   .me-sec h2 { font-size:19px; margin:0 0 8px; }
   .me-row { border:2px solid var(--line); border-radius:10px; padding:12px; margin-top:8px; }
@@ -63,6 +67,7 @@
 </header>
 <main>
   <div class="card">
+    <div id="error-top" class="err is-hidden" role="alert"></div>
     <form id="form" novalidate>
       <div id="task-box" class="task is-hidden"></div>
       <label class="field profile">姓名
@@ -287,6 +292,18 @@
     box.classList.remove('is-hidden');
   }
 
+  // 連結失效這類錯誤會讓整份表單都送不出去。訊息若留在欄位後面，
+  // 使用者會把整份填完、捲到底才發現白做。放最上面並停用欄位。
+  function blockForm(text) {
+    var box = $('error-top');
+    box.textContent = text;
+    box.classList.remove('is-hidden');
+    $('error').classList.add('is-hidden');
+    var f = $('form');
+    f.querySelectorAll('input, select, textarea, button').forEach(function (el) { el.disabled = true; });
+    box.scrollIntoView({ block: 'nearest' });
+  }
+
   if (KIND === 'me') {
     $('form').classList.add('is-hidden');
     $('me').classList.remove('is-hidden');
@@ -297,7 +314,7 @@
   fetch('/f/api/context?t=' + encodeURIComponent(TOKEN) + (KIND === 'report' ? '&n=' + encodeURIComponent(NEED_ID) : '')).then(function (r) {
     return r.json().then(function (d) { return { ok: r.ok, d: d }; });
   }).then(function (res) {
-    if (!res.ok) { showError(res.d.detail || res.d.error || '表單連結無效'); $('submit').disabled = true; return; }
+    if (!res.ok) { blockForm(res.d.detail || res.d.error || '表單連結無效'); return; }
     if (res.d.task) {
       var box = $('task-box');
       box.classList.remove('is-hidden');
@@ -309,9 +326,9 @@
     if (res.d.name) $('name').value = res.d.name;
     if (res.d.phone) $('phone').value = res.d.phone;
     if (res.d.address) $('address').value = res.d.address;
-    if (KIND === 'res' && !res.d.is_staff) { showError('只有志工可以登記物資，請先送出志工申請。'); $('submit').disabled = true; }
+    if (KIND === 'res' && !res.d.is_staff) { blockForm('只有志工可以登記物資，請先送出志工申請。'); }
     if (KIND === 'apply' && res.d.is_staff) { showError('您已經是志工，不用重新申請。'); $('submit').disabled = true; }
-  }).catch(function () { showError('無法連線，請檢查網路後重新開啟。'); });
+  }).catch(function () { blockForm('無法連線，請檢查網路後重新開啟表單。'); });
 
   $('form').addEventListener('submit', function (ev) {
     ev.preventDefault();
