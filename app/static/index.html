@@ -39,8 +39,13 @@ button.metric{cursor:pointer}button.metric:hover{background:var(--soft)}button.m
 .chip{height:30px;padding:0 11px;border:1px solid var(--line);border-radius:15px;background:var(--surface);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
 .chip:hover{border-color:var(--accent);color:var(--accent)}.chip.on{border-color:var(--accent);background:var(--accent);color:#fff}
 .chip b{font:700 11px var(--mono)}
-.row-actions{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap;opacity:0;transition:opacity .12s ease}
-tbody tr:hover .row-actions,tbody tr:focus-within .row-actions,.alert-row:hover .row-actions,.alert-row:focus-within .row-actions{opacity:1}
+.row-actions{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap;transition:opacity .12s ease}
+/* 只有真的有游標的裝置才「滑過才顯示」；觸控裝置沒有 hover，
+   藏起來就等於那些操作在手機上完全按不到。 */
+@media (hover:hover) and (pointer:fine){
+  .row-actions{opacity:0}
+  tbody tr:hover .row-actions,tbody tr:focus-within .row-actions,.alert-row:hover .row-actions,.alert-row:focus-within .row-actions{opacity:1}
+}
 tbody tr[data-row]{cursor:pointer}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .skel{display:block;height:11px;border-radius:3px;background:linear-gradient(90deg,#e9eeeb 25%,#f4f7f5 50%,#e9eeeb 75%);background-size:200% 100%;animation:sh 1.1s linear infinite}
@@ -94,6 +99,17 @@ tbody tr[data-row]{cursor:pointer}
 .toast{padding:11px 15px;border:1px solid var(--line);border-radius:5px;background:var(--surface);box-shadow:0 4px 16px #17201c1f;font-size:13px;max-width:320px}
 .toast.bad{border-color:#e8a8b2;color:var(--danger)}
 @media(max-width:1120px){.metrics{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}
+/* 窄螢幕不要把欄位壓到一個字一行：給表格最小寬度，讓它在容器內橫向捲動。 */
+@media(max-width:760px){
+  .table-wrap table{min-width:440px}
+  .table-wrap td,.table-wrap th{white-space:nowrap}
+  .alert-row{grid-template-columns:10px 1fr auto;row-gap:8px}
+  .alert-row .row-actions{grid-column:1/-1;justify-content:flex-start}
+  .page-heading{flex-wrap:wrap;gap:10px}
+  .panel-head{height:auto;padding:10px 12px;flex-wrap:wrap;gap:8px}
+  .panel-head input{width:100%}
+  .drawer{width:100%}
+}
 @media(max-width:760px){.sidebar{width:58px;flex-basis:58px}.brand{padding:16px 0;text-align:center}.brand strong{font-size:0}.brand strong::after{content:"鄰";font-size:20px}.brand span,.nav-label,.nav-item span,.sidebar-bottom span{display:none}.nav-item{justify-content:center;padding:0;border-left:0}.content{padding:14px}.topbar{padding:0 14px}.metrics{grid-template-columns:repeat(2,1fr)}.stamp{display:none}.panel-head input{width:140px}}
 </style>
 </head>

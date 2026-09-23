@@ -127,9 +127,13 @@ body {
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr:hover td { background: rgba(19,121,91,.04); }
 .tbl .muted { color: var(--muted); font-size: 11.5px; }
-/* 操作按鈕平常收起來，滑到該列或用鍵盤 focus 才出現，避免整頁都是按鈕。 */
-.tbl .row-actions { display: flex; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
-.tbl tr:hover .row-actions, .tbl tr:focus-within .row-actions { opacity: 1; }
+/* 操作按鈕平常收起來，滑到該列或用鍵盤 focus 才出現，避免整頁都是按鈕。
+   但只在真的有游標的裝置上這樣做——觸控裝置沒有 hover，藏起來等於按不到。 */
+.tbl .row-actions { display: flex; gap: 4px; justify-content: flex-end; transition: opacity .12s; }
+@media (hover: hover) and (pointer: fine) {
+  .tbl .row-actions { opacity: 0; }
+  .tbl tr:hover .row-actions, .tbl tr:focus-within .row-actions { opacity: 1; }
+}
 .list-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
 .list-toolbar input[type="search"] { flex: 1 1 200px; min-width: 150px; border: 1px solid var(--border);
   border-radius: var(--radius); padding: 7px 10px; font: inherit; font-size: 12.5px; color: var(--text); background: var(--card); }
@@ -151,8 +155,11 @@ body {
 .rel-order { width: 22px; height: 22px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
   border-radius: 50%; background: var(--soft); color: var(--primary); font: 700 11px var(--mono); }
 .rel-contact .spacer { margin-left: auto; }
-.rel-tools { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
-.rel-contact:hover .rel-tools, .rel-contact:focus-within .rel-tools { opacity: 1; }
+.rel-tools { display: flex; gap: 4px; transition: opacity .12s; }
+@media (hover: hover) and (pointer: fine) {
+  .rel-tools { opacity: 0; }
+  .rel-contact:hover .rel-tools, .rel-contact:focus-within .rel-tools { opacity: 1; }
+}
 .rel-tools .btn[disabled] { opacity: .25; }
 .risk-box { margin: 0 16px 12px; padding: 12px 14px; border: 1px solid rgba(201,54,75,.28);
   background: rgba(201,54,75,.06); border-radius: var(--radius); }
@@ -196,8 +203,11 @@ body {
 .person-facts a:hover { text-decoration: underline; }
 .person-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 5px; }
 .person .row-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px;
-  opacity: 0; transition: opacity .12s; background: var(--card); }
-.person:hover .row-actions, .person:focus-within .row-actions { opacity: 1; }
+  transition: opacity .12s; background: var(--card); }
+@media (hover: hover) and (pointer: fine) {
+  .person .row-actions { opacity: 0; }
+  .person:hover .row-actions, .person:focus-within .row-actions { opacity: 1; }
+}
 /* 看板：依角色分欄堆疊，哪一欄高就代表那一類人多，不用自己數。 */
 .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; padding: 14px 16px; align-items: start; }
 .board-col { border: 1px solid var(--border); border-radius: var(--radius); background: rgba(23,32,28,.018); }
@@ -1520,11 +1530,20 @@ async function toggleMode() {
   const btn = document.getElementById('mode-btn');
   const next = btn.dataset.mode === 'emergency' ? 'normal' : 'emergency';
   const label = next === 'emergency' ? '緊急' : '日常';
-  if (!confirm(`確定切換為${label}模式？${next === 'emergency' ? '\n\n⚠️ 系統將廣播通知所有已綁定 LINE 的使用者' : ''}`)) return;
-  const res = await fetch(`/api/dashboard/mode?mode=${next}`, { method: 'POST' });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { alert('切換失敗：' + (data.error || res.status)); return; }
-  loadMode();
+  // 切到緊急模式會對所有已綁定 LINE 的人真的發訊息，講清楚再問。
+  const body = next === 'emergency'
+    ? '<p><strong>系統會立刻對所有已綁定 LINE 的使用者廣播通知。</strong></p><p class="form-hint" style="margin-top:6px">這是真的會送出去的訊息，不是演練。確定現在要進入緊急模式嗎？</p>'
+    : '<p>解除後系統回到日常模式，並通知已綁定的使用者。</p>';
+  if (!await askConfirm(`切換為${label}模式`, body,
+      next === 'emergency' ? '啟動緊急模式' : '解除緊急模式',
+      next === 'emergency' ? 'btn-danger' : 'btn-success')) return;
+  try {
+    const res = await fetch(`/api/dashboard/mode?mode=${next}`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw Error(data.error || data.detail || `切換失敗（${res.status}）`);
+    toast('success', `已切換為${label}模式`);
+    loadMode();
+  } catch (e) { toast('danger', e.message); }
 }
 
 // ── 部署安全提醒：正式環境沒設 DEMO_PASSWORD 時，整個後台對外公開 ──
@@ -1670,7 +1689,13 @@ function toast(type, msg, ms = 4200) {
   const icons = { info:'ℹ️', success:'✅', danger:'❌', warning:'⚠️' };
   const el = document.createElement('div');
   el.className = `notice ${type}`;
-  el.innerHTML = `<span class="notice-icon">${icons[type]||''}</span><span>${msg}</span>`;
+  // 訊息常常夾帶伺服器回傳或使用者填的內容，用 textContent 而不是 innerHTML。
+  const icon = document.createElement('span');
+  icon.className = 'notice-icon';
+  icon.textContent = icons[type] || '';
+  const text = document.createElement('span');
+  text.textContent = msg;
+  el.append(icon, text);
   stack.appendChild(el);
   requestAnimationFrame(() => el.classList.add('show'));
   setTimeout(() => {
@@ -1950,11 +1975,19 @@ async function makeJoinCode(userId) {
 }
 
 async function unlinkLine() {
-  if (!confirm('確定解除這位成員的 LINE 綁定？他會收不到通知，選單也會收回。')) return;
+  if (!await askConfirm('解除 LINE 綁定',
+    '解除後這位成員收不到任何 LINE 通知，選單也會收回，需要重新綁定才能恢復。', '解除綁定', 'btn-danger')) return;
   const id = document.getElementById('user-id').value;
-  await fetch(`/api/dashboard/users/${encodeURIComponent(id)}/unlink_line`, { method: 'POST' });
-  renderBindState({ line_uid: null });
-  loadAll();
+  try {
+    const res = await fetch(`/api/dashboard/users/${encodeURIComponent(id)}/unlink_line`, { method: 'POST' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw Error(d.error || d.detail || `解除失敗（${res.status}）`);
+    }
+    renderBindState({ line_uid: null });
+    toast('success', '已解除綁定');
+    loadAll();
+  } catch (e) { toast('danger', e.message); }
 }
 
 function editUser(u) { openUserModal(u.roles[0] || 'elderly', u); }
@@ -1995,10 +2028,23 @@ async function saveUser() {
   loadAll();
 }
 
+// 後端可能拒絕（例如這位志工還有進行中的派遣）並附上原因；先前這裡
+// 不看回應就重新整理，畫面看起來像成功，原因被丟掉，人其實還在。
+async function sendDelete(url, onDone) {
+  try {
+    const res = await fetch(url, { method: 'DELETE' });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw Error(d.error || d.detail || `刪除失敗（${res.status}）`);
+    }
+    toast('success', '已刪除');
+    onDone();
+  } catch (e) { toast('danger', e.message); }
+}
+
 async function deleteUser(id, name) {
-  if (!confirm(`確定刪除「${name}」？此動作無法復原。`)) return;
-  await fetch(`/api/dashboard/users/${id}`, { method: 'DELETE' });
-  loadAll();
+  if (!await askConfirm('刪除成員', `確定刪除「${esc(name)}」？此動作無法復原，相關的打卡與照護關係也會一併移除。`, '刪除', 'btn-danger')) return;
+  sendDelete(`/api/dashboard/users/${id}`, loadAll);
 }
 
 // ════════════════════════════════════════════════
@@ -2051,9 +2097,8 @@ async function saveResource() {
 }
 
 async function deleteResource(id, name) {
-  if (!confirm(`確定刪除「${name}」？`)) return;
-  await fetch(`/api/resources/${id}`, { method: 'DELETE' });
-  loadAll();
+  if (!await askConfirm('刪除物資', `確定刪除「${esc(name)}」？`, '刪除', 'btn-danger')) return;
+  sendDelete(`/api/resources/${id}`, loadAll);
 }
 
 async function toggleResource(id) {
@@ -2169,9 +2214,9 @@ async function saveRelation() {
 }
 
 async function deleteRelation(id, elderly, contact) {
-  if (!confirm(`確定刪除「${elderly} ↔ ${contact}」的照護關係？`)) return;
-  await fetch(`/api/dashboard/relations/${id}`, { method: 'DELETE' });
-  loadRelations();
+  if (!await askConfirm('刪除照護關係',
+    `「${esc(elderly)}」未回應時就不會再通知「${esc(contact)}」。確定移除這組關係？`, '刪除', 'btn-danger')) return;
+  sendDelete(`/api/dashboard/relations/${id}`, loadRelations);
 }
 
 // 手畫 SVG，不引進圖表函式庫：CDN 被擋掉時這頁的主畫面不該整個不見。
@@ -2383,7 +2428,7 @@ async function saveChunk() {
 }
 
 async function deleteChunk(id) {
-  if (!confirm('確定刪除這筆知識庫內容？此操作無法復原。')) return;
+  if (!await askConfirm('刪除知識庫內容', '刪除後 AI 助手就查不到這份資料。此操作無法復原。', '刪除', 'btn-danger')) return;
   try {
     const res  = await fetch(`/api/rag/chunks/${id}`, { method: 'DELETE' });
     const data = await res.json();
@@ -2458,7 +2503,7 @@ async function syncKB() {
 }
 
 async function ingestAll() {
-  if (!confirm('這會清空現有知識庫並重新載入所有預設文件，約需 1-2 分鐘，確定嗎？')) return;
+  if (!await askConfirm('重新載入知識庫', '<p><strong>現有知識庫內容會被清空</strong>，再重新載入所有預設文件。</p><p class="form-hint" style="margin-top:6px">約需 1-2 分鐘，期間 AI 助手查不到資料。你自己新增的文件也會一併消失。</p>', '清空並重新載入', 'btn-danger')) return;
   document.getElementById('ingest-btn').disabled = true;
   showNotice('ingest-notice', 'info', '⏳ 已送出請求，正在重新載入…');
   try {
@@ -2497,7 +2542,7 @@ async function testQuery() {
 // Dispatch
 // ════════════════════════════════════════════════
 async function runDispatch(btn) {
-  if (!confirm('立即執行物資自動媒合？\n（系統需在緊急模式下才會媒合；個人物資媒合會先產生「待確認」建議，需要你到「緊急需求」頁逐筆確認後才會通知志工）')) return;
+  if (!await askConfirm('執行物資自動媒合', '<p>系統需在緊急模式下才會媒合。</p><p class="form-hint" style="margin-top:6px">個人物資只會產生「待確認」建議，要到調度畫面逐筆確認後才會通知志工，不會直接發出去。</p>', '開始媒合')) return;
   const original = btn.textContent;
   btn.disabled = true; btn.textContent = '媒合中…';
   try {
@@ -2531,7 +2576,7 @@ async function runDispatch(btn) {
 // ════════════════════════════════════════════════
 async function triggerCheckin() {
   const btn = document.getElementById('checkin-btn');
-  if (!confirm('立即對所有有綁定 LINE 的長者發送打卡訊息？')) return;
+  if (!await askConfirm('發送打卡訊息', '<p><strong>會立刻對所有已綁定 LINE 的長者發出訊息。</strong></p><p class="form-hint" style="margin-top:6px">這是真的會送出去的訊息，不是演練。</p>', '立即發送', 'btn-danger')) return;
   btn.disabled = true; btn.textContent = '發送中…';
   try {
     const res  = await fetch('/api/dashboard/trigger_checkin', { method: 'POST' });
@@ -2681,7 +2726,7 @@ async function savePoint() {
 }
 
 async function deletePoint(id, name) {
-  if (!confirm(`確定刪除資源點「${name}」？`)) return;
+  if (!await askConfirm('刪除資源點', `確定刪除資源點「${esc(name)}」？`, '刪除', 'btn-danger')) return;
   await fetch(`/api/resources/points/${id}`, { method: 'DELETE' });
   loadPoints();
 }
@@ -2697,7 +2742,7 @@ async function pointCheckout(id) {
 }
 
 async function seedPoints() {
-  if (!confirm('從政府開放資料匯入台中市資源點？\n（不會覆蓋已有的同名資源點）')) return;
+  if (!await askConfirm('匯入政府開放資料', '從政府開放資料匯入台中市資源點。已存在的同名資源點不會被覆蓋。', '開始匯入')) return;
   const noticeEl = document.getElementById('seed-notice');
   try {
     const res  = await fetch('/api/resources/points/seed?city=台中市', { method: 'POST' });
