@@ -226,7 +226,9 @@ def test_family_can_register_elderly(db, monkeypatch):
         CareRelation.elderly_id == elder.id,
         CareRelation.contact_id == family_id,
     ).first()
-    assert rel is not None and rel.relation == "家屬代理登記"
+    # 三個寫入端統一用英文鍵：先前只有這條路徑寫中文字面，導致同一個概念
+    # 在資料庫裡有兩種值，依關係類型上色或分組就對不上。
+    assert rel is not None and rel.relation == "family"
     db2.close()
 
     # 重複登記不應該產生重複資料

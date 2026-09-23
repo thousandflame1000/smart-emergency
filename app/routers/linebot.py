@@ -506,8 +506,11 @@ def _handle_volunteer_commands(event, db, user, text) -> bool:
         if not db.query(CareRelation).filter(
             CareRelation.elderly_id == elder.id, CareRelation.contact_id == user.id
         ).first():
+            # 跟其他寫入端一樣用英文鍵：這個欄位有三個寫入點，先前只有這裡寫
+            # 中文字面，結果同一個概念在資料庫裡有兩種值，依關係類型上色或
+            # 分組就全部對不上。
             db.add(CareRelation(elderly_id=elder.id, contact_id=user.id,
-                                relation="家屬代理登記", notify_order=1, is_active=True))
+                                relation="family", notify_order=1, is_active=True))
             db.commit()
         _say(event,
              f"✅ 已{'建立' if created else '找到'}長者資料：{elder_name}\n"

@@ -176,17 +176,23 @@ body {
    比力導向散佈圖更好讀，也看得出哪個聯絡人被掛了太多長者。 */
 .relgraph { padding: 6px 16px 14px; overflow-x: auto; }
 .relgraph svg { display: block; min-width: 620px; width: 100%; }
-.relgraph .edge { fill: none; stroke: #b9c7c0; stroke-width: 1.5; transition: stroke .12s, stroke-width .12s; }
+.relgraph .edge { fill: none; stroke-width: 2.5; opacity: .55; transition: opacity .12s, stroke-width .12s; }
 .relgraph .node { cursor: pointer; }
-.relgraph .node rect { fill: var(--card); stroke: var(--border); stroke-width: 1; rx: 4; transition: stroke .12s; }
-.relgraph .node:hover rect { stroke: var(--primary); }
-.relgraph .node text { font-size: 12px; fill: var(--text); dominant-baseline: middle; }
+.relgraph .node rect { fill: var(--card); stroke: var(--border); stroke-width: 1; rx: 6; transition: stroke .12s; }
+.relgraph .node:hover rect { stroke: var(--primary); stroke-width: 1.6; }
+.relgraph .node .n-name { font-size: 13.5px; font-weight: 600; fill: var(--text); dominant-baseline: middle; }
+.relgraph .node .n-sub { font-size: 11px; fill: var(--text-dim); dominant-baseline: middle; }
 .relgraph .node.elder rect { fill: var(--soft); }
 .relgraph .col-label { font: 700 10px var(--mono); fill: var(--muted); letter-spacing: .1em; }
-.relgraph .order { font: 700 9.5px var(--mono); fill: var(--primary); }
-.relgraph .load { font: 700 9.5px var(--mono); fill: var(--warning); }
-.relgraph.dim .edge:not(.lit) { stroke: #e3e9e6; }
-.relgraph.dim .node:not(.lit) { opacity: .35; }
+.relgraph .order-badge text { font: 700 10px var(--mono); fill: #fff; dominant-baseline: middle; }
+.relgraph .overload rect { fill: rgba(154,101,0,.12); stroke: rgba(154,101,0,.35); }
+.relgraph .overload text { font: 700 10px var(--mono); fill: var(--warning); dominant-baseline: middle; }
+.relgraph.dim .edge:not(.lit) { opacity: .12; }
+.relgraph.dim .node:not(.lit) { opacity: .28; }
+.relgraph .edge.lit { opacity: 1; stroke-width: 3.5; }
+.rel-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding: 4px 4px 0; font-size: 11.5px; color: var(--text-dim); }
+.rel-legend i { display: inline-block; width: 12px; height: 3px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.rel-legend .hint { margin-left: auto; color: var(--muted); }
 /* 人員清單改成卡片：這些資料欄位常常是空的，排成六欄表格會整片都是「—」。 */
 .people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; padding: 14px 16px; }
 .person { position: relative; border: 1px solid var(--border); border-radius: var(--radius);
@@ -2130,7 +2136,7 @@ async function loadRelations() {
     document.getElementById('rel-contact-id').innerHTML =
       contacts.map(u => `<option value="${u.id}">${esc(u.name)}（${u.roles.map(r=>esc(ROLE_LABEL[r]||r)).join('/')}）</option>`).join('');
 
-    const RMAP = { family:'家屬', volunteer:'志工', neighbor:'鄰居' };
+    const RMAP = { family:'家屬', volunteer:'志工', neighbor:'鄰居', other:'聯絡人' };
 
     // 沒有任何聯絡人的長者擺最上面，而且每個名字都能直接點去補設定——
     // 這才是這頁真正要處理的事，不該只是統計卡上的一個數字。
@@ -2169,7 +2175,7 @@ async function loadRelations() {
         ${list.map((r, i) => `<div class="rel-contact">
           <span class="rel-order">${i + 1}</span>
           <span>${esc(r.contact_name)}</span>
-          <span class="badge badge-gray">${esc(RMAP[r.relation] || r.relation)}</span>
+          <span class="badge badge-gray">${esc(RMAP[r.relation_kind] || r.relation)}</span>
           <span class="spacer"></span>
           <span class="rel-tools">
             <button class="btn btn-ghost btn-sm" title="往前一位" ${i === 0 ? 'disabled' : ''}
@@ -2233,41 +2239,65 @@ function renderRelationGraph(rels, elderly) {
 
   // 沒有任何連線的長者不畫進網絡圖——那不是「網絡」，而且上面的風險區
   // 已經列過一次了，重複畫等於同一份資訊佔兩塊版面。
-  const GAP = 38, TOP = 30, BOXW = 150, BOXH = 28, LEFT = 24, RIGHT = 520;
+  const GAP = 56, TOP = 34, BOXW = 210, BOXH = 44, LEFT = 24, RIGHT = 620;
+  const REL = { family:  { label: '家屬', color: '#9a6500' },
+                volunteer:{ label: '志工', color: '#13795b' },
+                neighbor:{ label: '鄰居', color: '#2c7fad' } };
+  const relOf = key => REL[key] || { label: key || '聯絡人', color: '#68756e' };
   const rows = Math.max(elderRows.length, contactRows.length);
-  const H = TOP + Math.max(rows, 1) * GAP + 10;
+  const H = TOP + Math.max(rows, 1) * GAP + 12;
   const yOf = (list, id) => TOP + list.findIndex(n => n.id === id) * GAP + BOXH / 2;
 
-  // 一個聯絡人被幾位長者指定 —— 掛太多人是單點風險，直接標在節點旁邊。
+  // 一個聯絡人被幾位長者指定 —— 掛太多人是單點風險。
   const load = {};
   rels.forEach(r => { load[String(r.contact_id)] = (load[String(r.contact_id)] || 0) + 1; });
+  const phoneOf = {};
+  rels.forEach(r => { if (r.contact_phone) phoneOf[String(r.contact_id)] = r.contact_phone; });
 
+  // 連線用關係類型上色，順序做成貼在線上的圓形徽章——數字浮在半空中
+  // 看不出是哪一條線的順序。
   const edges = rels.map(r => {
     const y1 = yOf(elderRows, String(r.elderly_id)), y2 = yOf(contactRows, String(r.contact_id));
     const x1 = LEFT + BOXW, x2 = RIGHT, mid = (x1 + x2) / 2;
-    return `<path class="edge" data-e="${esc(String(r.elderly_id))}" data-c="${esc(String(r.contact_id))}"
-      d="M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}"/>
-      <text class="order" x="${mid}" y="${(y1 + y2) / 2 - 4}" text-anchor="middle">${r.notify_order}</text>`;
+    const { color } = relOf(r.relation_kind);
+    const my = (y1 + y2) / 2;
+    return `<path class="edge" style="stroke:${color}" data-e="${esc(String(r.elderly_id))}" data-c="${esc(String(r.contact_id))}"
+        d="M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}"/>
+      <g class="order-badge"><circle cx="${mid}" cy="${my}" r="10" style="fill:${color}"/>
+        <text x="${mid}" y="${my}" text-anchor="middle">${r.notify_order}</text></g>`;
   }).join('');
 
-  const box = (n, x, y, cls, extra = '') => `<g class="node ${cls}" data-id="${esc(n.id)}">
+  const box = (n, x, y, cls, sub = '', extra = '') => `<g class="node ${cls}" data-id="${esc(n.id)}">
     <rect x="${x}" y="${y - BOXH / 2}" width="${BOXW}" height="${BOXH}"/>
-    <text x="${x + 11}" y="${y}">${esc(n.name)}</text>${extra}</g>`;
+    <text class="n-name" x="${x + 12}" y="${sub ? y - 6 : y}">${esc(n.name)}</text>
+    ${sub ? `<text class="n-sub" x="${x + 12}" y="${y + 11}">${esc(sub)}</text>` : ''}${extra}</g>`;
 
-  const elderBoxes = elderRows.map(n => box(n, LEFT, yOf(elderRows, n.id), 'elder')).join('');
+  const elderBoxes = elderRows.map(n => {
+    const mine = rels.filter(r => String(r.elderly_id) === n.id).length;
+    return box(n, LEFT, yOf(elderRows, n.id), 'elder', `${mine} 位聯絡人`);
+  }).join('');
+
   const contactBoxes = contactRows.map(n => {
     const y = yOf(contactRows, n.id);
     const count = load[n.id] || 0;
-    const tag = count > 1 ? `<text class="load" x="${RIGHT + BOXW - 10}" y="${y}" text-anchor="end">${count} 位</text>` : '';
-    return box(n, RIGHT, y, 'contact', tag);
+    const kinds = [...new Set(rels.filter(r => String(r.contact_id) === n.id).map(r => relOf(r.relation_kind).label))];
+    const tag = count > 1
+      ? `<g class="overload"><rect x="${RIGHT + BOXW - 62}" y="${y - 10}" width="54" height="20" rx="10"/>
+         <text x="${RIGHT + BOXW - 35}" y="${y}" text-anchor="middle">扛 ${count} 戶</text></g>` : '';
+    return box(n, RIGHT, y, 'contact', [kinds.join('／'), phoneOf[n.id]].filter(Boolean).join('  ·  '), tag);
   }).join('');
+
+  const legend = [...new Set(rels.map(r => r.relation_kind))].map(k => {
+    const { label, color } = relOf(k);
+    return `<span><i style="background:${color}"></i>${esc(label)}</span>`;
+  }).join('') + '<span class="hint">線上的號碼＝通知順序，滑到任一個人可以只看他的連線</span>';
 
   host.innerHTML = elderRows.length ? `<div class="relgraph">
     <svg viewBox="0 0 ${RIGHT + BOXW + 24} ${H}" role="img" aria-label="照護關係網絡圖">
-      <text class="col-label" x="${LEFT}" y="16">長者</text>
-      <text class="col-label" x="${RIGHT}" y="16">聯絡人</text>
+      <text class="col-label" x="${LEFT}" y="18">長者</text>
+      <text class="col-label" x="${RIGHT}" y="18">未回應時依序通知</text>
       ${edges}${elderBoxes}${contactBoxes}
-    </svg></div>` : '';
+    </svg><div class="rel-legend">${legend}</div></div>` : '';
 
   // 滑到節點時，把跟它無關的連線和節點壓暗，才看得出這個人到底連到誰。
   const wrap = host.querySelector('.relgraph');

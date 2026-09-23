@@ -451,6 +451,30 @@ def test_delete_user_with_active_dispatch_is_refused_with_a_reason(db, api):
     assert res.status_code == 409 and "進行中的派遣" in res.json()["error"]
 
 
+def test_relation_kind_normalises_the_two_vocabularies_already_in_the_data(db, api):
+    """relation 是自由文字且有多個寫入端，歷史資料同時存在中文字面與英文鍵。
+
+    讀取時要收斂成固定幾種，前端才能依它上色／分組；原始值仍要保留。
+    """
+    from app.models.care_relation import CareRelation
+    elder = User(name="長輩", roles=["elderly"])
+    a, b, c = (User(name="甲", roles=["family"]), User(name="乙", roles=["volunteer"]),
+               User(name="丙", roles=["volunteer"]))
+    db.add_all([elder, a, b, c])
+    db.commit()
+    # 「家屬代理登記」是 LINE 代理登記流程留在正式資料裡的舊值。
+    for contact, raw, order in ((a, "家屬代理登記", 1), (b, "volunteer", 2), (c, "說不上來", 3)):
+        db.add(CareRelation(elderly_id=elder.id, contact_id=contact.id, relation=raw, notify_order=order))
+    db.commit()
+
+    rows = {r["contact_name"]: r for r in api.get("/api/dashboard/relations").json()}
+    assert rows["甲"]["relation_kind"] == "family"
+    assert rows["乙"]["relation_kind"] == "volunteer"
+    assert rows["丙"]["relation_kind"] == "other"
+    # 原始值不能被覆蓋掉，那是使用者當初填的內容。
+    assert rows["甲"]["relation"] == "家屬代理登記"
+
+
 def test_care_contacts_can_be_reordered_without_deleting_and_recreating(db, api):
     """通知順序是這張表的重點，必須能直接調整，不是砍掉重建。"""
     from app.models.care_relation import CareRelation

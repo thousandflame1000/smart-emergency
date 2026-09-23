@@ -426,6 +426,24 @@ def trigger_checkin(db: Session = Depends(get_db)):
     return {"message": f"已觸發打卡，共 {elderly_count} 位有綁定 LINE 的長者"}
 
 
+def _relation_kind(raw: str | None) -> str:
+    """把 relation 欄位收斂成固定幾種，讓前端可以安心依它上色或分組。
+
+    這個欄位是自由文字而且有三個寫入端，歷史資料裡同一個概念存過中文字面
+    （例如「家屬代理登記」）也存過英文鍵。寫入端已經統一成英文鍵，但正式
+    環境既有的列還在，所以讀取時一併收斂，不必為了顯示去改動既有資料。
+    """
+    text = (raw or "").strip().lower()
+    if not text:
+        return "other"
+    for kind, words in (("family", ("family", "家屬", "家人", "親屬")),
+                        ("volunteer", ("volunteer", "志工", "義工")),
+                        ("neighbor", ("neighbor", "neighbour", "鄰居"))):
+        if any(word in text for word in words):
+            return kind
+    return "other"
+
+
 @router.get("/relations")
 def list_relations(elderly_id: str | None = None, db: Session = Depends(get_db)):
     """列出照護關係"""
@@ -441,8 +459,11 @@ def list_relations(elderly_id: str | None = None, db: Session = Depends(get_db))
             "elderly_name": r.elderly.name if r.elderly else "?",
             "contact_id":   str(r.contact_id),
             "contact_name": r.contact.name if r.contact else "?",
-            "relation":     r.relation,
-            "notify_order": r.notify_order,
+            # 緊急時要照順序打電話，號碼就該跟著關係一起給，不用再查一次名單。
+            "contact_phone": (r.contact.phone if r.contact else None) or None,
+            "relation":      r.relation,
+            "relation_kind": _relation_kind(r.relation),
+            "notify_order":  r.notify_order,
         }
         for r in rels
     ]
