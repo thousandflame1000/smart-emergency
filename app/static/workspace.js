@@ -4,6 +4,7 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'
 const TYPES = {incident:'事件', person:'人員', supply:'物資', facility:'設施', custom:'自訂物件'};
 const RELATIONS = {assignment:'指派', supplies:'供應', care:'照護', request:'提出需求', related:'相關', custom:'自訂關係'};
 const COLORS = {incident:'#c34736', person:'#237caf', supply:'#c57320', facility:'#8b5fa8', custom:'#087f72'};
+const ICONS = {incident:'triangle-alert', person:'user', supply:'package', facility:'building-2', custom:'shapes'};
 const STATUS = {active:'啟用', inactive:'停用'};
 const state = {id:null, revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
   undo:[], redo:[], hidden:new Set(), report:null, connect:null, preview:null, editVersion:0, documentVersion:0, importVersion:0};
@@ -56,22 +57,36 @@ function loadDocument(data) {
   if(cy){cy.destroy();cy=null;}
   state.id=data.id; state.revision=data.revision; state.graph=data.graph; state.selected=null; state.report=null;
   state.undo=[];state.redo=[];state.dirty=false;state.editVersion++;state.connect=null;
-  $('workspace-name').value=data.name; $('workspace-list').value=data.id||'';
+  $('workspace-name').value=data.name; $('workspace-folder').value=data.folder||''; $('workspace-list').value=data.id||'';
   state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateComparison();invalidateAllocation();
   $('save-state').textContent=data.id?`已儲存 · 版本 ${data.revision}`:'尚未儲存';
   $('analysis-result').textContent='';render();fit();
   workspaceUrl(data.id);
   rememberWorkspace(data.id);
 }
+function groupByFolder(items) {
+  const groups=new Map();
+  items.forEach(w=>{const key=w.folder||''; if(!groups.has(key))groups.set(key,[]); groups.get(key).push(w);});
+  const unfiled=groups.get('')||[]; groups.delete('');
+  const folders=[...groups.keys()].sort((a,b)=>a.localeCompare(b,'zh-Hant'));
+  return {folders, groups, unfiled};
+}
 async function listWorkspaces() {
-  const items=await api(''); $('workspace-list').innerHTML='<option value="">未儲存工作區</option>'+items.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('');
+  const items=await api('');
+  const {folders, groups, unfiled}=groupByFolder(items);
+  const optionsFor=list=>list.map(w=>`<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join('');
+  const groupedHtml=folders.map(name=>`<optgroup label="${escapeHtml(name)}">${optionsFor(groups.get(name))}</optgroup>`).join('');
+  const unfiledHtml=unfiled.length?(folders.length?`<optgroup label="未分類">${optionsFor(unfiled)}</optgroup>`:optionsFor(unfiled)):'';
+  $('workspace-list').innerHTML='<option value="">未儲存工作區</option>'+groupedHtml+unfiledHtml;
   $('workspace-list').value=state.id||'';
+  $('workspace-folder-options').innerHTML=folders.map(name=>`<option value="${escapeHtml(name)}">`).join('');
   return items;
 }
 async function save(copy=false) {
   const version=state.editVersion, documentVersion=state.documentVersion, graph=structuredClone(state.graph), name=$('workspace-name').value.trim()||'未命名工作區';
+  const folder=$('workspace-folder').value.trim();
   const id=copy?null:state.id;
-  const data=await api(id?'/'+id:'',{name,graph,baseline:state.baseline||null,revision:state.revision},id?'PUT':'POST');
+  const data=await api(id?'/'+id:'',{name,graph,baseline:state.baseline||null,revision:state.revision,folder},id?'PUT':'POST');
   if(documentVersion!==state.documentVersion){await listWorkspaces();message('先前工作區已儲存');return;}
   state.id=data.id;state.revision=data.revision;
   workspaceUrl(data.id);
@@ -142,11 +157,12 @@ function renderCanvas() {
       const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color,weight:state.selected?.id===e.id?6:2,dashArray:e.status==='inactive'?'5 5':'7 5'}).addTo(mapLayers);
       line.bindTooltip(document.createTextNode(`${e.label} · ${STATUS[e.status]}${e.directed?' · 有方向':''}`));line.on('click',event=>{L.DomEvent.stopPropagation(event);select('edge',e.id);});
     }
-    for(const n of nodes.values()){if(n.lat===null)continue;const size=n.kind==='incident'?21:17;
-      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}"></div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(mapLayers);
+    for(const n of nodes.values()){if(n.lat===null)continue;const size=n.kind==='incident'?26:22;
+      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}"><i data-lucide="${ICONS[n.kind]}"></i></div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(mapLayers);
       marker.bindTooltip(document.createTextNode(`${n.label} · ${TYPES[n.kind]}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});
     }
+    icons();
   }else renderGraph(nodes,critical);
 }
 function renderGraph(nodes,critical) {

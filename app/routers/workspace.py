@@ -27,6 +27,7 @@ class WorkspaceWrite(BaseModel):
     revision: int = Field(default=0, ge=0)
     baseline: ComparisonBaseline | None = None
     zone_id: str = Field(default=GENERAL_ZONE_ID, max_length=180)
+    folder: str = Field(default="", max_length=120)
 
 
 class AnalysisRequest(BaseModel):
@@ -59,7 +60,7 @@ def timestamp():
 
 def serialize(row, detail=True):
     result = {"id": row.id, "name": row.name, "revision": row.revision, "updated_at": row.updated_at,
-              "zone_id": row.zone_id}
+              "zone_id": row.zone_id, "folder": row.folder}
     if detail:
         document = json.loads(row.document)
         if "graph" in document:
@@ -87,7 +88,7 @@ def create_workspace(body: WorkspaceWrite, db: Session = Depends(get_db)):
         raise HTTPException(400, "找不到這個分區")
     row = TopologyWorkspace(id=uuid4().hex, name=body.name.strip() or "未命名工作區",
                             document=body.model_dump_json(include={"graph", "baseline"}), revision=1,
-                            updated_at=timestamp(), zone_id=body.zone_id)
+                            updated_at=timestamp(), zone_id=body.zone_id, folder=body.folder.strip())
     db.add(row)
     db.commit()
     return serialize(row)
@@ -242,10 +243,13 @@ def save_workspace(workspace_id: str, body: WorkspaceWrite, db: Session = Depend
         from app.models.zone import Zone
         if not db.get(Zone, body.zone_id):
             raise HTTPException(400, "找不到這個分區")
+    if "folder" not in body.model_fields_set and row:
+        body.folder = row.folder
     changed = db.query(TopologyWorkspace).filter(TopologyWorkspace.id == workspace_id,
                                                 TopologyWorkspace.revision == body.revision).update({
         "name": body.name.strip() or "未命名工作區", "document": body.model_dump_json(include={"graph", "baseline"}),
         "revision": body.revision + 1, "updated_at": timestamp(), "zone_id": body.zone_id,
+        "folder": body.folder.strip(),
     }, synchronize_session=False)
     if not changed:
         db.rollback()

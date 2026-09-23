@@ -23,6 +23,8 @@
     <h1>事件處置工作區</h1>
     <select id="workspace-list" aria-label="已儲存的工作區"><option value="">未儲存工作區</option></select>
     <input id="workspace-name" aria-label="工作區名稱" value="未命名工作區" maxlength="120">
+    <input id="workspace-folder" aria-label="資料夾" placeholder="資料夾（選填）" list="workspace-folder-options" maxlength="120">
+    <datalist id="workspace-folder-options"></datalist>
     <div class="header-actions">
       <button id="new" title="新增空白工作區" aria-label="新增空白工作區"><i data-lucide="file-plus-2"></i></button>
       <button id="save" class="primary"><i data-lucide="save"></i>儲存</button>

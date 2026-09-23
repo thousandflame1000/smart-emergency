@@ -120,6 +120,34 @@ def test_workspace_persistence_isolation_and_conflict(db):
     assert len(client.get('/api/workspaces').json()) == 2
 
 
+def test_workspace_folder_is_organizational_and_independent_of_zone(db):
+    client = TestClient(app)
+    created = client.post('/api/workspaces', json={"name": "本機測試", "folder": "演練"})
+    assert created.status_code == 201
+    created = created.json()
+    assert created["folder"] == "演練"
+    assert created["zone_id"] == "general"
+
+    # Not sending zone_id/folder on save keeps whatever the row already had.
+    kept = client.put('/api/workspaces/' + created["id"], json={"name": "本機測試", "revision": 1})
+    assert kept.status_code == 200
+    assert kept.json()["folder"] == "演練"
+    assert kept.json()["zone_id"] == "general"
+
+    # Explicitly clearing the folder is independent of the zone assignment.
+    cleared = client.put('/api/workspaces/' + created["id"],
+                         json={"name": "本機測試", "revision": 2, "folder": ""})
+    assert cleared.status_code == 200
+    assert cleared.json()["folder"] == ""
+    assert cleared.json()["zone_id"] == "general"
+
+    listed = client.get('/api/workspaces').json()
+    assert listed[0]["folder"] == ""
+
+    no_folder = client.post('/api/workspaces', json={"name": "沒有資料夾"}).json()
+    assert no_folder["folder"] == ""
+
+
 def test_invalid_import_analysis_and_removed_road_endpoint_are_non_mutating(db):
     client = TestClient(app)
     assert client.post('/api/workspaces/import-preview', json={"format":"geojson","content":"invalid"}).status_code == 400

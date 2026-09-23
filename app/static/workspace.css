@@ -15,7 +15,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 header { min-height: 64px; display: flex; align-items: center; gap: 12px; padding: 12px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 h1 { font-size: 19px; margin: 0 12px 0 0; font-weight: 700; }
 h2 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
-header select { width: 190px; } #workspace-name { width: 190px; }
+header select { width: 190px; } #workspace-name { width: 190px; } #workspace-folder { width: 140px; }
 .header-actions { display: flex; gap: 6px; margin-left: auto; }
 .toolbar { display: flex; align-items: center; gap: 6px; padding: 10px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .segmented { display: flex; gap: 0; margin-right: 8px; }
@@ -49,8 +49,9 @@ aside { padding: 18px 14px; overflow: auto; min-width: 0; }
 .locate input { width: 97px; border: 0; padding: 5px; }
 .empty-state { position: absolute; z-index: 500; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; gap: 12px; align-items: center; padding: 15px; background: white; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; box-shadow: 0 3px 18px #263e2520; }
 .connect-state { position: absolute; bottom: 28px; left: 12px; z-index: 500; padding: 8px 14px; border-radius: 4px; background: #253c31; color: white; }
-.map-dot { border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 5px #0006; }
+.map-dot { border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 5px #0006; display: flex; align-items: center; justify-content: center; }
 .map-dot.selected { outline: 3px solid #f8b52c; } .map-dot.unavailable { opacity: .4; }
+.map-dot svg { width: 62%; height: 62%; color: white; stroke-width: 2.75; }
 .inspector label, dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 .inspector input, .inspector select { width: 100%; color: var(--ink); }
 .inspector .checkbox-label, dialog .checkbox-label { flex-direction: row; align-items: center; }

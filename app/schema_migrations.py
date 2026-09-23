@@ -31,6 +31,7 @@ def ensure_additive_schema(engine: Engine) -> None:
     _ensure_zone_column(engine, inspector, "community_needs")
     _ensure_zone_column(engine, inspector, "topology_workspaces")
     _ensure_general_zone(engine)
+    _ensure_workspace_folder_column(engine, inspector)
 
     if "community_resources" in inspector.get_table_names():
         resource_columns = {column["name"] for column in inspector.get_columns("community_resources")}
@@ -79,6 +80,19 @@ def _ensure_zone_column(engine: Engine, inspector, table: str) -> None:
     with engine.begin() as connection:
         connection.exec_driver_sql(
             f"ALTER TABLE {table} ADD COLUMN zone_id TEXT NOT NULL DEFAULT 'general'"
+        )
+
+
+def _ensure_workspace_folder_column(engine: Engine, inspector) -> None:
+    """Add the purely organizational `folder` label, independent of zone_id (geographic)."""
+    if "topology_workspaces" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("topology_workspaces")}
+    if "folder" in columns:
+        return
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "ALTER TABLE topology_workspaces ADD COLUMN folder TEXT NOT NULL DEFAULT ''"
         )
 
 
