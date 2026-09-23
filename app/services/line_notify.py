@@ -422,7 +422,9 @@ def get_display_name(line_uid: str) -> str:
         profile = _get_api().get_profile(line_uid)
         return profile.display_name
     except Exception:
-        return f"用戶_{line_uid[-6:]}"
+        from app.labels import UNNAMED_RESIDENT
+        # 不要拿 LINE UID 片段當人的名字：它會被存起來並一路顯示到後台與通知裡。
+        return UNNAMED_RESIDENT
 
 
 # ──────────────────────────────────────────────

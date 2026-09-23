@@ -123,8 +123,12 @@ def _task_for(db: Session, user: User, need_id: str):
 @router.get("/api/context")
 def form_context(t: str, n: str | None = None, db: Session = Depends(get_db)):
     from app.routers.linebot import NEED_ZH, STATUS_ZH, _is_staff
+    from app.labels import is_placeholder_name
     user = _user_from_token(db, t)
-    out = {"name": user.name, "phone": user.phone, "address": user.address,
+    # 佔位姓名不要回填到表單——居民看到姓名欄已經填著系統給的字串，
+    # 多半會直接送出，那個假名字就被固定下來了。
+    out = {"name": "" if is_placeholder_name(user.name) else user.name,
+           "phone": user.phone, "address": user.address,
            "is_staff": _is_staff(user), "has_location": user.lat is not None}
     if n:
         need = _task_for(db, user, n)

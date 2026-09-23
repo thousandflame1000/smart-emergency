@@ -145,8 +145,11 @@ def _is_staff(user) -> bool:
 
 
 def _welcome_text(name: str) -> str:
+    from app.labels import is_placeholder_name
+    # 取不到 LINE 顯示名稱時不要拿佔位字當稱呼——叫人「用戶_4f8a2c」比不叫名字更糟。
+    greeting = "👋 歡迎加入鄰里守望！" if is_placeholder_name(name) else f"👋 {name}，歡迎加入鄰里守望！"
     return (
-        f"👋 {name}，歡迎加入鄰里守望！\n\n"
+        f"{greeting}\n\n"
         "您已自動註冊。先從下方「居民服務」開始：\n"
         "・有危險：選「緊急求助」或傳「需要幫忙」\n"
         "・物資或生活需求：選「申請需求」一次填寫\n"

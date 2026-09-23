@@ -17,3 +17,14 @@ NEED_STATUS_ZH = {
 def need_status(value: str | None) -> str:
     """狀態的中文說法；遇到沒收錄的值就照原樣回傳，不要讓畫面變成空白。"""
     return NEED_STATUS_ZH.get(value or "", value or "未知")
+
+
+# 取不到 LINE 顯示名稱時的佔位字。先前用的是「用戶_」加 LINE UID 末六碼，
+# 那串東西會被當成姓名存進資料庫，然後出現在歡迎詞、後台名單、派遣卡片與
+# 家屬通知裡——調度者看到「用戶_4f8a2c」根本不知道那是誰。
+UNNAMED_RESIDENT = "未命名住戶"
+
+
+def is_placeholder_name(name: str | None) -> bool:
+    """這個名字是系統自動給的佔位字，不是本人提供的稱呼。"""
+    return not name or name == UNNAMED_RESIDENT or name.startswith("用戶_")

@@ -1083,3 +1083,50 @@ def test_user_facing_errors_do_not_leak_raw_status_codes(db):
     assert message, "狀態不符時應該要有錯誤訊息"
     assert "matched" not in message, f"原始狀態碼外洩到使用者訊息：{message}"
     assert "已派遣" in message
+
+
+def test_placeholder_name_never_reaches_the_user(db, line_outbox, monkeypatch):
+    """取不到 LINE 顯示名稱時，不能拿 UID 片段當人的名字。
+
+    先前會存成「用戶_4f8a2c」，然後出現在歡迎詞、後台名單、派遣卡片與家屬
+    通知裡；表單還會把它回填到姓名欄，居民直接送出就固定下來了。
+    """
+    from app.services import line_notify
+    from app.labels import UNNAMED_RESIDENT, is_placeholder_name
+
+    # 只讓「查 LINE 顯示名稱」失敗；回覆訊息仍要照常走 line_outbox，
+    # 整個 _get_api 換掉會把回覆路徑一起打斷。
+    real_get_api = line_notify._get_api
+
+    class _NoProfile:
+        def __init__(self, inner): self._inner = inner
+        def __getattr__(self, item): return getattr(self._inner, item)
+        def get_profile(self, *a, **k): raise RuntimeError("profile unavailable")
+
+    monkeypatch.setattr(line_notify, "_get_api", lambda: _NoProfile(real_get_api()))
+    assert line_notify.get_display_name("U0123456789abcdef") == UNNAMED_RESIDENT
+
+    say("Unoname", "你好")
+    greeting = " ".join(replies(line_outbox))
+    assert "歡迎加入鄰里守望" in greeting
+    assert "用戶_" not in greeting, f"佔位字被當成稱呼送出去了：{greeting}"
+
+    db2 = SessionLocal()
+    user = db2.query(User).filter(User.line_uid == "Unoname").one()
+    assert is_placeholder_name(user.name)
+    db2.close()
+
+
+def test_form_does_not_prefill_a_placeholder_name(db):
+    from app.labels import UNNAMED_RESIDENT
+    from app.services.form_token import make_token
+    from app.main import app as real_app
+    api = TestClient(real_app)   # 這裡要打到 /f，本檔的 api fixture 沒掛 webform router
+    mk(db, UNNAMED_RESIDENT, ["elderly"], "Uph")
+    ctx = api.get("/f/api/context", params={"t": make_token("Uph")})
+    assert ctx.status_code == 200
+    assert ctx.json()["name"] == "", "佔位姓名不該回填到表單，否則居民會照著送出"
+
+    mk(db, "陳真名", ["elderly"], "Ureal")
+    ctx2 = api.get("/f/api/context", params={"t": make_token("Ureal")})
+    assert ctx2.json()["name"] == "陳真名", "真實姓名仍要回填，省得重打"
