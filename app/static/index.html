@@ -31,6 +31,34 @@ button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--n
 .empty{padding:36px 18px;text-align:center;color:var(--muted)}.page-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.page-heading h2{font-size:17px}.page-heading p{margin-top:4px;color:var(--muted);font-size:12px}
 .trend-table td:not(:first-child),.trend-table th:not(:first-child){text-align:right;font-family:var(--mono)}
 .ask{max-width:900px}.query-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:16px}.query-row input{height:40px;border:1px solid var(--line);border-radius:4px;padding:0 12px}.primary{height:40px;border:0;border-radius:4px;background:var(--accent);color:#fff;padding:0 18px;font-weight:700;cursor:pointer}.primary:disabled{opacity:.55;cursor:wait}.answer{padding:16px;border-top:1px solid var(--line);line-height:1.75;white-space:pre-wrap}.sources{padding:12px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:12px}
+.metric{background:var(--surface);padding:15px 16px;min-height:95px;border:0;width:100%;text-align:left;font:inherit;color:inherit}
+button.metric{cursor:pointer}button.metric:hover{background:var(--soft)}button.metric.on{background:var(--soft);box-shadow:inset 3px 0 0 var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{height:30px;padding:0 11px;border:1px solid var(--line);border-radius:15px;background:var(--surface);color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.chip:hover{border-color:var(--accent);color:var(--accent)}.chip.on{border-color:var(--accent);background:var(--accent);color:#fff}
+.chip b{font:700 11px var(--mono)}
+.row-actions{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap}
+.mini{height:28px;padding:0 9px;border:1px solid var(--line);border-radius:4px;background:var(--surface);color:var(--ink);cursor:pointer;font-size:12px;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
+.mini:hover{border-color:var(--accent);color:var(--accent)}.mini[disabled]{opacity:.4;cursor:not-allowed}.mini.warn:hover{border-color:var(--danger);color:var(--danger)}
+.alert-row{grid-template-columns:10px 1fr auto auto}
+[hidden]{display:none !important}
+.scrim{position:fixed;inset:0;background:#17201c66;z-index:60}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(400px,92vw);background:var(--surface);border-left:1px solid var(--line);z-index:61;display:flex;flex-direction:column;box-shadow:-8px 0 26px #17201c1f}
+.drawer-head{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.drawer-head h3{font-size:16px}.drawer-head p{margin-top:5px;color:var(--muted);font-size:12px}
+.drawer-body{padding:16px 18px;overflow:auto;display:flex;flex-direction:column;gap:16px}
+.field{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+.field span{color:var(--muted)}.field a{color:var(--accent)}
+.sub{font:700 10px var(--mono);color:var(--muted);text-transform:uppercase;margin-bottom:7px}
+.contact{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;border:1px solid var(--line);border-radius:4px;margin-bottom:6px;font-size:13px}
+.warn-box{padding:11px 13px;border:1px solid #e8a8b2;border-radius:4px;background:#fff1f3;color:var(--danger);font-size:12.5px;line-height:1.6}
+.drawer-actions{margin-top:auto;padding:14px 18px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap}
+.chart-wrap{padding:16px}.chart-wrap svg{width:100%;height:230px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:14px;padding:0 16px 14px;font-size:12px;color:var(--muted)}
+.legend i{display:inline-block;width:11px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.toast-stack{position:fixed;right:18px;bottom:18px;z-index:70;display:flex;flex-direction:column;gap:8px}
+.toast{padding:11px 15px;border:1px solid var(--line);border-radius:5px;background:var(--surface);box-shadow:0 4px 16px #17201c1f;font-size:13px;max-width:320px}
+.toast.bad{border-color:#e8a8b2;color:var(--danger)}
 @media(max-width:1120px){.metrics{grid-template-columns:repeat(3,1fr)}.grid{grid-template-columns:1fr}}
 @media(max-width:760px){.sidebar{width:58px;flex-basis:58px}.brand{padding:16px 0;text-align:center}.brand strong{font-size:0}.brand strong::after{content:"鄰";font-size:20px}.brand span,.nav-label,.nav-item span,.sidebar-bottom span{display:none}.nav-item{justify-content:center;padding:0;border-left:0}.content{padding:14px}.topbar{padding:0 14px}.metrics{grid-template-columns:repeat(2,1fr)}.stamp{display:none}.panel-head input{width:140px}}
 </style>
@@ -56,9 +84,9 @@ button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--n
   <div class="content">
     <section class="page active" id="page-overview">
       <div class="metrics">
-        <div class="metric ok"><span>今日平安</span><strong id="m-ok">-</strong><small>已完成打卡</small></div>
-        <div class="metric danger"><span>需要關注</span><strong id="m-risk">-</strong><small>未回應或求助</small></div>
-        <div class="metric warning"><span>等待回覆</span><strong id="m-pending">-</strong><small>今日待確認</small></div>
+        <button type="button" class="metric ok" data-filter="ok"><span>今日平安</span><strong id="m-ok">-</strong><small>點擊篩選名單</small></button>
+        <button type="button" class="metric danger" data-filter="risk"><span>需要關注</span><strong id="m-risk">-</strong><small>未回應或求助</small></button>
+        <button type="button" class="metric warning" data-filter="pending"><span>等待回覆</span><strong id="m-pending">-</strong><small>今日待確認</small></button>
         <div class="metric danger"><span>未解警報</span><strong id="m-alerts">-</strong><small>待聯繫處理</small></div>
         <div class="metric"><span>待處理需求</span><strong id="m-needs">-</strong><small>事件處置工作區</small></div>
         <div class="metric"><span>可用物資</span><strong id="m-resources">-</strong><small>正式登記資料</small></div>
@@ -70,11 +98,13 @@ button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--n
     </section>
     <section class="page" id="page-elderly">
       <div class="page-heading"><div><h2>長者狀態</h2><p id="elderly-count">0 位</p></div><input id="elderly-search" placeholder="搜尋姓名或地址" aria-label="搜尋姓名或地址"></div>
-      <article class="panel"><div class="table-wrap"><table><thead><tr><th>姓名</th><th>電話</th><th>地址</th><th>今日狀態</th><th>回覆時間</th></tr></thead><tbody id="elderly-body"></tbody></table></div></article>
+      <div class="chips" id="elderly-chips"></div>
+      <article class="panel"><div class="table-wrap"><table><thead><tr><th>姓名</th><th>電話</th><th>地址</th><th>今日狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="elderly-body"></tbody></table></div></article>
     </section>
     <section class="page" id="page-analytics-page">
-      <div class="page-heading"><div><h2>近 14 日趨勢</h2><p>打卡、警報與需求紀錄</p></div></div>
-      <article class="panel trend-table"><div class="table-wrap"><table><thead><tr><th>日期</th><th>平安</th><th>未回應</th><th>求助</th><th>等待</th><th>警報</th><th>需求</th><th>完成</th></tr></thead><tbody id="trends-body"></tbody></table></div></article>
+      <div class="page-heading"><div><h2>近 14 日趨勢</h2><p>打卡、警報與需求紀錄</p></div><div class="chips" id="trend-range"></div></div>
+      <article class="panel" style="margin-bottom:16px"><div class="chart-wrap" id="trend-chart"></div><div class="legend" id="trend-legend"></div></article>
+      <article class="panel trend-table"><div class="panel-head"><h2>每日明細</h2></div><div class="table-wrap"><table><thead><tr><th>日期</th><th>平安</th><th>未回應</th><th>求助</th><th>等待</th><th>警報</th><th>需求</th><th>完成</th></tr></thead><tbody id="trends-body"></tbody></table></div></article>
     </section>
     <section class="page" id="page-ai-page">
       <div class="page-heading"><div><h2>AI 知識查詢</h2><p>依已核准知識庫回覆</p></div></div>
@@ -82,6 +112,16 @@ button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--n
     </section>
   </div>
 </main>
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" hidden aria-label="長者詳情">
+  <div class="drawer-head">
+    <div><h3 id="d-name">-</h3><p id="d-status">-</p></div>
+    <button class="mini" id="d-close" aria-label="關閉">關閉</button>
+  </div>
+  <div class="drawer-body" id="d-body"></div>
+  <div class="drawer-actions" id="d-actions"></div>
+</aside>
+<div class="toast-stack" id="toasts"></div>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -91,19 +131,111 @@ let elders=[];
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 function badge(status){const [label,cls]=statuses[status]||[status||'未知','b-muted'];return `<span class="badge ${cls}">${esc(label)}</span>`;}
 function clock(value){if(!value)return '-';const iso=String(value).replace(' ','T');const date=new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(iso)?iso:iso+'Z');return Number.isNaN(+date)?'-':date.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Taipei'});}
+function toast(text,bad=false){const el=document.createElement('div');el.className='toast'+(bad?' bad':'');el.textContent=text;$('toasts').appendChild(el);setTimeout(()=>el.remove(),bad?6000:3500);}
+// 狀態分組：畫面上的篩選是「平安／需要關注／等待／未發送」四組，底層可能對應多個原始狀態值。
+const GROUPS={ok:['ok','safe','confirmed_safe'],risk:['no_response','help_needed'],pending:['pending'],not_sent:['not_sent']};
+const GROUP_LABEL={ok:'平安',risk:'需要關注',pending:'等待回覆',not_sent:'未發送'};
+function inGroup(row,group){return !group||(GROUPS[group]||[]).includes(row.today_status||'not_sent');}
+let overviewFilter='',elderFilter='',relationsCache=null;
+function elderById(id){return elders.find(e=>String(e.id)===String(id));}
 function showPage(id){if(!pageTitles[id])id='overview';document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+id));document.querySelectorAll('[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===id));$('title').textContent=pageTitles[id];if(id==='analytics-page')loadTrends();if(history.replaceState)history.replaceState(null,'','#'+id);}
-function renderElders(target,data,full=false){$(target).innerHTML=data.length?data.map(row=>`<tr><td><strong>${esc(row.name)}</strong></td>${full?`<td class="muted">${esc(row.phone||'-')}</td><td class="muted">${esc(row.address||'-')}</td>`:''}<td>${badge(row.today_status)}</td><td class="muted">${clock(row.responded_at)}</td></tr>`).join(''):`<tr><td colspan="${full?5:3}" class="empty">目前沒有資料</td></tr>`;}
-function renderAlerts(rows){$('alert-count').textContent=rows.length+' 筆';$('alerts').innerHTML=rows.length?rows.map(row=>{const high=row.alert_type==='help_needed'||row.alert_type==='no_response_3h';const labels={help_needed:'主動求助',no_response_1h:'超過 1 小時未回應',no_response_3h:'超過 3 小時未回應'};return `<div class="alert-row"><span class="dot ${high?'high':''}"></span><div><strong>${esc(row.elderly)}</strong><p>${esc(labels[row.alert_type]||row.alert_type)}</p></div><time>${clock(row.created_at)}</time></div>`;}).join(''):'<div class="empty">目前沒有未解警報</div>';}
-async function loadAll(){try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;$('elderly-count').textContent=elders.length+' 位';renderElders('overview-elderly',elders);renderElders('elderly-body',elders,true);renderAlerts(alerts);const emergency=summary.mode==='emergency';$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
-async function loadTrends(){const body=$('trends-body');body.innerHTML='<tr><td colspan="8" class="empty">讀取中</td></tr>';try{const data=await fetch('/api/dashboard/trends?days=14').then(r=>r.json());body.innerHTML=data.days.map(row=>`<tr><td>${esc(row.date)}</td><td>${row.checkin_ok}</td><td>${row.checkin_no_response}</td><td>${row.checkin_help_needed}</td><td>${row.checkin_pending}</td><td>${row.alerts}</td><td>${row.needs}</td><td>${row.needs_fulfilled}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">目前沒有資料</td></tr>';}catch(error){body.innerHTML='<tr><td colspan="8" class="empty">趨勢讀取失敗</td></tr>';}}
+function renderElders(target,data,full=false){
+  const cols=full?6:4;
+  $(target).innerHTML=data.length?data.map(row=>`<tr><td><strong>${esc(row.name)}</strong></td>${full?`<td class="muted">${esc(row.phone||'-')}</td><td class="muted">${esc(row.address||'-')}</td>`:''}<td>${badge(row.today_status)}</td><td class="muted">${clock(row.responded_at)}</td><td><div class="row-actions">${row.phone?`<a class="mini" href="tel:${esc(row.phone)}" title="撥號給 ${esc(row.name)}">撥號</a>`:'<button class="mini" disabled title="沒有留電話">撥號</button>'}<button class="mini" data-detail="${esc(row.id)}">詳情</button></div></td></tr>`).join(''):`<tr><td colspan="${cols}" class="empty">目前沒有資料</td></tr>`;
+  $(target).querySelectorAll('[data-detail]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.detail));
+}
+function renderElderChips(){
+  const counts=g=>elders.filter(r=>inGroup(r,g)).length;
+  const items=[['','全部',elders.length],...Object.keys(GROUPS).map(g=>[g,GROUP_LABEL[g],counts(g)])];
+  $('elderly-chips').innerHTML=items.map(([g,label,n])=>`<button type="button" class="chip ${elderFilter===g?'on':''}" data-chip="${g}">${esc(label)}<b>${n}</b></button>`).join('');
+  $('elderly-chips').querySelectorAll('[data-chip]').forEach(b=>b.onclick=()=>{elderFilter=b.dataset.chip;renderElderChips();applyElderFilters();});
+}
+function applyElderFilters(){
+  const q=$('elderly-search').value;
+  renderElders('elderly-body',elders.filter(r=>inGroup(r,elderFilter)&&(r.name.includes(q)||(r.address||'').includes(q))),true);
+}
+function applyOverviewFilter(){
+  const q=$('overview-search').value;
+  renderElders('overview-elderly',elders.filter(r=>inGroup(r,overviewFilter)&&r.name.includes(q)));
+  document.querySelectorAll('[data-filter]').forEach(el=>el.classList.toggle('on',el.dataset.filter===overviewFilter));
+}
+function renderAlerts(rows){
+  $('alert-count').textContent=rows.length+' 筆';
+  const labels={help_needed:'主動求助',no_response_1h:'超過 1 小時未回應',no_response_3h:'超過 3 小時未回應'};
+  $('alerts').innerHTML=rows.length?rows.map(row=>{
+    const high=row.alert_type==='help_needed'||row.alert_type==='no_response_3h';
+    return `<div class="alert-row"><span class="dot ${high?'high':''}"></span><div><strong>${esc(row.elderly)}</strong><p>${esc(labels[row.alert_type]||row.alert_type)}</p></div><time>${clock(row.created_at)}</time><div class="row-actions">${row.elderly_id?`<button class="mini" data-alert-detail="${esc(row.elderly_id)}">詳情</button><button class="mini warn" data-resolve="${esc(row.elderly_id)}" data-who="${esc(row.elderly)}">處理</button>`:''}</div></div>`;
+  }).join(''):'<div class="empty">目前沒有未解警報</div>';
+  $('alerts').querySelectorAll('[data-alert-detail]').forEach(b=>b.onclick=()=>openDrawer(b.dataset.alertDetail));
+  $('alerts').querySelectorAll('[data-resolve]').forEach(b=>b.onclick=()=>resolveAlerts(b.dataset.resolve,b.dataset.who));
+}
+async function resolveAlerts(elderlyId,who){
+  if(!confirm(`確定把「${who}」名下所有未解警報標記為已處理？\n這不會通知對方，只是從待辦清單移除。`))return;
+  try{
+    const response=await fetch(`/api/dashboard/users/${encodeURIComponent(elderlyId)}/resolve_alerts`,{method:'POST'});
+    const data=await response.json();
+    if(!response.ok)throw Error(data.detail||'處理失敗');
+    toast(data.message||'已處理');
+    await loadAll();
+    if(!$('drawer').hidden)openDrawer(elderlyId);
+  }catch(error){toast(error.message,true);}
+}
+function closeDrawer(){$('drawer').hidden=true;$('scrim').hidden=true;}
+async function openDrawer(elderlyId){
+  const row=elderById(elderlyId);
+  $('drawer').hidden=false;$('scrim').hidden=false;
+  $('d-name').textContent=row?row.name:'（查無此長者）';
+  $('d-status').innerHTML=row?`${badge(row.today_status)} <span class="muted">回覆 ${clock(row.responded_at)}</span>`:'';
+  $('d-actions').innerHTML=row?`${row.phone?`<a class="mini" href="tel:${esc(row.phone)}">撥號 ${esc(row.phone)}</a>`:''}<button class="mini warn" id="d-resolve">標記警報已處理</button>`:'';
+  if(row)$('d-resolve').onclick=()=>resolveAlerts(row.id,row.name);
+  if(!row){$('d-body').innerHTML='';return;}
+  $('d-body').innerHTML=`<div><div class="field"><span>電話</span>${row.phone?`<a href="tel:${esc(row.phone)}">${esc(row.phone)}</a>`:'<b class="muted">未留</b>'}</div><div class="field"><span>地址</span><b>${esc(row.address||'未留')}</b></div><div class="field"><span>座標</span><b class="muted">${row.lat!=null?`${row.lat}, ${row.lng}`:'未定位'}</b></div></div><div id="d-contacts"><div class="sub">緊急聯絡人</div><p class="muted">讀取中…</p></div>`;
+  try{
+    if(!relationsCache)relationsCache=await fetch('/api/dashboard/relations').then(r=>r.json());
+    const mine=relationsCache.filter(r=>String(r.elderly_id)===String(row.id)).sort((a,b)=>a.notify_order-b.notify_order);
+    $('d-contacts').innerHTML=`<div class="sub">緊急聯絡人</div>`+(mine.length
+      ? mine.map(r=>`<div class="contact"><div><strong>${esc(r.contact_name)}</strong> <span class="muted">${esc(r.relation)}</span></div><span class="badge b-muted">順位 ${r.notify_order}</span></div>`).join('')
+      : `<div class="warn-box">這位長者沒有設定任何緊急聯絡人。未回應時系統找不到人通知，請到「照護關係」補上。</div>`);
+  }catch(error){$('d-contacts').innerHTML=`<div class="sub">緊急聯絡人</div><p class="muted">讀取失敗</p>`;}
+}
+async function loadAll(){try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();applyOverviewFilter();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
+const SERIES=[{key:'checkin_ok',label:'平安',color:'#18765a'},{key:'checkin_no_response',label:'未回應',color:'#c9364b'},{key:'checkin_help_needed',label:'求助',color:'#d9822b'},{key:'alerts',label:'警報',color:'#8f52a8'},{key:'needs',label:'需求',color:'#2c7fad'}];
+let trendDays=14;
+// 手畫 SVG 折線圖，不引進圖表函式庫：外部 CDN 被擋掉時整張圖就沒了，這頁的重點就是那張圖。
+function renderChart(rows){
+  const w=960,h=230,padL=34,padR=12,padT=14,padB=26;
+  const max=Math.max(1,...rows.flatMap(r=>SERIES.map(s=>r[s.key]||0)));
+  const x=i=>padL+(rows.length<2?0:i*(w-padL-padR)/(rows.length-1));
+  const y=v=>h-padB-(v/max)*(h-padT-padB);
+  const ticks=[0,Math.ceil(max/2),max].filter((v,i,a)=>a.indexOf(v)===i);
+  const grid=ticks.map(v=>`<line x1="${padL}" y1="${y(v)}" x2="${w-padR}" y2="${y(v)}" stroke="#d7dfda" stroke-width="1"/><text x="${padL-7}" y="${y(v)+4}" text-anchor="end" font-size="10" fill="#68756e">${v}</text>`).join('');
+  const step=Math.ceil(rows.length/7);
+  const xlabels=rows.map((r,i)=>i%step?'':`<text x="${x(i)}" y="${h-8}" text-anchor="middle" font-size="10" fill="#68756e">${esc(r.date.slice(5))}</text>`).join('');
+  const lines=SERIES.map(s=>{
+    const pts=rows.map((r,i)=>`${x(i)},${y(r[s.key]||0)}`).join(' ');
+    const dots=rows.map((r,i)=>(r[s.key]||0)>0?`<circle cx="${x(i)}" cy="${y(r[s.key])}" r="3" fill="${s.color}"><title>${esc(r.date)} ${esc(s.label)} ${r[s.key]}</title></circle>`:'').join('');
+    return `<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2" stroke-linejoin="round"/>${dots}`;
+  }).join('');
+  $('trend-chart').innerHTML=`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" role="img" aria-label="近 ${rows.length} 日趨勢折線圖">${grid}${xlabels}${lines}</svg>`;
+  $('trend-legend').innerHTML=SERIES.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join('');
+}
+function renderTrendRange(){
+  $('trend-range').innerHTML=[7,14,30].map(n=>`<button type="button" class="chip ${trendDays===n?'on':''}" data-days="${n}">近 ${n} 日</button>`).join('');
+  $('trend-range').querySelectorAll('[data-days]').forEach(b=>b.onclick=()=>{trendDays=+b.dataset.days;renderTrendRange();loadTrends();});
+}
+async function loadTrends(){const body=$('trends-body');body.innerHTML='<tr><td colspan="8" class="empty">讀取中</td></tr>';try{const data=await fetch('/api/dashboard/trends?days='+trendDays).then(r=>r.json());renderChart(data.days);body.innerHTML=data.days.slice().reverse().map(row=>`<tr><td>${esc(row.date)}</td><td>${row.checkin_ok}</td><td>${row.checkin_no_response}</td><td>${row.checkin_help_needed}</td><td>${row.checkin_pending}</td><td>${row.alerts}</td><td>${row.needs}</td><td>${row.needs_fulfilled}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">目前沒有資料</td></tr>';}catch(error){body.innerHTML='<tr><td colspan="8" class="empty">趨勢讀取失敗</td></tr>';$('trend-chart').innerHTML='<p class="empty">圖表讀取失敗</p>';}}
 document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click',()=>showPage(el.dataset.page)));
-$('overview-search').addEventListener('input',event=>renderElders('overview-elderly',elders.filter(row=>row.name.includes(event.target.value))));
-$('elderly-search').addEventListener('input',event=>{const q=event.target.value;renderElders('elderly-body',elders.filter(row=>row.name.includes(q)||(row.address||'').includes(q)),true);});
+$('overview-search').addEventListener('input',applyOverviewFilter);
+$('elderly-search').addEventListener('input',applyElderFilters);
+document.querySelectorAll('[data-filter]').forEach(el=>el.addEventListener('click',()=>{overviewFilter=overviewFilter===el.dataset.filter?'':el.dataset.filter;applyOverviewFilter();}));
+$('d-close').addEventListener('click',closeDrawer);
+$('scrim').addEventListener('click',closeDrawer);
+document.addEventListener('keydown',event=>{if(event.key==='Escape')closeDrawer();});
 $('refresh').addEventListener('click',loadAll);
 $('mode').addEventListener('click',async()=>{const next=$('mode').classList.contains('emergency')?'normal':'emergency';if(!confirm(next==='emergency'?'確定切換為緊急模式並通知 LINE 使用者？':'確定解除緊急模式？'))return;await fetch('/api/dashboard/mode?mode='+next,{method:'POST'});loadAll();});
 $('rag-form').addEventListener('submit',async event=>{event.preventDefault();const button=$('rag-submit'),answer=$('rag-answer'),sources=$('rag-sources');button.disabled=true;button.textContent='查詢中';answer.hidden=false;answer.textContent='';sources.hidden=true;try{const response=await fetch('/api/rag/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('rag-question').value.trim()})});const data=await response.json();if(!response.ok)throw Error(data.detail||data.error||'查詢失敗');answer.textContent=data.answer||'目前沒有可用回答';const refs=(data.sources||[]).map(item=>typeof item==='string'?item:(item.source||item.title||'')).filter(Boolean);sources.textContent=refs.length?'來源：'+refs.join(' · '):'未回傳來源';sources.hidden=false;}catch(error){answer.textContent=error.message;}finally{button.disabled=false;button.textContent='查詢';}});
 window.addEventListener('message',event=>{if(event.origin===location.origin&&event.data&&event.data.navigate)showPage(event.data.navigate);});
-window.addEventListener('DOMContentLoaded',()=>{if(window.lucide)lucide.createIcons();showPage(location.hash.slice(1)||'overview');loadAll();});
+window.addEventListener('DOMContentLoaded',()=>{if(window.lucide)lucide.createIcons();renderTrendRange();showPage(location.hash.slice(1)||'overview');loadAll();});
 </script>
 </body>
 </html>

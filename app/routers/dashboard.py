@@ -181,6 +181,8 @@ def list_alerts(db: Session = Depends(get_db)):
         {
             "id":         str(a.id),
             "elderly":    a.elderly.name if a.elderly else "unknown",
+            # 前端要靠這個才能直接對這位長者解警報／開詳情，不然畫面上只有名字可看不能動。
+            "elderly_id": str(a.elderly_id) if a.elderly_id else None,
             "alert_type": a.alert_type,
             "created_at": str(a.created_at),
         }
