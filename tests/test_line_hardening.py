@@ -451,6 +451,44 @@ def test_delete_user_with_active_dispatch_is_refused_with_a_reason(db, api):
     assert res.status_code == 409 and "進行中的派遣" in res.json()["error"]
 
 
+def test_care_contacts_can_be_reordered_without_deleting_and_recreating(db, api):
+    """通知順序是這張表的重點，必須能直接調整，不是砍掉重建。"""
+    from app.models.care_relation import CareRelation
+    elder = User(name="長輩", roles=["elderly"])
+    first = User(name="先通知的人", roles=["family"])
+    second = User(name="後通知的人", roles=["volunteer"])
+    db.add_all([elder, first, second])
+    db.commit()
+    for contact, order in ((first, 1), (second, 2)):
+        res = api.post("/api/dashboard/relations", params={
+            "elderly_id": str(elder.id), "contact_id": str(contact.id),
+            "relation": "family", "notify_order": order})
+        assert res.status_code == 200
+
+    def order_now():
+        rows = (db.query(CareRelation).filter(CareRelation.elderly_id == elder.id)
+                .order_by(CareRelation.notify_order).all())
+        for row in rows:
+            db.refresh(row)
+        return [row.contact.name for row in sorted(rows, key=lambda r: r.notify_order)]
+
+    assert order_now() == ["先通知的人", "後通知的人"]
+    second_rel = (db.query(CareRelation)
+                  .filter(CareRelation.elderly_id == elder.id, CareRelation.contact_id == second.id).one())
+    moved = api.post(f"/api/dashboard/relations/{second_rel.id}/move", params={"direction": "up"})
+    assert moved.status_code == 200 and moved.json()["moved"] is True
+    db.expire_all()
+    assert order_now() == ["後通知的人", "先通知的人"]
+
+    # 已經在最前面就不該再動，也不該報錯。
+    again = api.post(f"/api/dashboard/relations/{second_rel.id}/move", params={"direction": "up"})
+    assert again.status_code == 200 and again.json()["moved"] is False
+    db.expire_all()
+    assert order_now() == ["後通知的人", "先通知的人"]
+    assert api.post(f"/api/dashboard/relations/{second_rel.id}/move",
+                    params={"direction": "sideways"}).status_code == 422
+
+
 def test_duplicate_line_uid_and_relation_are_conflicts_not_500(db, api):
     elder, fam = _elder_with_family(db, False)
     dup = api.post("/api/dashboard/users", params={"name": "重複", "roles": ["volunteer"], "line_uid": "Uel"})

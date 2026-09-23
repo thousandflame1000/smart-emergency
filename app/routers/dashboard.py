@@ -481,6 +481,44 @@ def create_relation(
     return {"message": "關係建立成功", "id": str(rel.id)}
 
 
+@router.post("/relations/{relation_id}/move")
+def move_relation(relation_id: str, direction: str, db: Session = Depends(get_db)):
+    """把一筆照護關係在該長者的通知順序裡往前或往後移一位。
+
+    通知順序就是這張表存在的理由（長者沒回應時要依序找人），但先前只能
+    新增和刪除，想調順序得整筆砍掉重建。這裡直接跟相鄰的那一筆交換
+    notify_order，兩筆一起寫在同一個交易裡，不會出現中途只改到一半的狀態。
+    """
+    from app.models.care_relation import CareRelation
+    if direction not in ("up", "down"):
+        raise ApiError(422, "direction 只能是 up 或 down。")
+    rel = db.query(CareRelation).filter(CareRelation.id == relation_id).first()
+    if not rel:
+        raise ApiError(404, "找不到這筆照護關係。")
+
+    siblings = (
+        db.query(CareRelation)
+        .filter(CareRelation.elderly_id == rel.elderly_id)
+        .order_by(CareRelation.notify_order, CareRelation.created_at)
+        .all()
+    )
+    index = next(i for i, r in enumerate(siblings) if str(r.id) == str(rel.id))
+    swap_with = index - 1 if direction == "up" else index + 1
+    if not 0 <= swap_with < len(siblings):
+        return {"message": "已經在最前面或最後面了", "moved": False}
+
+    other = siblings[swap_with]
+    rel.notify_order, other.notify_order = other.notify_order, rel.notify_order
+    # 兩筆原本就可能是同一個順序值（早期資料沒有強制唯一），交換後還是一樣，
+    # 那就照實際排序重新編號，讓畫面上的數字真的代表順序。
+    if rel.notify_order == other.notify_order:
+        siblings[index], siblings[swap_with] = siblings[swap_with], siblings[index]
+        for position, row in enumerate(siblings, start=1):
+            row.notify_order = position
+    db.commit()
+    return {"message": "順序已更新", "moved": True}
+
+
 @router.delete("/relations/{relation_id}")
 def delete_relation(relation_id: str, db: Session = Depends(get_db)):
     """刪除照護關係"""

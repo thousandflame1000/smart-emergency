@@ -127,6 +127,37 @@ body {
 .tbl tr:last-child td { border-bottom: none; }
 .tbl tr:hover td { background: rgba(19,121,91,.04); }
 .tbl .muted { color: var(--muted); font-size: 11.5px; }
+/* 操作按鈕平常收起來，滑到該列或用鍵盤 focus 才出現，避免整頁都是按鈕。 */
+.tbl .row-actions { display: flex; gap: 4px; justify-content: flex-end; opacity: 0; transition: opacity .12s; }
+.tbl tr:hover .row-actions, .tbl tr:focus-within .row-actions { opacity: 1; }
+.list-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+.list-toolbar input[type="search"] { flex: 1 1 200px; min-width: 150px; border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 7px 10px; font: inherit; font-size: 12.5px; color: var(--text); background: var(--card); }
+.fchip { height: 28px; padding: 0 11px; border: 1px solid var(--border); border-radius: 14px; background: var(--card);
+  color: var(--text-dim); cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 5px; transition: all .12s; }
+.fchip:hover { border-color: var(--primary); color: var(--primary); }
+.fchip.on { background: var(--primary); border-color: var(--primary); color: #fff; }
+.fchip b { font-family: var(--mono); font-size: 11px; }
+.stat-tile.clickable { cursor: pointer; }
+.stat-tile.clickable:hover { background: var(--soft); }
+.stat-tile.on { background: var(--soft); box-shadow: inset 3px 0 0 var(--primary); }
+/* 照護關係改成一位長者一張卡，才看得出誰的聯絡人有缺。 */
+.rel-group { border: 1px solid var(--border); border-radius: var(--radius); margin: 0 16px 10px; overflow: hidden; }
+.rel-group-head { display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 14px; background: rgba(23,32,28,.02); border-bottom: 1px solid var(--border); }
+.rel-group-head strong { font-size: 13px; }
+.rel-contact { display: flex; align-items: center; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); font-size: 12.5px; }
+.rel-contact:last-child { border-bottom: 0; }
+.rel-order { width: 22px; height: 22px; flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; background: var(--soft); color: var(--primary); font: 700 11px var(--mono); }
+.rel-contact .spacer { margin-left: auto; }
+.rel-tools { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; }
+.rel-contact:hover .rel-tools, .rel-contact:focus-within .rel-tools { opacity: 1; }
+.rel-tools .btn[disabled] { opacity: .25; }
+.risk-box { margin: 0 16px 12px; padding: 12px 14px; border: 1px solid rgba(201,54,75,.28);
+  background: rgba(201,54,75,.06); border-radius: var(--radius); }
+.risk-box .risk-title { font-size: 12px; font-weight: 700; color: var(--danger); margin-bottom: 8px; }
+.risk-names { display: flex; flex-wrap: wrap; gap: 6px; }
 
 /* ── Badges ── */
 .badge {
@@ -474,6 +505,10 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             ＋ 新增長者
           </button>
         </div>
+        <div class="list-toolbar">
+          <input type="search" id="elderly-search" placeholder="搜尋姓名、電話或地址" aria-label="搜尋長者">
+          <div id="elderly-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
         <div class="table-wrap">
           <table class="tbl" id="elderly-tbl">
             <thead>
@@ -483,7 +518,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                 <th>地址</th>
                 <th>LINE 狀態</th>
                 <th>帳號狀態</th>
-                <th>操作</th>
+                <th style="text-align:right">操作</th>
               </tr>
             </thead>
             <tbody id="elderly-tbody">
@@ -522,11 +557,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <div class="card-title">志工 / 家屬名單</div>
             <div class="card-subtitle">協助照護的聯絡人</div>
           </div>
-          <div style="display:flex;gap:8px">
-            <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增志工</button>
-            <button class="btn btn-ghost btn-sm"   onclick="openUserModal('family')">＋ 新增家屬</button>
-            <button class="btn btn-ghost btn-sm"   onclick="openUserModal('field_staff')">＋ 新增基層員工</button>
-          </div>
+          <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增成員</button>
+        </div>
+        <div class="list-toolbar">
+          <input type="search" id="volunteers-search" placeholder="搜尋姓名或電話" aria-label="搜尋成員">
+          <div id="volunteers-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
         <div class="table-wrap">
           <table class="tbl">
@@ -537,7 +572,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
                 <th>電話</th>
                 <th>LINE 狀態</th>
                 <th>帳號狀態</th>
-                <th>操作</th>
+                <th style="text-align:right">操作</th>
               </tr>
             </thead>
             <tbody id="volunteers-tbody">
@@ -561,21 +596,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </div>
           <button class="btn btn-primary btn-sm" onclick="openRelationModal()">＋ 新增關係</button>
         </div>
-        <div class="table-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>長者</th>
-                <th>聯絡人</th>
-                <th>關係</th>
-                <th style="text-align:center">通知順序</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody id="relations-tbody">
-              <tr><td colspan="5"><div class="empty"><div class="spinner"></div></div></td></tr>
-            </tbody>
-          </table>
+        <div id="relations-risk"></div>
+        <div id="relations-groups" style="padding:12px 0 4px">
+          <div class="empty"><div class="spinner"></div></div>
         </div>
       </div>
     </div>
@@ -1675,38 +1698,64 @@ async function loadAll() {
 // ════════════════════════════════════════════════
 // Elderly table
 // ════════════════════════════════════════════════
+// 「未綁定」是常態不是錯誤，用中性灰；紅色留給真正要處理的事。
+function lineBadge(u) {
+  return u.line_uid ? `<span class="badge badge-green">✓ 已綁定</span>`
+                    : `<span class="badge badge-gray">未綁定</span>`;
+}
+function activeBadge(u) {
+  return u.is_active ? `<span class="badge badge-green">啟用</span>`
+                     : `<span class="badge badge-gray">停用</span>`;
+}
+function rowActions(u) {
+  return `<div class="row-actions">
+    <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${esc(JSON.stringify(u))})'>編輯</button>
+    <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}',${esc(JSON.stringify(u.name))})">刪除</button>
+  </div>`;
+}
+let elderlyAll = [], elderlyFilter = '', volunteersAll = [], volunteerFilter = '';
+const ELDER_FILTERS = {
+  bound:    { label: '已綁定 LINE', test: u => !!u.line_uid },
+  unbound:  { label: '未綁定',      test: u => !u.line_uid },
+  inactive: { label: '已停用',      test: u => !u.is_active },
+};
 function renderElderly(data) {
-  const bound = data.filter(u => u.line_uid).length;
-  const active = data.filter(u => u.is_active).length;
+  if (data) elderlyAll = data;
+  const all = elderlyAll;
+  const bound = all.filter(u => u.line_uid).length;
+  const active = all.filter(u => u.is_active).length;
   document.getElementById('elderly-stats').innerHTML = `
-    <div class="stat-tile"><div class="stat-tile-label">總長者數</div><div class="stat-tile-value">${data.length}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">總長者數</div><div class="stat-tile-value">${all.length}</div></div>
     <div class="stat-tile"><div class="stat-tile-label">已綁定 LINE</div><div class="stat-tile-value ok">${bound}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">未綁定</div><div class="stat-tile-value ${data.length-bound>0?'warn':''}">${data.length - bound}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">未綁定</div><div class="stat-tile-value">${all.length - bound}</div></div>
     <div class="stat-tile"><div class="stat-tile-label">帳號啟用中</div><div class="stat-tile-value">${active}</div></div>`;
 
+  document.getElementById('elderly-chips').innerHTML =
+    [['', '全部', all.length], ...Object.entries(ELDER_FILTERS).map(([k, f]) => [k, f.label, all.filter(f.test).length])]
+      .map(([k, label, n]) => `<button type="button" class="fchip ${elderlyFilter===k?'on':''}" data-echip="${k}">${esc(label)}<b>${n}</b></button>`).join('');
+  document.getElementById('elderly-chips').querySelectorAll('[data-echip]').forEach(b =>
+    b.onclick = () => { elderlyFilter = b.dataset.echip; renderElderly(); });
+
+  const q = (document.getElementById('elderly-search').value || '').trim().toLowerCase();
+  const hit = u => !q || [u.name, u.phone, u.address].some(v => (v || '').toLowerCase().includes(q));
+  const rows = all.filter(u => (!elderlyFilter || ELDER_FILTERS[elderlyFilter].test(u)) && hit(u));
+
   const tbody = document.getElementById('elderly-tbody');
-  if (!data.length) {
+  if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
       <div class="empty-icon">👴</div>
-      <div class="empty-text">尚未新增長者</div>
+      <div class="empty-text">${all.length ? '這個條件下沒有長者，換個篩選或清掉搜尋字' : '尚未新增長者'}</div>
     </div></td></tr>`;
     return;
   }
-  tbody.innerHTML = data.map(u => `
+  tbody.innerHTML = rows.map(u => `
     <tr>
       <td><strong>${esc(u.name)}</strong></td>
       <td class="muted">${esc(u.phone) || '—'}</td>
       <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.address) || '—'}</td>
-      <td>${u.line_uid
-        ? `<span class="badge badge-green">✓ 已綁定</span>`
-        : `<span class="badge badge-red">未綁定</span>`}</td>
-      <td>${u.is_active
-        ? `<span class="badge badge-green">啟用</span>`
-        : `<span class="badge badge-gray">停用</span>`}</td>
-      <td>
-        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${esc(JSON.stringify(u))})'>編輯</button>
-        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}',${esc(JSON.stringify(u.name))})">刪除</button>
-      </td>
+      <td>${lineBadge(u)}</td>
+      <td>${activeBadge(u)}</td>
+      <td>${rowActions(u)}</td>
     </tr>`).join('');
 }
 
@@ -1714,40 +1763,43 @@ function renderElderly(data) {
 // Volunteer table
 // ════════════════════════════════════════════════
 function renderVolunteers(data) {
-  const volCount = data.filter(u => u.roles.includes('volunteer')).length;
-  const famCount = data.filter(u => u.roles.includes('family')).length;
-  const staffCount = data.filter(u => u.roles.includes('field_staff')).length;
-  const bound = data.filter(u => u.line_uid).length;
+  if (data) volunteersAll = data;
+  const all = volunteersAll;
+  const count = role => all.filter(u => u.roles.includes(role)).length;
+  const bound = all.filter(u => u.line_uid).length;
   document.getElementById('volunteers-stats').innerHTML = `
-    <div class="stat-tile"><div class="stat-tile-label">總人數</div><div class="stat-tile-value">${data.length}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">志工</div><div class="stat-tile-value">${volCount}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">家屬</div><div class="stat-tile-value">${famCount}</div></div>
-    <div class="stat-tile"><div class="stat-tile-label">基層員工</div><div class="stat-tile-value">${staffCount}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">總人數</div><div class="stat-tile-value">${all.length}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">志工</div><div class="stat-tile-value">${count('volunteer')}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">家屬</div><div class="stat-tile-value">${count('family')}</div></div>
+    <div class="stat-tile"><div class="stat-tile-label">基層員工</div><div class="stat-tile-value">${count('field_staff')}</div></div>
     <div class="stat-tile"><div class="stat-tile-label">已綁定 LINE</div><div class="stat-tile-value ok">${bound}</div></div>`;
 
+  document.getElementById('volunteers-chips').innerHTML =
+    [['', '全部', all.length], ...['volunteer','family','field_staff'].map(r => [r, ROLE_LABEL[r] || r, count(r)])]
+      .map(([k, label, n]) => `<button type="button" class="fchip ${volunteerFilter===k?'on':''}" data-vchip="${k}">${esc(label)}<b>${n}</b></button>`).join('');
+  document.getElementById('volunteers-chips').querySelectorAll('[data-vchip]').forEach(b =>
+    b.onclick = () => { volunteerFilter = b.dataset.vchip; renderVolunteers(); });
+
+  const q = (document.getElementById('volunteers-search').value || '').trim().toLowerCase();
+  const hit = u => !q || [u.name, u.phone].some(v => (v || '').toLowerCase().includes(q));
+  const rows = all.filter(u => (!volunteerFilter || u.roles.includes(volunteerFilter)) && hit(u));
+
   const tbody = document.getElementById('volunteers-tbody');
-  if (!data.length) {
+  if (!rows.length) {
     tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
       <div class="empty-icon">🙋</div>
-      <div class="empty-text">尚未新增志工或家屬</div>
+      <div class="empty-text">${all.length ? '這個條件下沒有成員，換個篩選或清掉搜尋字' : '尚未新增志工或家屬'}</div>
     </div></td></tr>`;
     return;
   }
-  tbody.innerHTML = data.map(u => `
+  tbody.innerHTML = rows.map(u => `
     <tr>
       <td><strong>${esc(u.name)}</strong></td>
       <td>${u.roles.map(r => `<span class="badge ${ROLE_BADGE[r]||'badge-gray'}" style="margin-right:3px">${esc(ROLE_LABEL[r]||r)}</span>`).join('')}</td>
       <td class="muted">${esc(u.phone) || '—'}</td>
-      <td>${u.line_uid
-        ? `<span class="badge badge-green">✓ 已綁定</span>`
-        : `<span class="badge badge-red">未綁定</span>`}</td>
-      <td>${u.is_active
-        ? `<span class="badge badge-green">啟用</span>`
-        : `<span class="badge badge-gray">停用</span>`}</td>
-      <td>
-        <button class="btn btn-ghost-edit btn-sm" onclick='editUser(${esc(JSON.stringify(u))})'>編輯</button>
-        <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}',${esc(JSON.stringify(u.name))})">刪除</button>
-      </td>
+      <td>${lineBadge(u)}</td>
+      <td>${activeBadge(u)}</td>
+      <td>${rowActions(u)}</td>
     </tr>`).join('');
 }
 
@@ -1993,38 +2045,70 @@ async function loadRelations() {
       contacts.map(u => `<option value="${u.id}">${esc(u.name)}（${u.roles.map(r=>esc(ROLE_LABEL[r]||r)).join('/')}）</option>`).join('');
 
     const RMAP = { family:'家屬', volunteer:'志工', neighbor:'鄰居' };
-    const tbody = document.getElementById('relations-tbody');
+
+    // 沒有任何聯絡人的長者擺最上面，而且每個名字都能直接點去補設定——
+    // 這才是這頁真正要處理的事，不該只是統計卡上的一個數字。
+    const missing = elderly.filter(u => !coveredIds.has(u.id));
+    document.getElementById('relations-risk').innerHTML = missing.length ? `
+      <div class="risk-box">
+        <div class="risk-title">⚠ ${missing.length} 位長者還沒有任何緊急聯絡人</div>
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:9px">他們未回應時，系統找不到人可以通知。</div>
+        <div class="risk-names">${missing.map(u =>
+          `<button class="btn btn-ghost btn-sm" onclick="openRelationModal('${u.id}')">${esc(u.name)}　＋ 設定聯絡人</button>`).join('')}</div>
+      </div>` : '';
+
+    const groups = document.getElementById('relations-groups');
     if (!rels.length) {
-      tbody.innerHTML = `<tr><td colspan="5"><div class="empty">
+      groups.innerHTML = `<div class="empty">
         <div class="empty-icon">🔗</div>
         <div class="empty-text">尚未設定照護關係</div>
-      </div></td></tr>`;
+      </div>`;
       return;
     }
-    tbody.innerHTML = rels.map(r => `
-      <tr>
-        <td><strong>${esc(r.elderly_name)}</strong></td>
-        <td>${esc(r.contact_name)}</td>
-        <td><span class="badge badge-gray">${esc(RMAP[r.relation] || r.relation)}</span></td>
-        <td style="text-align:center">
-          <span class="badge badge-blue">${r.notify_order}</span>
-        </td>
-        <td>
-          <button class="btn btn-ghost-danger btn-sm"
-            onclick="deleteRelation('${r.id}',${esc(JSON.stringify(r.elderly_name))},${esc(JSON.stringify(r.contact_name))})">刪除</button>
-        </td>
-      </tr>`).join('');
+    const byElder = new Map();
+    rels.forEach(r => { if (!byElder.has(r.elderly_id)) byElder.set(r.elderly_id, []); byElder.get(r.elderly_id).push(r); });
+    groups.innerHTML = [...byElder.entries()].map(([id, list]) => {
+      list.sort((a, b) => a.notify_order - b.notify_order);
+      return `<div class="rel-group">
+        <div class="rel-group-head">
+          <strong>${esc(list[0].elderly_name)}</strong>
+          <span style="display:flex;align-items:center;gap:8px">
+            <span class="muted" style="font-size:11.5px">${list.length} 位聯絡人</span>
+            <button class="btn btn-ghost btn-sm" onclick="openRelationModal('${id}')">＋ 新增</button>
+          </span>
+        </div>
+        ${list.map((r, i) => `<div class="rel-contact">
+          <span class="rel-order">${i + 1}</span>
+          <span>${esc(r.contact_name)}</span>
+          <span class="badge badge-gray">${esc(RMAP[r.relation] || r.relation)}</span>
+          <span class="spacer"></span>
+          <span class="rel-tools">
+            <button class="btn btn-ghost btn-sm" title="往前一位" ${i === 0 ? 'disabled' : ''}
+              onclick="moveRelation('${r.id}','up')">↑</button>
+            <button class="btn btn-ghost btn-sm" title="往後一位" ${i === list.length - 1 ? 'disabled' : ''}
+              onclick="moveRelation('${r.id}','down')">↓</button>
+            <button class="btn btn-ghost-danger btn-sm"
+              onclick="deleteRelation('${r.id}',${esc(JSON.stringify(r.elderly_name))},${esc(JSON.stringify(r.contact_name))})">刪除</button>
+          </span>
+        </div>`).join('')}
+      </div>`;
+    }).join('');
   } catch(e) {
     document.getElementById('relations-tbody').innerHTML =
       `<tr><td colspan="5" style="color:var(--danger);padding:16px">載入失敗：${e.message}</td></tr>`;
   }
 }
 
-function openRelationModal() {
-  if (!document.getElementById('rel-elderly-id').options.length) {
-    loadRelations().then(() => openModal('modal-relation'));
-  } else {
+function openRelationModal(elderlyId) {
+  const show = () => {
+    // 從某位長者那一列點進來時，直接把他選好，不用再從下拉找一次。
+    if (elderlyId) document.getElementById('rel-elderly-id').value = elderlyId;
     openModal('modal-relation');
+  };
+  if (!document.getElementById('rel-elderly-id').options.length) {
+    loadRelations().then(show);
+  } else {
+    show();
   }
 }
 
@@ -2044,6 +2128,14 @@ async function deleteRelation(id, elderly, contact) {
   if (!confirm(`確定刪除「${elderly} ↔ ${contact}」的照護關係？`)) return;
   await fetch(`/api/dashboard/relations/${id}`, { method: 'DELETE' });
   loadRelations();
+}
+
+async function moveRelation(id, direction) {
+  try {
+    const response = await fetch(`/api/dashboard/relations/${id}/move?direction=${direction}`, { method: 'POST' });
+    if (!response.ok) throw Error((await response.json()).detail || '調整順序失敗');
+    await loadRelations();
+  } catch (e) { alert(e.message); }
 }
 
 // ════════════════════════════════════════════════
@@ -2172,6 +2264,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (ta) ta.addEventListener('input', () => {
     document.getElementById('doc-char-count').textContent = ta.value.length + ' 字';
   });
+  const es = document.getElementById('elderly-search');
+  if (es) es.addEventListener('input', () => renderElderly());
+  const vs = document.getElementById('volunteers-search');
+  if (vs) vs.addEventListener('input', () => renderVolunteers());
 });
 
 async function addDocument() {
