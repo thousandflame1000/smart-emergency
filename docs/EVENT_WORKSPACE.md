@@ -16,6 +16,33 @@
 `POST /api/workspaces/database-merge` 會重建資料庫投影，同時保留手動建立的事件物件、關係與版面。
 資料庫紀錄被刪除後，其投影與相連的手動關係也會移除，不留下幽靈物件。
 
+## 分區
+
+每筆物資、需求與工作區都帶一個 `zone_id`，預設是保底分區 `general`——沒有人特別
+分區之前，系統行為跟分區功能加入前完全一樣。`GET operational-data`／`POST
+database-merge` 帶 `zone_id` 查詢參數時，只投影該分區的物資與需求；不帶則維持
+全系統視圖（管理員總覽用）。資源點（固定設施）不分區，任何分區都看得到。
+
+自動媒合（`auto_dispatch`）與志工自行接單（LINE「接單」）只在**同一分區**內配
+對，不會跨分區——這是唯一性保證的核心：同一份真實物資不會被兩個不同分區的自動
+流程同時搶用。管理員手動指派（`manual_dispatch`／工作區的 `apply-allocation`）
+是有人監督的動作，允許跨分區調度。
+
+改派分區（`PUT /api/zones/resources/{id}`、`PUT /api/zones/needs/{id}`）跟其他
+寫入共用同一套 `row_predicates` 樂觀鎖：改派當下如果那筆資料已被另一個操作動
+過，會乾淨地回 409，不會悄悄蓋掉別人的變更。`general` 不能被刪除；其他分區底
+下還有物資或需求時也不能刪除。
+
+### 自動依座標判斷分區
+
+分區可以選填「中心點（經緯度）＋半徑（公里）」。有座標時，新登記的物資／需求
+（LINE 對話、`/api/resources/`）會用 `resolve_zone_for_point()` 自動歸到「實際
+距離最近、且落在該分區半徑內」的分區；沒有落在任何分區半徑內，或根本沒有座
+標，一律留在 `general`。`general` 本身刻意不設中心點——它是保底，不是地圖上
+的一個地方。判斷依據是直線距離，不是行政區界線，適合「大概在這一帶」的粗略
+分區，不是精確的村里界線。呼叫端仍可用 `zone_id` 參數明確指定，跳過自動判
+斷（例如管理員手動建檔）。
+
 ## 資料完整性
 
 - 物件、關係與物資紀錄的識別碼在同一工作區中必須唯一。
@@ -60,5 +87,8 @@
 | POST | `/api/workspaces/database-diff` | 預覽正式物資變更 |
 | POST | `/api/workspaces/database-push` | 經版本檢查後套用物資變更 |
 | POST | `/api/workspaces/apply-allocation` | 建立待核准派遣建議 |
+| GET/POST | `/api/zones` | 列出或建立分區 |
+| DELETE | `/api/zones/{id}` | 刪除空分區（`general` 與非空分區會被拒絕） |
+| PUT | `/api/zones/resources/{id}`、`/api/zones/needs/{id}` | 改派物資／需求的分區 |
 
 固定花東路網沙盒、道路範圍載入、颱風夜模擬與獨立社區地圖已移除，不應重新加入。

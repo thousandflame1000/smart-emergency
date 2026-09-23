@@ -276,7 +276,7 @@ def withdraw_my_resource(form: MeAction, db: Session = Depends(get_db)):
         res = None
     if not res:
         raise ApiError(404, "找不到這份物資。")
-    if not res.is_available:
+    if not res.is_available or int(res.reserved_amount or 0) > 0:
         raise ApiError(409, "這份物資已被派出或保留中，不能撤回，請聯絡管理員。")
     db.delete(res)
     db.commit()

@@ -15,7 +15,16 @@ from app.models.need import CommunityNeed
 from app.models.user import User
 from app.models.resource_point import ResourcePoint, POINT_TYPES, POINT_SUPPLY_TYPES
 from app.models.dispatch_event import DispatchEvent
+from app.models.inventory import InventoryEvent
+from app.models.zone import Zone
+from app.security import require_admin, require_staff
+from app.services.inventory import available_amount, quantity_parts, set_quantity_fields
 from app.services.record_version import row_predicates
+
+
+def _check_zone(zone_id: str, db: Session) -> None:
+    if not db.get(Zone, zone_id):
+        raise ApiError(400, "找不到這個分區")
 
 router = APIRouter()
 
@@ -26,6 +35,38 @@ def _unreserved(resource, db):
         raise ApiError(409, "物資已被待核准或執行中的任務保留，請先處理任務")
 
 
+@router.get("/{resource_id}/inventory-events")
+def list_inventory_events(resource_id: str, limit: int = 100, db: Session = Depends(get_db)):
+    if not db.query(CommunityResource.id).filter(CommunityResource.id == resource_id).first():
+        raise HTTPException(status_code=404, detail="Resource not found")
+    rows = (
+        db.query(InventoryEvent)
+        .filter(InventoryEvent.resource_id == resource_id)
+        .order_by(InventoryEvent.resource_version.desc(), InventoryEvent.created_at.desc())
+        .limit(max(1, min(limit, 500)))
+        .all()
+    )
+    return [
+        {
+            "id": str(event.id),
+            "resource_id": str(event.resource_id),
+            "need_id": str(event.need_id) if event.need_id else None,
+            "event_type": event.event_type,
+            "quantity": event.quantity,
+            "unit": event.unit,
+            "on_hand_before": event.on_hand_before,
+            "on_hand_after": event.on_hand_after,
+            "reserved_before": event.reserved_before,
+            "reserved_after": event.reserved_after,
+            "resource_version": event.resource_version,
+            "actor_id": str(event.actor_id) if event.actor_id else None,
+            "actor_label": event.actor_label,
+            "created_at": str(event.created_at),
+        }
+        for event in rows
+    ]
+
+
 # ──────────────────────────────────────────────
 # 物資
 # ──────────────────────────────────────────────
@@ -33,6 +74,7 @@ def _unreserved(resource, db):
 def list_resources(
     resource_type: str | None = None,
     available_only: bool = True,
+    zone_id: str | None = None,
     db: Session = Depends(get_db),
 ):
     q = db.query(CommunityResource)
@@ -40,6 +82,8 @@ def list_resources(
         q = q.filter(CommunityResource.is_available == True)
     if resource_type:
         q = q.filter(CommunityResource.resource_type == resource_type)
+    if zone_id:
+        q = q.filter(CommunityResource.zone_id == zone_id)
 
     resources = q.order_by(CommunityResource.created_at.desc()).all()
     return [
@@ -49,11 +93,17 @@ def list_resources(
             "resource_type": r.resource_type,
             "name":          r.name,
             "quantity":      r.quantity,
+            "quantity_amount": r.quantity_amount,
+            "quantity_unit": r.quantity_unit,
+            "reserved_amount": r.reserved_amount,
+            "available_amount": available_amount(r),
+            "inventory_version": r.inventory_version,
             "address":       r.address,
             "lat":           r.lat,
             "lng":           r.lng,
             "note":          r.note,
             "is_available":  r.is_available,
+            "zone_id":       r.zone_id,
             "last_updated":  str(r.last_updated),
         }
         for r in resources
@@ -71,11 +121,18 @@ def create_resource(
     lat: float | None = None,
     lng: float | None = None,
     note: str | None = None,
+    zone_id: str | None = None,
     db: Session = Depends(get_db),
+    _principal: dict | None = Depends(require_staff),
 ):
     name = check_name(name, what="物資名稱")
     check_choice(resource_type, RESOURCE_TYPES, what="物資類型")
     check_coords(lat, lng)
+    if zone_id is None:
+        from app.services.zones import resolve_zone_for_point
+        zone_id = resolve_zone_for_point(db, lat, lng)
+    else:
+        _check_zone(zone_id, db)
     if owner_id:
         try:
             owner = db.query(User).filter(User.id == owner_id).first()
@@ -92,12 +149,13 @@ def create_resource(
         owner_id=owner.id,
         resource_type=resource_type,
         name=name,
-        quantity=quantity,
         address=address,
         lat=lat,
         lng=lng,
         note=note,
+        zone_id=zone_id,
     )
+    set_quantity_fields(resource, quantity)
     db.add(resource)
     db.commit()
     db.refresh(resource)
@@ -115,6 +173,7 @@ def update_resource(
     lng: float | None = None,
     is_available: bool | None = None,
     db: Session = Depends(get_db),
+    _principal: dict | None = Depends(require_staff),
 ):
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
@@ -126,6 +185,13 @@ def update_resource(
         name = check_name(name, what="物資名稱")
     values = {key: value for key, value in {"name": name, "quantity": quantity, "address": address,
               "note": note, "lat": lat, "lng": lng, "is_available": is_available}.items() if value is not None}
+    if quantity is not None:
+        parsed = quantity_parts(quantity)
+        values.update(
+            quantity_amount=parsed[0] if parsed else None,
+            quantity_unit=parsed[1] if parsed else None,
+            inventory_version=int(r.inventory_version or 1) + 1,
+        )
     changed = db.query(CommunityResource).filter(*row_predicates(r)).update(
         {**values, "last_updated": now_utc()}, synchronize_session=False)
     if changed != 1:
@@ -136,7 +202,7 @@ def update_resource(
 
 
 @router.delete("/{resource_id}")
-def delete_resource(resource_id: str, db: Session = Depends(get_db)):
+def delete_resource(resource_id: str, db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
         from fastapi import HTTPException
@@ -151,7 +217,7 @@ def delete_resource(resource_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/{resource_id}/toggle")
-def toggle_availability(resource_id: str, db: Session = Depends(get_db)):
+def toggle_availability(resource_id: str, db: Session = Depends(get_db), _principal: dict | None = Depends(require_staff)):
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
         raise ApiError(404, "找不到這筆物資。")
@@ -170,13 +236,11 @@ def toggle_availability(resource_id: str, db: Session = Depends(get_db)):
 # 緊急需求（災時）
 # ──────────────────────────────────────────────
 @router.get("/needs")
-def list_needs(status: str = "open", db: Session = Depends(get_db)):
-    needs = (
-        db.query(CommunityNeed)
-        .filter(CommunityNeed.status == status)
-        .order_by(CommunityNeed.urgency, CommunityNeed.created_at)
-        .all()
-    )
+def list_needs(status: str = "open", zone_id: str | None = None, db: Session = Depends(get_db)):
+    q = db.query(CommunityNeed).filter(CommunityNeed.status == status)
+    if zone_id:
+        q = q.filter(CommunityNeed.zone_id == zone_id)
+    needs = q.order_by(CommunityNeed.urgency, CommunityNeed.created_at).all()
     accepted = set()
     if needs and status == "matched":
         from app.services.dispatch import accepted_need_ids
@@ -197,11 +261,16 @@ def list_needs(status: str = "open", db: Session = Depends(get_db)):
             "need_type":   n.need_type,
             "description": n.description,
             "quantity":    n.quantity,
+            "quantity_amount": n.quantity_amount,
+            "quantity_unit": n.quantity_unit,
+            "reserved_quantity_amount": n.reserved_quantity_amount,
+            "fulfilled_quantity_amount": n.fulfilled_quantity_amount,
             "address":     n.address,
             "lat":         n.lat,
             "lng":         n.lng,
             "urgency":     n.urgency,
             "status":      n.status,
+            "zone_id":     n.zone_id,
             "created_at":  str(n.created_at),
             "last_report": _fmt_report(reports.get(str(n.id))),
             "accepted":    str(n.id) in accepted,
@@ -245,11 +314,18 @@ def create_need(
     lat: float | None = None,
     lng: float | None = None,
     urgency: int = 2,
+    zone_id: str | None = None,
     db: Session = Depends(get_db),
+    _principal: dict | None = Depends(require_admin),
 ):
     check_choice(need_type, NEED_TYPES, what="需求類型")
     check_urgency(urgency)
     check_coords(lat, lng)
+    if zone_id is None:
+        from app.services.zones import resolve_zone_for_point
+        zone_id = resolve_zone_for_point(db, lat, lng)
+    else:
+        _check_zone(zone_id, db)
     if requester_id:
         try:
             requester = db.query(User).filter(User.id == requester_id).first()
@@ -269,12 +345,13 @@ def create_need(
         requester_id=requester.id,
         need_type=need_type,
         description=description,
-        quantity=quantity,
         address=address,
         lat=lat,
         lng=lng,
         urgency=urgency,
+        zone_id=zone_id,
     )
+    set_quantity_fields(need, quantity)
     db.add(need)
     db.commit()
     db.refresh(need)
@@ -282,7 +359,8 @@ def create_need(
 
 
 @router.put("/needs/{need_id}")
-def update_need_status(need_id: str, status: str, db: Session = Depends(get_db)):
+def update_need_status(need_id: str, status: str, db: Session = Depends(get_db),
+                       _principal: dict | None = Depends(require_admin)):
     """更新需求狀態（例如 cancelled）"""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
@@ -296,7 +374,7 @@ def update_need_status(need_id: str, status: str, db: Session = Depends(get_db))
 
 
 @router.delete("/needs/{need_id}")
-def delete_need(need_id: str, db: Session = Depends(get_db)):
+def delete_need(need_id: str, db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """永久刪除一筆需求，只允許還沒真的進入現場流程的狀態。
 
     "取消"（PUT status=cancelled）之前是唯一的收尾動作，垃圾測試資料
@@ -345,21 +423,22 @@ def list_need_dispatch_events(
 
 
 @router.post("/needs/{need_id}/resolve_sos")
-def resolve_sos_need(need_id: str, db: Session = Depends(get_db)):
+def resolve_sos_need(need_id: str, db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """管理員確認已聯繫、處理完一筆一鍵求助"""
     from app.services.dispatch import resolve_sos
     return raise_if_error(resolve_sos(need_id, db))
 
 
 @router.post("/needs/{need_id}/match")
-def match_need(need_id: str, resource_id: str, db: Session = Depends(get_db)):
+def match_need(need_id: str, resource_id: str, db: Session = Depends(get_db),
+              _principal: dict | None = Depends(require_admin)):
     """手動媒合需求與物資，並立即 LINE 通知志工"""
     from app.services.dispatch import manual_dispatch
     return raise_if_error(manual_dispatch(need_id, resource_id, db))
 
 
 @router.post("/dispatch")
-def run_dispatch():
+def run_dispatch(_principal: dict | None = Depends(require_admin)):
     """
     立即執行一次自動媒合（管理員手動觸發）。
     只會產生「建議」（need.status = suggested），不會自動通知志工——
@@ -371,14 +450,16 @@ def run_dispatch():
 
 
 @router.post("/needs/{need_id}/confirm_dispatch")
-def confirm_dispatch(need_id: str, expected_version: str | None = None, db: Session = Depends(get_db)):
+def confirm_dispatch(need_id: str, expected_version: str | None = None, db: Session = Depends(get_db),
+                     _principal: dict | None = Depends(require_admin)):
     """管理員確認自動媒合建議，此時才真正 LINE 通知志工"""
     from app.services.dispatch import confirm_dispatch as _confirm_dispatch
     return raise_if_error(_confirm_dispatch(need_id, db, expected_version=expected_version))
 
 
 @router.post("/needs/{need_id}/decline_suggestion")
-def decline_suggestion(need_id: str, expected_version: str | None = None, db: Session = Depends(get_db)):
+def decline_suggestion(need_id: str, expected_version: str | None = None, db: Session = Depends(get_db),
+                       _principal: dict | None = Depends(require_admin)):
     """管理員否決自動媒合建議，物資恢復可用、需求退回待媒合"""
     from app.services.dispatch import decline_suggestion as _decline_suggestion
     return raise_if_error(_decline_suggestion(need_id, db, expected_version=expected_version))
@@ -446,6 +527,7 @@ def create_resource_point(
     operating_hours: str | None = None,
     note: str | None = None,
     db: Session = Depends(get_db),
+    _principal: dict | None = Depends(require_staff),
 ):
     """新增固定資源點"""
     name = check_name(name, what="資源點名稱")
@@ -482,6 +564,7 @@ def update_resource_point(
     note: str | None = None,
     is_active: bool | None = None,
     db: Session = Depends(get_db),
+    _principal: dict | None = Depends(require_staff),
 ):
     pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
     if not pt:
@@ -501,7 +584,8 @@ def update_resource_point(
 
 
 @router.post("/points/{point_id}/checkin")
-def checkin_to_point(point_id: str, count: int = 1, db: Session = Depends(get_db)):
+def checkin_to_point(point_id: str, count: int = 1, db: Session = Depends(get_db),
+                     _principal: dict | None = Depends(require_staff)):
     """
     回報有人（例：災民、住戶）抵達此資源點（避難所/收容點），
     current_load 隨即 +count；管理員在儀表板一鍵操作，不需要手動計算人數。
@@ -515,7 +599,8 @@ def checkin_to_point(point_id: str, count: int = 1, db: Session = Depends(get_db
 
 
 @router.post("/points/{point_id}/checkout")
-def checkout_from_point(point_id: str, count: int = 1, db: Session = Depends(get_db)):
+def checkout_from_point(point_id: str, count: int = 1, db: Session = Depends(get_db),
+                        _principal: dict | None = Depends(require_staff)):
     """回報有人離開此資源點，current_load 隨即 -count（不會低於 0）"""
     pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
     if not pt:
@@ -526,7 +611,8 @@ def checkout_from_point(point_id: str, count: int = 1, db: Session = Depends(get
 
 
 @router.delete("/points/{point_id}")
-def delete_resource_point(point_id: str, db: Session = Depends(get_db)):
+def delete_resource_point(point_id: str, db: Session = Depends(get_db),
+                          _principal: dict | None = Depends(require_admin)):
     pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
     if not pt:
         raise HTTPException(status_code=404, detail="Not found")
@@ -536,7 +622,8 @@ def delete_resource_point(point_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/points/seed")
-def seed_resource_points(city: str = "台中市", clear: bool = False):
+def seed_resource_points(city: str = "台中市", clear: bool = False,
+                         _principal: dict | None = Depends(require_admin)):
     """從政府開放資料匯入固定資源點（管理員觸發）"""
     import threading
     result = {"status": "started"}

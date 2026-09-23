@@ -18,7 +18,7 @@ from app.errors import http_exception_handler, validation_error_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.demo_auth import DemoAuthMiddleware
-from app.routers import join_page, webform, linebot, dashboard, resources, rag, ontology, workspace, tasks
+from app.routers import join_page, webform, linebot, dashboard, resources, rag, ontology, workspace, tasks, zones
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
@@ -105,6 +105,7 @@ app.include_router(rag.router,       prefix="/api/rag",       tags=["RAG"])
 app.include_router(ontology.router,  prefix="/api/ontology",  tags=["Ontology"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(workspace.router, prefix="/api/workspaces", tags=["事件處置工作區"])
+app.include_router(zones.router,     prefix="/api/zones",      tags=["分區"])
 
 
 @app.get("/workspace")
@@ -169,7 +170,8 @@ def admin_login(t: str = ""):
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.id == uid).first() if uid else None
-        if not user or not user.roles or "admin" not in user.roles or user.is_active is False:
+        allowed_roles = {"admin", "field_staff"}
+        if not user or not user.roles or not allowed_roles & set(user.roles) or user.is_active is False:
             return HTMLResponse("登入連結已過期或無效。請回 LINE 傳「後台」取得新的連結。", status_code=401)
     finally:
         db.close()
@@ -207,6 +209,8 @@ def security_status():
         "auth_enabled": mode != "open",
         "public_admin": _settings.APP_ENV == "production" and mode == "open",
         "admin": admin["name"] if admin else None,
+        # 沒人登入、也沒開密碼閘時是「open」，後端本來就不分級，前端一律當作全權限。
+        "roles": admin["roles"] if admin else (["admin"] if mode == "open" else []),
     }
 
 

@@ -70,6 +70,14 @@ from app.models.alert import Alert
 from app.models.care_relation import CareRelation
 from app.models.config import SystemConfig
 from app.models.dispatch_event import DispatchEvent
+from app.services.inventory import (
+    InventoryError,
+    available_amount,
+    consume_for_need,
+    release_for_need,
+    reserve_for_need,
+    structured_quantity,
+)
 from app.services.line_notify import send_task_message
 
 
@@ -355,16 +363,20 @@ def _collect_from_resources(
     type_aff = {t: a for t, a in compat}
 
     availability = CommunityResource.is_available == True
+    zone_match = CommunityResource.zone_id == need.zone_id
     if include_resource_id is not None:
         # 已被建議給這筆需求的物資因為保留而 is_available=False，如果不特別
         # 帶進來，管理員打開「待確認」需求的詳情只會看到「無候選資源」，
-        # 完全看不到系統為什麼配這個人。
+        # 完全看不到系統為什麼配這個人。同理，就算分區後來被改掉，已經配對
+        # 的那一筆還是要能顯示，不能無聲消失。
         availability = (availability) | (CommunityResource.id == include_resource_id)
+        zone_match = (zone_match) | (CommunityResource.id == include_resource_id)
     res_list = (
         db.query(CommunityResource)
         .filter(
             CommunityResource.resource_type.in_(list(type_aff.keys())),
             availability,
+            zone_match,
         )
         .all()
     )
@@ -374,6 +386,16 @@ def _collect_from_resources(
     for r in res_list:
         if r.owner_id == need.requester_id:
             continue  # 不能把自己的物資配給自己的需求
+        resource_quantity = structured_quantity(r)
+        need_quantity = structured_quantity(need)
+        if resource_quantity is not None:
+            requested = need_quantity[0] if need_quantity is not None else 1
+            requested_unit = need_quantity[1] if need_quantity is not None else resource_quantity[1]
+            stock = available_amount(r) or 0
+            if str(r.id) == str(include_resource_id or ""):
+                stock += int(need.reserved_quantity_amount or 0)
+            if requested_unit != resource_quantity[1] or stock < requested:
+                continue
         affinity = type_aff.get(r.resource_type, 0.0)
         dist = _distance_km(need.lat, need.lng, r.lat, r.lng, db)
         vol_load = volunteer_load.get(str(r.owner_id), 0)
@@ -508,27 +530,34 @@ def _assign_resources_optimally(
     return assignment
 
 
-def _reserve_for_need(need: CommunityNeed, resource: CommunityResource, db: Session, status: str) -> bool:
+def _reserve_for_need(
+    need: CommunityNeed,
+    resource: CommunityResource,
+    db: Session,
+    status: str,
+    *,
+    actor_id: str | None = None,
+    actor_label: str | None = None,
+) -> bool:
     """Claim a resource and its need together across automatic, manual and workspace entry points."""
     from app.services.record_version import row_predicates
     if need.status not in ("open", "suggested"):
         return False
-    if not resource.is_available and str(resource.id) != str(need.matched_resource_id or ""):
-        return False
-    if db.query(CommunityNeed.id).filter(CommunityNeed.matched_resource_id == resource.id,
-                                         CommunityNeed.status.in_(("suggested", "matched")),
-                                         CommunityNeed.id != need.id).first():
-        return False
-    previous = {"is_available": resource.is_available, "last_updated": resource.last_updated}
-    reserved = db.query(CommunityResource).filter(*row_predicates(resource)).update(
-        {"is_available": False, "last_updated": _utcnow_naive()}, synchronize_session=False)
-    if reserved != 1:
-        return False
-    claimed = db.query(CommunityNeed).filter(*row_predicates(need)).update(
-        {"status": status, "matched_resource_id": resource.id}, synchronize_session=False)
-    if claimed != 1:
-        # This transaction still holds the resource write lock; release only its own tentative claim.
-        db.query(CommunityResource).filter(CommunityResource.id == resource.id).update(previous, synchronize_session=False)
+    try:
+        with db.begin_nested():
+            reserve_for_need(
+                db,
+                resource,
+                need,
+                actor_id=actor_id,
+                actor_label=actor_label,
+            )
+            claimed = db.query(CommunityNeed).filter(*row_predicates(need)).update(
+                {"status": status, "matched_resource_id": resource.id}, synchronize_session=False)
+            if claimed != 1:
+                raise InventoryError("Need changed concurrently; reload and retry")
+    except InventoryError as exc:
+        db.info["inventory_error"] = str(exc)
         return False
     db.refresh(need)
     db.refresh(resource)
@@ -776,14 +805,26 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
 
     previous_status = need.status
     old_resource_id = need.matched_resource_id
-    if not _reserve_for_need(need, resource, db, "matched"):
-        db.rollback()
-        return {"error": "需求或物資已由另一個操作處理，請重新載入。"}
     if old_resource_id and str(old_resource_id) != str(resource.id):
         old = db.query(CommunityResource).filter(CommunityResource.id == old_resource_id).first()
         if old:
-            old.is_available = True  # 放掉原本建議的那份，不要讓它永遠卡在保留狀態
-            old.last_updated = _utcnow_naive()
+            try:
+                release_for_need(
+                    db, old, need, actor_id=actor_id, actor_label=actor_label
+                )
+            except InventoryError as exc:
+                db.rollback()
+                return {"error": str(exc)}
+    if not _reserve_for_need(
+        need,
+        resource,
+        db,
+        "matched",
+        actor_id=actor_id,
+        actor_label=actor_label,
+    ):
+        db.rollback()
+        return {"error": db.info.pop("inventory_error", None) or "需求或物資已由另一個操作處理，請重新載入。"}
     db.commit()
 
     notified = False
@@ -921,14 +962,21 @@ def decline_suggestion(need_id: str, db: Session, expected_version: str | None =
     from app.services.record_version import row_predicates, row_version
     if expected_version and expected_version != row_version(need):
         return {"error": "需求已有新版本，請更新現況後重新處理"}
+    if previous_resource_id:
+        resource = db.query(CommunityResource).filter(
+            CommunityResource.id == previous_resource_id
+        ).first()
+        if resource:
+            try:
+                release_for_need(db, resource, need, actor_label="manager")
+            except InventoryError as exc:
+                db.rollback()
+                return {"error": str(exc)}
     changed = db.query(CommunityNeed).filter(*row_predicates(need)).update(
         {"status": "open", "matched_resource_id": None}, synchronize_session=False)
     if changed != 1:
         db.rollback()
         return {"error": "此建議已由另一個操作處理，請更新現況"}
-    if previous_resource_id:
-        db.query(CommunityResource).filter(CommunityResource.id == previous_resource_id).update(
-            {"is_available": True, "last_updated": _utcnow_naive()}, synchronize_session=False)
     db.refresh(need)
     _log_dispatch_event(
         db,
@@ -1002,8 +1050,12 @@ def cancel_need(need_id: str, db: Session) -> dict:
             CommunityResource.id == need.matched_resource_id
         ).first()
         if resource:
-            resource.is_available = True
-            resource_released = True
+            try:
+                release_for_need(db, resource, need, actor_label="manager")
+                resource_released = True
+            except InventoryError as exc:
+                db.rollback()
+                return {"error": str(exc)}
 
     volunteer_uid = None
     if previous_status == "matched" and need.matched_resource_id:
@@ -1069,13 +1121,32 @@ def mark_task_delivered(
     if previous_status != "matched":
         # 過期的任務卡：需求已被退回、取消或還沒核准，不能憑一次按鈕就直接
         # 變成「已完成」——之前需求退回 open 之後志工再按「已送達」，會在
-        # 沒有任何指派的狀況下直接完成，物資也沒有被消耗。
+        # 沒有任何指派的狀況下直接完成。
         return {
             "error": "invalid task state",
             "need_id": need_id,
             "need_status": previous_status,
         }
 
+    resource = None
+    movement = None
+    if need.matched_resource_id:
+        resource = db.query(CommunityResource).filter(
+            CommunityResource.id == need.matched_resource_id
+        ).first()
+    if resource is None:
+        return {"error": "matched resource not found"}
+    try:
+        movement = consume_for_need(
+            db,
+            resource,
+            need,
+            actor_id=actor_id,
+            actor_label=actor_label,
+        )
+    except InventoryError as exc:
+        db.rollback()
+        return {"error": str(exc)}
     need.status = "fulfilled"
     _log_dispatch_event(
         db,
@@ -1087,7 +1158,13 @@ def mark_task_delivered(
         previous_status=previous_status,
         new_status=need.status,
         outcome="fulfilled",
-        details={"matched_resource_id": previous_resource_id},
+        details={
+            "matched_resource_id": previous_resource_id,
+            "inventory_mode": movement.mode,
+            "quantity_consumed": movement.quantity,
+            "quantity_unit": movement.unit,
+            "available_after": movement.available_after,
+        },
     )
     db.commit()
     notify_requester(
@@ -1110,16 +1187,16 @@ def list_claimable(user, db: Session, limit: int = 5) -> dict:
     Returns {"items": [{need, resource, dist_km}], "open_total": n, "has_resources": bool}."""
     owned = db.query(CommunityResource).filter(CommunityResource.owner_id == user.id).all()
     mine = [r for r in owned if r.is_available]
-    by_type: dict[str, CommunityResource] = {}
+    by_type: dict[tuple[str, str], CommunityResource] = {}
     for r in mine:
-        by_type.setdefault(r.resource_type, r)
+        by_type.setdefault((r.resource_type, r.zone_id), r)
     needs = db.query(CommunityNeed).filter(
         CommunityNeed.status == "open", CommunityNeed.need_type != "sos",
         CommunityNeed.requester_id != user.id,
     ).all()
     items = []
     for n in needs:
-        r = by_type.get(n.need_type)
+        r = by_type.get((n.need_type, n.zone_id))
         if r is None:
             continue
         d = _distance_km(n.lat, n.lng, r.lat, r.lng, db)
@@ -1139,6 +1216,7 @@ def claim_need(need_id: str, user, db: Session) -> dict:
     resource = db.query(CommunityResource).filter(
         CommunityResource.owner_id == user.id, CommunityResource.resource_type == need.need_type,
         CommunityResource.is_available == True,  # noqa: E712
+        CommunityResource.zone_id == need.zone_id,
     ).first()
     if not resource:
         return {"error": "您沒有可提供的對應物資，請先傳「登記物資」。"}
@@ -1353,8 +1431,18 @@ def decline_task_assignment(
             CommunityResource.id == need.matched_resource_id
         ).first()
         if resource:
-            resource.is_available = True
-            resource_released = True
+            try:
+                release_for_need(
+                    db,
+                    resource,
+                    need,
+                    actor_id=actor_id,
+                    actor_label=actor_label,
+                )
+                resource_released = True
+            except InventoryError as exc:
+                db.rollback()
+                return {"error": str(exc)}
 
     need.status = "open"
     need.matched_resource_id = None

@@ -295,6 +295,7 @@ def _trigger_sos(user, db) -> dict:
     created = False
     sos_need = existing_sos
     if not existing_sos:
+        from app.services.zones import resolve_zone_for_point
         coords = _resolve_coordinates(user)
         sos_need = CommunityNeed(
             requester_id=user.id,
@@ -304,6 +305,7 @@ def _trigger_sos(user, db) -> dict:
             lat=coords[0] if coords else None,
             lng=coords[1] if coords else None,
             urgency=5,
+            zone_id=resolve_zone_for_point(db, coords[0] if coords else None, coords[1] if coords else None),
         )
         db.add(sos_need)
         db.commit()
@@ -588,6 +590,9 @@ def _register_resource(event, db, user, rest: str) -> None:
 def save_resource(db, user, detected_type: str, quantity, explicit_address, resource_name=None) -> tuple[str, bool]:
     """Create or update this person's resource. Returns (reply text, whether to ask for a location)."""
     from app.models.resource import CommunityResource
+    from app.models.need import CommunityNeed
+    from app.services.inventory import set_quantity_fields
+    from app.services.zones import resolve_zone_for_point
     address = explicit_address or (user.address or None)
 
     coords = _resolve_coordinates(user, explicit_address)
@@ -600,24 +605,33 @@ def save_resource(db, user, detected_type: str, quantity, explicit_address, reso
         CommunityResource.resource_type == detected_type,
         CommunityResource.is_available == True,
     ).first()
+    if existing and db.query(CommunityNeed.id).filter(
+        CommunityNeed.matched_resource_id == existing.id,
+        CommunityNeed.status.in_(("suggested", "matched")),
+    ).first():
+        existing = None
     label = RES_TYPE_ZH.get(detected_type, "物資")
     if existing:
         if quantity:
-            existing.quantity = quantity
+            set_quantity_fields(existing, quantity)
+            existing.inventory_version = int(existing.inventory_version or 1) + 1
         if address:
             existing.address = address
         if resource_name:
             existing.name = resource_name
         if lat is not None:
             existing.lat, existing.lng = lat, lng
+            existing.zone_id = resolve_zone_for_point(db, lat, lng)
         existing.last_updated = now_utc()
         verb = "已更新"
     else:
-        db.add(CommunityResource(
+        resource = CommunityResource(
             owner_id=user.id, resource_type=detected_type,
-            name=resource_name or f"{user.name}提供的{label}", quantity=quantity, address=address,
-            lat=lat, lng=lng, is_available=True,
-        ))
+            name=resource_name or f"{user.name}提供的{label}", address=address,
+            lat=lat, lng=lng, is_available=True, zone_id=resolve_zone_for_point(db, lat, lng),
+        )
+        set_quantity_fields(resource, quantity)
+        db.add(resource)
         verb = "登記成功"
     db.commit()
 
@@ -665,6 +679,7 @@ def _handle_needs(event, db, user, text, intent) -> bool:
 def submit_needs(db, user, ntypes, description, *, urgent=False, address=None) -> tuple[str, bool]:
     """Create needs for this person. Returns (reply text, whether to ask for a location)."""
     from app.models.need import CommunityNeed
+    from app.services.zones import resolve_zone_for_point
     existing_types = {n.need_type for n in db.query(CommunityNeed).filter(
         CommunityNeed.requester_id == user.id, CommunityNeed.status.in_(["open", "suggested", "matched"])).all()}
     coords = _resolve_coordinates(user, address)
@@ -672,6 +687,7 @@ def submit_needs(db, user, ntypes, description, *, urgent=False, address=None) -
         user.lat, user.lng = coords
     if address and not user.address:
         user.address = address
+    zone_id = resolve_zone_for_point(db, coords[0] if coords else None, coords[1] if coords else None)
     created, duplicates = [], []
     for ntype in ntypes:
         if ntype in existing_types:
@@ -681,7 +697,7 @@ def submit_needs(db, user, ntypes, description, *, urgent=False, address=None) -
         db.add(CommunityNeed(
             requester_id=user.id, need_type=ntype, description=description, address=address or user.address,
             lat=coords[0] if coords else None, lng=coords[1] if coords else None,
-            urgency=max(base, 4) if urgent else base,
+            urgency=max(base, 4) if urgent else base, zone_id=zone_id,
         ))
         created.append(ntype)
     db.commit()

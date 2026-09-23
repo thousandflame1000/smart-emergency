@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import re
 from datetime import datetime, UTC
 from typing import Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
@@ -12,25 +11,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.dispatch_event import DispatchEvent
+from app.models.inventory import InventoryEvent
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
-from app.models.resource_point import ResourcePoint
+from app.models.resource_point import POINT_TYPES, ResourcePoint
 from app.models.user import User
+from app.models.zone import GENERAL_ZONE_ID, Zone
+from app.services.inventory import quantity_parts, set_quantity_fields
 from app.services.record_version import row_predicates, row_version
-
-
-def quantity_parts(value: str | None) -> tuple[int, str] | None:
-    # A count without a unit uses the legacy "份". Never equate boxes with bottles.
-    match = re.fullmatch(r"\s*(\d+)\s*([^\d\s,，/／+＋()（）]{0,20})\s*", value or "")
-    if not match or int(match[1]) > 1_000_000:
-        return None
-    return int(match[1]), match[2] or "份"
 
 
 def editable_values(row) -> dict:
     if isinstance(row, CommunityResource):
         return {"name": row.name, "quantity": row.quantity or "", "lat": row.lat, "lng": row.lng,
                 "address": row.address or "", "is_available": bool(row.is_available)}
+    if isinstance(row, ResourcePoint):
+        return {"name": row.name, "lat": row.lat, "lng": row.lng, "address": row.address or "",
+                "capacity": row.capacity, "phone": row.phone or "", "operating_hours": row.operating_hours or ""}
     return {"lat": row.lat, "lng": row.lng, "address": row.address or ""}
 
 
@@ -42,6 +39,9 @@ class InventoryValues(BaseModel):
     lng: float | None = Field(default=None, ge=-180, le=180, allow_inf_nan=False)
     address: str = Field(default="", max_length=500)
     is_available: bool = True
+    capacity: int | None = Field(default=None, ge=0, le=1_000_000)
+    phone: str = Field(default="", max_length=40)
+    operating_hours: str = Field(default="", max_length=100)
 
 
 class InventoryChange(BaseModel):
@@ -53,10 +53,22 @@ class InventoryChange(BaseModel):
     values: InventoryValues
     owner_id: UUID | None = None
     resource_type: Literal["water", "food", "first_aid", "shelter", "vehicle", "tool", "other"] | None = None
+    point_type: str | None = Field(default=None, max_length=40)
+
+    @model_validator(mode="after")
+    def one_kind_on_create(self):
+        if self.operation != "create":
+            return self
+        if bool(self.resource_type) == bool(self.point_type):
+            raise ValueError("新增物件必須恰好指定物資品項或資源點類型其中一種")
+        if self.point_type is not None and self.point_type not in POINT_TYPES:
+            raise ValueError(f"point_type 必須是 {list(POINT_TYPES.keys())} 之一")
+        return self
 
 
 class InventoryCommand(BaseModel):
     changes: list[InventoryChange] = Field(min_length=1, max_length=100)
+    zone_id: str = Field(default=GENERAL_ZONE_ID, max_length=180)
 
     @model_validator(mode="after")
     def unique_objects(self):
@@ -72,31 +84,62 @@ class InventoryConflict(ValueError):
     pass
 
 
-def _prepare(change: InventoryChange, db: Session):
+def _prepare(change: InventoryChange, db: Session, zone_id: str = GENERAL_ZONE_ID):
     values = change.values.model_dump(exclude_unset=True)
     if not values:
         raise ValueError("未指定變更欄位")
     if change.operation == "create":
-        if change.node_id.startswith("db:") or not change.owner_id or not change.resource_type or not change.creation_key:
-            raise ValueError("新增物資須使用情境物件識別碼，並指定擁有者與品項")
-        owner = db.get(User, change.owner_id)
-        if not owner or not owner.is_active:
-            raise ValueError("物資擁有者不存在或已停用")
-        if not (owner.has_role("volunteer") or owner.has_role("admin")):
-            raise ValueError("物資提供者必須是志工或管理員")
-        if not {"name", "quantity"} <= values.keys():
-            raise ValueError("新增物資須填寫名稱與數量單位")
-        key = uuid5(NAMESPACE_URL, "smart-emergency:workspace-resource:" + str(change.creation_key))
-        row = db.get(CommunityResource, key)
-        if row:
-            if (str(row.owner_id) == str(change.owner_id) and row.resource_type == change.resource_type
-                    and all(editable_values(row).get(k) == v for k, v in values.items())):
-                return row, {}, {}, "already_applied"
-            raise InventoryConflict("這個物件已登記到資料庫，請重新同步")
-        row = CommunityResource(id=key, owner_id=change.owner_id, resource_type=change.resource_type,
-                                is_available=True, **{k: v for k, v in values.items() if k != "is_available"})
-        row.is_available = values.get("is_available", True)
-        before = {}
+        if change.node_id.startswith("db:") or not change.creation_key:
+            raise ValueError("新增物件須使用情境物件識別碼")
+        if not db.get(Zone, zone_id):
+            raise ValueError("找不到這個分區")
+        if change.point_type is not None:
+            # 社區固定資源點：避難所、消防分隊等，不屬於任何一位志工，不吃品項/擁有者欄位。
+            if not {"name"} <= values.keys():
+                raise ValueError("新增資源點須填寫名稱")
+            point_values = {k: v for k, v in values.items()
+                            if k in ("name", "lat", "lng", "address", "capacity", "phone", "operating_hours")}
+            key = uuid5(NAMESPACE_URL, "smart-emergency:workspace-point:" + str(change.creation_key))
+            row = db.get(ResourcePoint, key)
+            if row:
+                if row.point_type == change.point_type and all(
+                    editable_values(row).get(k) == v for k, v in point_values.items()
+                ):
+                    return row, {}, {}, "already_applied"
+                raise InventoryConflict("這個物件已登記到資料庫，請重新同步")
+            row = ResourcePoint(id=key, point_type=change.point_type, is_active=True, source="workspace",
+                                **point_values)
+            before = {}
+        else:
+            if not change.owner_id or not change.resource_type:
+                raise ValueError("新增物資須指定擁有者與品項")
+            owner = db.get(User, change.owner_id)
+            if not owner or not owner.is_active:
+                raise ValueError("物資擁有者不存在或已停用")
+            if not (owner.has_role("volunteer") or owner.has_role("admin")):
+                raise ValueError("物資提供者必須是志工或管理員")
+            if not {"name", "quantity"} <= values.keys():
+                raise ValueError("新增物資須填寫名稱與數量單位")
+            resource_values = {k: v for k, v in values.items() if k in ("name", "lat", "lng", "address", "is_available")}
+            key = uuid5(NAMESPACE_URL, "smart-emergency:workspace-resource:" + str(change.creation_key))
+            row = db.get(CommunityResource, key)
+            if row:
+                if (str(row.owner_id) == str(change.owner_id) and row.resource_type == change.resource_type
+                        and all(editable_values(row).get(k) == v for k, v in resource_values.items())
+                        and editable_values(row).get("quantity") == values.get("quantity", editable_values(row).get("quantity"))):
+                    return row, {}, {}, "already_applied"
+                raise InventoryConflict("這個物件已登記到資料庫，請重新同步")
+            row = CommunityResource(
+                id=key,
+                owner_id=change.owner_id,
+                resource_type=change.resource_type,
+                is_available=True,
+                zone_id=zone_id,
+                **{k: v for k, v in resource_values.items() if k != "is_available"},
+            )
+            set_quantity_fields(row, values.get("quantity"))
+            row.is_available = values.get("is_available", True)
+            before = {}
     else:
         prefix, model = next(((prefix, model) for prefix, model in
                               (("db:res:", CommunityResource), ("db:point:", ResourcePoint))
@@ -110,7 +153,8 @@ def _prepare(change: InventoryChange, db: Session):
             raise InventoryConflict("資料庫已有新版本，請重新同步並檢查差異")
         before = editable_values(row)
         if not values.keys() <= before.keys():
-            raise ValueError("資源點只允許更新位置與地址")
+            allowed = "、".join(before.keys())
+            raise ValueError(f"這個物件只允許更新：{allowed}")
         if isinstance(row, CommunityResource) and db.query(CommunityNeed.id).filter(
                 CommunityNeed.matched_resource_id == row.id,
                 CommunityNeed.status.in_(("suggested", "matched"))).first():
@@ -130,7 +174,7 @@ def preview_inventory(command: InventoryCommand, db: Session) -> dict:
     changes, conflicts = [], []
     for change in command.changes:
         try:
-            row, before, values, action = _prepare(change, db)
+            row, before, values, action = _prepare(change, db, command.zone_id)
             changes.append({"node_id": change.node_id, "label": row.name, "operation": action,
                             "fields": [{"field": key, "before": before.get(key), "after": value}
                                        for key, value in values.items()]})
@@ -142,8 +186,12 @@ def preview_inventory(command: InventoryCommand, db: Session) -> dict:
 def apply_inventory(command: InventoryCommand, db: Session, actor: dict | None = None) -> dict:
     results = []
     try:
-        prepared = [(change, *_prepare(change, db)) for change in command.changes]
+        prepared = [(change, *_prepare(change, db, command.zone_id)) for change in command.changes]
         for change, row, before, values, action in prepared:
+            is_resource = isinstance(row, CommunityResource)
+            quantity_before = row.quantity_amount if is_resource else None
+            unit_before = row.quantity_unit if is_resource else None
+            version_before = int(row.inventory_version or 1) if is_resource else None
             if action == "create":
                 db.add(row)
                 db.flush()
@@ -152,10 +200,38 @@ def apply_inventory(command: InventoryCommand, db: Session, actor: dict | None =
                 # Compare every column as well as timestamps; older writers do not all bump timestamps.
                 predicates = row_predicates(row)
                 timestamp_key = "last_updated" if isinstance(row, CommunityResource) else "updated_at"
+                update_values = {**values, timestamp_key: datetime.now(UTC).replace(tzinfo=None)}
+                if is_resource and "quantity" in values:
+                    parsed = quantity_parts(values["quantity"])
+                    update_values.update(
+                        quantity_amount=parsed[0] if parsed else None,
+                        quantity_unit=parsed[1] if parsed else None,
+                        inventory_version=version_before + 1,
+                    )
                 count = db.query(model).filter(*predicates).update(
-                    {**values, timestamp_key: datetime.now(UTC).replace(tzinfo=None)}, synchronize_session=False)
+                    update_values, synchronize_session=False)
                 if count != 1:
                     raise InventoryConflict("寫入期間資料已變動，整批變更未套用")
+            if is_resource and (action == "create" or "quantity" in values):
+                parsed_after = quantity_parts(values.get("quantity", row.quantity))
+                amount_after = parsed_after[0] if parsed_after else None
+                unit_after = parsed_after[1] if parsed_after else None
+                version_after = 1 if action == "create" else version_before + 1
+                db.add(InventoryEvent(
+                    resource_id=row.id,
+                    event_type="ADJUST",
+                    quantity=abs((amount_after or 0) - (quantity_before or 0)) or None,
+                    unit=unit_after or unit_before,
+                    on_hand_before=0 if action == "create" else quantity_before,
+                    on_hand_after=amount_after,
+                    reserved_before=0,
+                    reserved_after=0,
+                    resource_version=version_after,
+                    actor_id=actor["id"] if actor else None,
+                    actor_label=actor["name"] if actor else "workspace",
+                    details_json=json.dumps({"operation": action, "quantity_text": values.get("quantity", row.quantity)},
+                                            ensure_ascii=False),
+                ))
             if values:
                 db.add(DispatchEvent(action="workspace_inventory", outcome=action,
                                      resource_id=row.id if isinstance(row, CommunityResource) else None,

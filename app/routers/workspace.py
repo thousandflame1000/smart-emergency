@@ -9,10 +9,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.workspace import TopologyWorkspace
+from app.models.zone import GENERAL_ZONE_ID
 from app.services.workspace import ComparisonBaseline, GraphDocument, ImportRequest, analyze, import_document
 from app.services.workspace_comparison import compare
 from app.services.workspace_allocation import AllocationRequest, plan_allocation
 from app.services.places import search_places
+from app.security import require_admin, require_staff
 from app.services.workspace_bridge import is_db_id, merge_database, operational_snapshot, _item
 from app.services.workspace_inventory import (InventoryCommand, InventoryConflict, apply_inventory,
                                              preview_inventory, quantity_parts, row_version)
@@ -24,6 +26,7 @@ class WorkspaceWrite(BaseModel):
     graph: GraphDocument = Field(default_factory=GraphDocument)
     revision: int = Field(default=0, ge=0)
     baseline: ComparisonBaseline | None = None
+    zone_id: str = Field(default=GENERAL_ZONE_ID, max_length=180)
 
 
 class AnalysisRequest(BaseModel):
@@ -55,7 +58,8 @@ def timestamp():
 
 
 def serialize(row, detail=True):
-    result = {"id": row.id, "name": row.name, "revision": row.revision, "updated_at": row.updated_at}
+    result = {"id": row.id, "name": row.name, "revision": row.revision, "updated_at": row.updated_at,
+              "zone_id": row.zone_id}
     if detail:
         document = json.loads(row.document)
         if "graph" in document:
@@ -69,14 +73,21 @@ def serialize(row, detail=True):
 
 
 @router.get("")
-def list_workspaces(db: Session = Depends(get_db)):
-    return [serialize(row, False) for row in db.query(TopologyWorkspace).order_by(TopologyWorkspace.updated_at.desc()).all()]
+def list_workspaces(zone_id: str | None = None, db: Session = Depends(get_db)):
+    q = db.query(TopologyWorkspace)
+    if zone_id is not None:
+        q = q.filter(TopologyWorkspace.zone_id == zone_id)
+    return [serialize(row, False) for row in q.order_by(TopologyWorkspace.updated_at.desc()).all()]
 
 
 @router.post("", status_code=201)
 def create_workspace(body: WorkspaceWrite, db: Session = Depends(get_db)):
+    from app.models.zone import Zone
+    if not db.get(Zone, body.zone_id):
+        raise HTTPException(400, "找不到這個分區")
     row = TopologyWorkspace(id=uuid4().hex, name=body.name.strip() or "未命名工作區",
-                            document=body.model_dump_json(include={"graph", "baseline"}), revision=1, updated_at=timestamp())
+                            document=body.model_dump_json(include={"graph", "baseline"}), revision=1,
+                            updated_at=timestamp(), zone_id=body.zone_id)
     db.add(row)
     db.commit()
     return serialize(row)
@@ -126,28 +137,32 @@ def allocate_graph(body: AllocationRequest):
 
 
 @router.post("/database-merge")
-def database_merge(body: DatabaseMergeRequest, db: Session = Depends(get_db)):
-    """把平台資料庫的長者、需求、志工物資、資源點併入傳來的圖資料（不儲存）。"""
+def database_merge(body: DatabaseMergeRequest, zone_id: str | None = None, db: Session = Depends(get_db)):
+    """把平台資料庫的長者、需求、志工物資、資源點併入傳來的圖資料（不儲存）。
+
+    帶 zone_id 時只併入該分區的物資／需求；不帶則維持併入全系統資料（例如管理員總覽）。"""
     try:
-        graph, counts = merge_database(body.graph, db)
+        graph, counts = merge_database(body.graph, db, zone_id)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     return {"graph": graph.model_dump(), "counts": counts}
 
 
 @router.get("/operational-data")
-def get_operational_data(db: Session = Depends(get_db)):
+def get_operational_data(zone_id: str | None = None, db: Session = Depends(get_db)):
     """Read-only projection. No graph upload, persistence, notifications or stock mutations."""
-    return operational_snapshot(db)
+    return operational_snapshot(db, zone_id)
 
 
 @router.post("/database-diff")
-def database_diff(body: InventoryCommand, db: Session = Depends(get_db)):
+def database_diff(body: InventoryCommand, db: Session = Depends(get_db),
+                  _principal: dict | None = Depends(require_staff)):
     return preview_inventory(body, db)
 
 
 @router.post("/database-push")
-def database_push(body: InventoryCommand, db: Session = Depends(get_db)):
+def database_push(body: InventoryCommand, db: Session = Depends(get_db),
+                  _principal: dict | None = Depends(require_staff)):
     from app.services.admin_session import current_admin
     try:
         return apply_inventory(body, db, current_admin.get())
@@ -158,7 +173,8 @@ def database_push(body: InventoryCommand, db: Session = Depends(get_db)):
 
 
 @router.post("/apply-allocation")
-def apply_allocation(body: ApplyAllocationRequest, db: Session = Depends(get_db)):
+def apply_allocation(body: ApplyAllocationRequest, db: Session = Depends(get_db),
+                     _principal: dict | None = Depends(require_admin)):
     """把分配試算的結果寫成派遣建議（待確認）。不通知志工、不扣庫存，仍須在調度畫面確認。"""
     from app.services.admin_session import current_admin
     from app.services.dispatch import propose_manual
@@ -215,15 +231,21 @@ def get_workspace(workspace_id: str, db: Session = Depends(get_db)):
 
 @router.put("/{workspace_id}")
 def save_workspace(workspace_id: str, body: WorkspaceWrite, db: Session = Depends(get_db)):
+    row = db.get(TopologyWorkspace, workspace_id)
     if "baseline" not in body.model_fields_set:
-        row = db.get(TopologyWorkspace, workspace_id)
         previous = json.loads(row.document).get("baseline") if row else None
         if previous:
             body.baseline = ComparisonBaseline.model_validate(previous)
+    if "zone_id" not in body.model_fields_set and row:
+        body.zone_id = row.zone_id
+    elif "zone_id" in body.model_fields_set:
+        from app.models.zone import Zone
+        if not db.get(Zone, body.zone_id):
+            raise HTTPException(400, "找不到這個分區")
     changed = db.query(TopologyWorkspace).filter(TopologyWorkspace.id == workspace_id,
                                                 TopologyWorkspace.revision == body.revision).update({
         "name": body.name.strip() or "未命名工作區", "document": body.model_dump_json(include={"graph", "baseline"}),
-        "revision": body.revision + 1, "updated_at": timestamp(),
+        "revision": body.revision + 1, "updated_at": timestamp(), "zone_id": body.zone_id,
     }, synchronize_session=False)
     if not changed:
         db.rollback()

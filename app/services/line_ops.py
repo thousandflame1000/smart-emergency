@@ -83,6 +83,10 @@ def is_admin(user: User) -> bool:
     return bool(user.roles) and "admin" in user.roles
 
 
+def is_field_staff(user: User) -> bool:
+    return bool(user.roles) and "field_staff" in user.roles
+
+
 def is_volunteer(user: User) -> bool:
     return bool(user.roles) and any(r in user.roles for r in ("volunteer", "admin"))
 
@@ -712,6 +716,12 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
                         "請依受控維運流程單次執行。")
     elif text in VOLUNTEER_COMMANDS:
         my_tasks(event, db, user)
+    elif text == "後台":
+        # 基層員工只能拿登入連結進網頁更新物資／資源點，其他管理指令仍是管理員專用。
+        if is_admin(user) or is_field_staff(user):
+            admin_login_link(event, user)
+        else:
+            _say(event, "此功能僅限管理員或基層員工使用。")
     elif text in ADMIN_COMMANDS:
         if not _require_admin(event, user):
             return True

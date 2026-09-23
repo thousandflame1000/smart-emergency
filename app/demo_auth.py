@@ -51,6 +51,8 @@ def _cached(key, compute):
 
 
 def _admin_by_id(user_id: str):
+    """The logged-in principal for this session: an admin, or a field_staff account that can
+    only reach the data-entry endpoints app/security.py gates separately (require_staff)."""
     from app.database import SessionLocal
     from app.models.user import User
 
@@ -58,8 +60,10 @@ def _admin_by_id(user_id: str):
         db = SessionLocal()
         try:
             user = db.query(User).filter(User.id == user_id).first()
-            if user and user.is_active is not False and user.roles and "admin" in user.roles:
-                return {"id": str(user.id), "name": user.name}
+            if user and user.is_active is not False and user.roles and (
+                "admin" in user.roles or "field_staff" in user.roles
+            ):
+                return {"id": str(user.id), "name": user.name, "roles": list(user.roles)}
             return None
         finally:
             db.close()
@@ -112,10 +116,13 @@ class DemoAuthMiddleware(BaseHTTPMiddleware):
         if cookie:
             uid = admin_session.verify_session(cookie)
             admin = _admin_by_id(uid) if uid else None
+        password = settings.DEMO_PASSWORD
+        if not admin and password and _basic_password_ok(request, password):
+            # 展演密碼是給主持人的臨時全權限通行證，不是分級帳號，一律視同管理員。
+            admin = {"id": None, "name": "demo-password", "roles": ["admin"]}
         marker = admin_session.current_admin.set(admin)
         try:
-            password = settings.DEMO_PASSWORD
-            if admin or (password and _basic_password_ok(request, password)):
+            if admin:
                 return await call_next(request)
             if not password and not line_login_enforced():
                 return await call_next(request)

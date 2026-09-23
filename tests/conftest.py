@@ -24,6 +24,12 @@ import app.models.resource_point  # noqa: F401 確保所有 model 都被註冊
 def clean_db():
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
+    from app.services.zones import ensure_general_zone
+    session = SessionLocal()
+    try:
+        ensure_general_zone(session)
+    finally:
+        session.close()
     yield
 
 

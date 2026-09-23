@@ -49,7 +49,8 @@ def test_auto_dispatch_only_suggests_does_not_notify(db, monkeypatch):
     res = db2.query(CommunityResource).filter(CommunityResource.id == res_id).first()
     event = db2.query(DispatchEvent).filter(DispatchEvent.need_id == need_id).first()
     assert need.status == "suggested"
-    assert res.is_available is False, "建議階段應先保留物資，避免被同時建議給別人"
+    assert res.reserved_amount == 1, "未填需求數量時應預留一個已登記單位"
+    assert res.is_available is True, "仍有未預留庫存時可服務其他需求"
     assert event.action == "propose_dispatch"
     assert event.outcome == "suggested"
     assert event.previous_status == "open"

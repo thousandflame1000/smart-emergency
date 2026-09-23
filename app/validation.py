@@ -5,7 +5,7 @@ import math
 
 from app.errors import ApiError
 
-USER_ROLES = {"elderly", "volunteer", "family", "admin"}
+USER_ROLES = {"elderly", "volunteer", "family", "admin", "field_staff"}
 NEED_TYPES = {"water", "food", "first_aid", "shelter", "vehicle", "tool", "other", "sos"}
 RESOURCE_TYPES = {"water", "food", "first_aid", "shelter", "vehicle", "tool", "other"}
 
