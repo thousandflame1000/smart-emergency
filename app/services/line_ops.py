@@ -28,9 +28,9 @@ from app.timeutil import now_utc, today_tw
 logger = logging.getLogger(__name__)
 
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
-ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台"}
+ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
-RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "我的紀錄", "刪除我的帳號", "刪除帳號"}
+RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "我的紀錄", "刪除我的帳號", "刪除帳號"}
 ROLE_CENTER_COMMANDS = {"居民中心", "志工中心", "決策中心"}
 MAINTENANCE_COMMANDS = {"更新選單"}
 COMMAND_WORDS = (VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
@@ -716,7 +716,7 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
                         "請依受控維運流程單次執行。")
     elif text in VOLUNTEER_COMMANDS:
         my_tasks(event, db, user)
-    elif text == "後台":
+    elif text in ("後台", "開啟後台"):
         # 基層員工只能拿登入連結進網頁更新物資／資源點，其他管理指令仍是管理員專用。
         if is_admin(user) or is_field_staff(user):
             admin_login_link(event, user)
@@ -731,7 +731,7 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
             admin_pending_needs(event, db, user)
         elif text in ("待審", "待審志工"):
             admin_pending_apps(event, db, user)
-        elif text == "求救單":
+        elif text in ("求救單", "緊急求救"):
             admin_sos_list(event, db, user)
         else:
             admin_login_link(event, user)

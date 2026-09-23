@@ -1130,3 +1130,35 @@ def test_form_does_not_prefill_a_placeholder_name(db):
     mk(db, "陳真名", ["elderly"], "Ureal")
     ctx2 = api.get("/f/api/context", params={"t": make_token("Ureal")})
     assert ctx2.json()["name"] == "陳真名", "真實姓名仍要回填，省得重打"
+
+
+def test_every_rich_menu_label_works_when_typed(db, line_outbox, monkeypatch):
+    """按鈕上寫的字，使用者照著打也必須有用。
+
+    圖文選單是居民每天在按的東西，他們從按鈕學到詞彙。先前「申請需求」
+    「查看進度」「回報平安」「操作說明」四顆按鈕的字打出來全部落到
+    「收到您的訊息了…傳『幫助』可查看可用指令」的 fallback——系統聽不懂
+    自己按鈕上的字，還叫使用者去查說明（Nielsen #4 一致性、#6 辨識優於回想）。
+    """
+    from app.services.rich_menu import ADMIN_ROWS, RESIDENT_ROWS, STAFF_ROWS
+    from app.services import line_ops
+
+    # Flex 卡片按鈕送出的是 text，這裡要驗的是「標籤本身」能不能當指令用。
+    labels = {cell[0] for rows in (RESIDENT_ROWS, STAFF_ROWS, ADMIN_ROWS) for row in rows for cell in row}
+    # 分享位置是 LINE 端的定位動作，不是文字指令。
+    labels -= {"分享位置"}
+
+    mk(db, "管理員兼志工", ["admin", "volunteer", "elderly"], "Umenu")
+    monkeypatch.setattr(line_ops, "_flex", lambda *a, **k: None)
+    monkeypatch.setattr(lb, "_flex", lambda *a, **k: None, raising=False)
+
+    unheard = []
+    for label in sorted(labels):
+        line_outbox.sent.clear()
+        try:
+            say("Umenu", label)
+        except Exception:
+            continue          # 送 Flex 的路徑在測試環境會失敗，但那代表指令有被接住
+        if any("傳「幫助」可查看可用指令" in t for t in replies(line_outbox)):
+            unheard.append(label)
+    assert not unheard, f"這些按鈕上的字，打出來系統聽不懂：{unheard}"

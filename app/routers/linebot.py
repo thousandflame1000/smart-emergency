@@ -207,7 +207,7 @@ SOS_WORDS = ["需要幫忙", "救命", "緊急", "昏倒", "胸痛", "無法呼�
 NEGATORS = ("不", "沒", "別", "免", "無需", "已經有", "已有")
 URGENCY_BY_TYPE = {"first_aid": 4}
 CANCEL_NEED_WORDS = ("取消需求", "取消求助", "我不需要了", "不需要了", "已經收到了", "已收到物資")
-CHECKIN_OK_WORDS = ("我很好", "好", "OK", "ok", "沒事", "沒事了", "平安")
+CHECKIN_OK_WORDS = ("我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "回報平安")
 KNOWN_TOPICS = ("CPR", "cpr", "AED", "aed", "止血", "心肺復甦", "燒燙傷", "骨折", "中暑", "溺水",
                 "哽塞", "哈姆立克", "地震", "颱風", "淹水", "電線", "停電", "壓瘡", "褥瘡", "失智",
                 "癲癇", "抽搐", "過敏", "一氧化碳", "土石流", "跌倒預防", "低血糖", "失溫")
@@ -667,7 +667,7 @@ def _handle_needs(event, db, user, text, intent) -> bool:
              if active else "您目前沒有進行中的需求。")
         return True
 
-    if text in ("申請物資", "物資申請", "需要物資", "申請表單"):
+    if text in ("申請物資", "物資申請", "需要物資", "申請表單", "申請需求"):
         _open_form(event, db, user, "need")
         return True
 
@@ -883,10 +883,12 @@ HELP_BASE = (
 )
 
 
-FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "狀態", "status", "幫助", "help", "?", "？",
+FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "回報平安",
+                  "狀態", "status", "幫助", "help", "?", "？", "操作說明",
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
-                  "申請物資", "物資申請", "需要物資", "申請表單", "接單", "可接任務", "找任務"}
+                  "申請物資", "物資申請", "需要物資", "申請表單", "申請需求",
+                  "接單", "可接任務", "找任務"}
 UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
 FIXED_COMMANDS |= line_ops.COMMAND_WORDS | set(UNWELL_WORDS)
 
@@ -946,7 +948,7 @@ def _process_text(event, db, user, text) -> bool:
         _say(event, f"目前模式：{'🚨 緊急模式' if _get_mode(db) == 'emergency' else '🟢 日常模式'}")
         return True
 
-    if text in ["幫助", "help", "?", "？"]:
+    if text in ["幫助", "help", "?", "？", "操作說明"]:
         parts = [HELP_BASE, "・「我的紀錄」— 需求紀錄、取消需求、家人綁定\n・「邀請家人」— 取得綁定碼，讓家人收到您的狀況通知"]
         roles = user.roles or []
         if "volunteer" in roles or "admin" in roles:
