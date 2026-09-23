@@ -6,6 +6,8 @@
 <title>鄰里守望 · 照護現況</title>
 <script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
 <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;letter-spacing:0}
 :root{--bg:#f3f6f3;--surface:#fff;--ink:#17201c;--muted:#68756e;--line:#d7dfda;--nav:#181d1b;--nav-muted:#9aa69f;--accent:#13795b;--danger:#c9364b;--warning:#9a6500;--ok:#18765a;--soft:#e8f2ed;--radius:6px;--sans:Inter,"Noto Sans TC","Microsoft JhengHei",sans-serif;--mono:"SFMono-Regular",Consolas,monospace}
@@ -78,6 +80,16 @@ tbody tr[data-row]{cursor:pointer}
 .chart-wrap{padding:16px}.chart-wrap svg{width:100%;height:230px;display:block}
 .legend{display:flex;flex-wrap:wrap;gap:14px;padding:0 16px 14px;font-size:12px;color:var(--muted)}
 .legend i{display:inline-block;width:11px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.viewseg{display:inline-flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+.viewseg button{border:0;background:var(--surface);color:var(--muted);padding:0 13px;height:31px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;transition:all .12s}
+.viewseg button+button{border-left:1px solid var(--line)}
+.viewseg button:hover{background:var(--soft);color:var(--accent)}
+.viewseg button.on{background:var(--accent);color:#fff}
+#elder-map{height:min(62vh,560px);width:100%}
+.map-foot{padding:10px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:12px;color:var(--muted)}
+.map-foot i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;border:2px solid #fff;box-shadow:0 0 0 1px #0002}
+.pin{border:2px solid #fff;border-radius:50%;box-shadow:0 1px 5px #0006}
+.pin.sel{outline:3px solid #f8b52c}
 .toast-stack{position:fixed;right:18px;bottom:18px;z-index:70;display:flex;flex-direction:column;gap:8px}
 .toast{padding:11px 15px;border:1px solid var(--line);border-radius:5px;background:var(--surface);box-shadow:0 4px 16px #17201c1f;font-size:13px;max-width:320px}
 .toast.bad{border-color:#e8a8b2;color:var(--danger)}
@@ -119,9 +131,18 @@ tbody tr[data-row]{cursor:pointer}
       </div>
     </section>
     <section class="page" id="page-elderly">
-      <div class="page-heading"><div><h2>長者狀態</h2><p id="elderly-count">0 位</p></div><input id="elderly-search" placeholder="搜尋姓名或地址" aria-label="搜尋姓名或地址"></div>
+      <div class="page-heading"><div><h2>長者狀態</h2><p id="elderly-count">0 位</p></div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="viewseg" id="elder-view"><button type="button" data-elderview="list" class="on">清單</button><button type="button" data-elderview="map">地圖</button></div>
+          <input id="elderly-search" placeholder="搜尋姓名或地址" aria-label="搜尋姓名或地址">
+        </div>
+      </div>
       <div class="chips" id="elderly-chips"></div>
-      <article class="panel"><div class="table-wrap"><table><thead><tr><th>姓名</th><th>電話</th><th>地址</th><th>今日狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="elderly-body"></tbody></table></div></article>
+      <article class="panel" id="elderly-list-panel"><div class="table-wrap"><table><thead><tr><th>姓名</th><th>電話</th><th>地址</th><th>今日狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="elderly-body"></tbody></table></div></article>
+      <article class="panel" id="elderly-map-panel" hidden>
+        <div id="elder-map"></div>
+        <div class="map-foot" id="elder-map-foot"></div>
+      </article>
     </section>
     <section class="page" id="page-analytics-page">
       <div class="page-heading"><div><h2>近 14 日趨勢</h2><p>打卡、警報與需求紀錄</p></div><div class="chips" id="trend-range"></div></div>
@@ -202,7 +223,44 @@ function renderElderChips(){
 }
 function applyElderFilters(){
   const q=$('elderly-search').value;
-  renderElders('elderly-body',elders.filter(r=>inGroup(r,elderFilter)&&(r.name.includes(q)||(r.address||'').includes(q))),true);
+  const rows=elders.filter(r=>inGroup(r,elderFilter)&&(r.name.includes(q)||(r.address||'').includes(q)));
+  renderElders('elderly-body',rows,true);
+  if(elderView==='map')renderElderMap(rows);
+}
+// 狀態顏色：地圖上唯一的資訊就是位置＋顏色，所以跟清單的徽章用同一套語意。
+const PIN={ok:'#18765a',safe:'#18765a',confirmed_safe:'#18765a',no_response:'#c9364b',help_needed:'#c9364b',pending:'#9a6500',not_sent:'#9ca9a0'};
+let elderView='list',elderMap=null,elderPins=null;
+function setElderView(view){
+  elderView=view;
+  $('elderly-list-panel').hidden=view!=='list';
+  $('elderly-map-panel').hidden=view!=='map';
+  document.querySelectorAll('#elder-view [data-elderview]').forEach(b=>b.classList.toggle('on',b.dataset.elderview===view));
+  if(view==='map')applyElderFilters();
+}
+function renderElderMap(rows){
+  if(!window.L){$('elder-map').innerHTML='<p class="empty">地圖元件載入失敗（可能被網路或擴充功能擋住），請改用清單檢視。</p>';return;}
+  if(!elderMap){
+    elderMap=L.map('elder-map',{preferCanvas:true}).setView([23.7,121],8);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(elderMap);
+    elderPins=L.layerGroup().addTo(elderMap);
+  }
+  elderMap.invalidateSize();
+  elderPins.clearLayers();
+  const located=rows.filter(r=>r.lat!==null&&r.lng!==null);
+  located.forEach(r=>{
+    const size=(r.today_status==='help_needed'||r.today_status==='no_response')?24:18;
+    const marker=L.marker([r.lat,r.lng],{icon:L.divIcon({className:'',iconSize:[size,size],iconAnchor:[size/2,size/2],
+      html:`<div class="pin" style="width:${size}px;height:${size}px;background:${PIN[r.today_status]||'#9ca9a0'}"></div>`})});
+    // 用 createTextNode 而不是樣板字串塞 HTML：名字是使用者可控的內容。
+    marker.bindTooltip(document.createTextNode(r.name + ' · ' + (statuses[r.today_status]||['未知'])[0]));
+    marker.on('click',()=>openDrawer(r.id));
+    elderPins.addLayer(marker);
+  });
+  if(located.length)elderMap.fitBounds(located.map(r=>[r.lat,r.lng]),{padding:[45,45],maxZoom:16});
+  const missing=rows.length-located.length;
+  $('elder-map-foot').innerHTML=Object.entries({ok:'平安',no_response:'未回應',help_needed:'需要協助',pending:'等待中',not_sent:'未發送'})
+    .map(([k,label])=>`<span><i style="background:${PIN[k]}"></i>${label}</span>`).join('')
+    +(missing?`<span style="margin-left:auto">${missing} 位沒有座標，不會出現在地圖上</span>`:'');
 }
 function applyOverviewFilter(){
   const q=$('overview-search').value;
@@ -305,6 +363,7 @@ document.querySelectorAll('[data-page]').forEach(el=>el.addEventListener('click'
 $('overview-search').addEventListener('input',applyOverviewFilter);
 $('elderly-search').addEventListener('input',applyElderFilters);
 document.querySelectorAll('[data-filter]').forEach(el=>el.addEventListener('click',()=>{overviewFilter=overviewFilter===el.dataset.filter?'':el.dataset.filter;applyOverviewFilter();}));
+document.querySelectorAll('#elder-view [data-elderview]').forEach(b=>b.addEventListener('click',()=>setElderView(b.dataset.elderview)));
 $('d-close').addEventListener('click',closeDrawer);
 $('scrim').addEventListener('click',closeDrawer);
 document.addEventListener('keydown',event=>{if(event.key==='Escape')closeDrawer();});

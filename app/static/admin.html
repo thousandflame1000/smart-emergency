@@ -158,6 +158,57 @@ body {
   background: rgba(201,54,75,.06); border-radius: var(--radius); }
 .risk-box .risk-title { font-size: 12px; font-weight: 700; color: var(--danger); margin-bottom: 8px; }
 .risk-names { display: flex; flex-wrap: wrap; gap: 6px; }
+.viewseg { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.viewseg button { border: 0; background: var(--card); color: var(--text-dim); padding: 6px 12px;
+  font: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; transition: all .12s; }
+.viewseg button + button { border-left: 1px solid var(--border); }
+.viewseg button:hover { background: var(--soft); color: var(--primary); }
+.viewseg button.on { background: var(--primary); color: #fff; }
+/* 照護網絡圖：資料天生是「長者 ↔ 聯絡人」的二分結構，所以左右分欄畫，
+   比力導向散佈圖更好讀，也看得出哪個聯絡人被掛了太多長者。 */
+.relgraph { padding: 6px 16px 14px; overflow-x: auto; }
+.relgraph svg { display: block; min-width: 620px; width: 100%; }
+.relgraph .edge { fill: none; stroke: #b9c7c0; stroke-width: 1.5; transition: stroke .12s, stroke-width .12s; }
+.relgraph .node { cursor: pointer; }
+.relgraph .node rect { fill: var(--card); stroke: var(--border); stroke-width: 1; rx: 4; transition: stroke .12s; }
+.relgraph .node:hover rect { stroke: var(--primary); }
+.relgraph .node text { font-size: 12px; fill: var(--text); dominant-baseline: middle; }
+.relgraph .node.elder rect { fill: var(--soft); }
+.relgraph .node.alone rect { fill: rgba(201,54,75,.07); stroke: rgba(201,54,75,.45); stroke-dasharray: 3 2; }
+.relgraph .node.alone text { fill: var(--danger); }
+.relgraph .col-label { font: 700 10px var(--mono); fill: var(--muted); letter-spacing: .1em; }
+.relgraph .order { font: 700 9.5px var(--mono); fill: var(--primary); }
+.relgraph .load { font: 700 9.5px var(--mono); fill: var(--warning); }
+.relgraph.dim .edge:not(.lit) { stroke: #e3e9e6; }
+.relgraph.dim .node:not(.lit) { opacity: .35; }
+/* 人員清單改成卡片：這些資料欄位常常是空的，排成六欄表格會整片都是「—」。 */
+.people-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 12px; padding: 14px 16px; }
+.person { position: relative; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); padding: 13px 14px; transition: border-color .12s, box-shadow .12s; }
+.person:hover { border-color: var(--border-bright); box-shadow: var(--shadow); }
+.person-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.person-name { font-size: 14px; font-weight: 700; }
+.person-roles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+.person-facts { margin-top: 11px; display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.person-facts div { display: flex; gap: 7px; color: var(--text-dim); }
+.person-facts .k { flex-shrink: 0; width: 15px; text-align: center; opacity: .75; }
+.person-facts a { color: var(--primary); text-decoration: none; }
+.person-facts a:hover { text-decoration: underline; }
+.person-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 5px; }
+.person .row-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px;
+  opacity: 0; transition: opacity .12s; background: var(--card); }
+.person:hover .row-actions, .person:focus-within .row-actions { opacity: 1; }
+/* 看板：依角色分欄堆疊，哪一欄高就代表那一類人多，不用自己數。 */
+.board { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; padding: 14px 16px; align-items: start; }
+.board-col { border: 1px solid var(--border); border-radius: var(--radius); background: rgba(23,32,28,.018); }
+.board-head { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 9px 12px; border-bottom: 1px solid var(--border); }
+.board-head span { font-size: 12px; font-weight: 700; }
+.board-head b { font: 700 11px var(--mono); color: var(--text-dim); }
+.board-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; min-height: 60px; }
+.board-body .person { padding: 10px 11px; }
+.board-body .person-name { font-size: 13px; }
+.board-empty { padding: 14px 4px; text-align: center; color: var(--muted); font-size: 11.5px; }
 
 /* ── Badges ── */
 .badge {
@@ -509,22 +560,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <input type="search" id="elderly-search" placeholder="搜尋姓名、電話或地址" aria-label="搜尋長者">
           <div id="elderly-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
-        <div class="table-wrap">
-          <table class="tbl" id="elderly-tbl">
-            <thead>
-              <tr>
-                <th>姓名</th>
-                <th>電話</th>
-                <th>地址</th>
-                <th>LINE 狀態</th>
-                <th>帳號狀態</th>
-                <th style="text-align:right">操作</th>
-              </tr>
-            </thead>
-            <tbody id="elderly-tbody">
-              <tr><td colspan="6"><div class="empty"><div class="spinner"></div></div></td></tr>
-            </tbody>
-          </table>
+        <div id="elderly-grid" class="people-grid">
+          <div class="empty"><div class="spinner"></div></div>
         </div>
       </div>
     </div>
@@ -563,22 +600,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <input type="search" id="volunteers-search" placeholder="搜尋姓名或電話" aria-label="搜尋成員">
           <div id="volunteers-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
-        <div class="table-wrap">
-          <table class="tbl">
-            <thead>
-              <tr>
-                <th>姓名</th>
-                <th>角色</th>
-                <th>電話</th>
-                <th>LINE 狀態</th>
-                <th>帳號狀態</th>
-                <th style="text-align:right">操作</th>
-              </tr>
-            </thead>
-            <tbody id="volunteers-tbody">
-              <tr><td colspan="6"><div class="empty"><div class="spinner"></div></div></td></tr>
-            </tbody>
-          </table>
+        <div id="volunteers-board" class="board">
+          <div class="empty"><div class="spinner"></div></div>
         </div>
       </div>
     </div>
@@ -594,10 +617,17 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <div class="card-title">照護關係設定</div>
             <div class="card-subtitle">長者未回應時，依順序通知對應聯絡人</div>
           </div>
-          <button class="btn btn-primary btn-sm" onclick="openRelationModal()">＋ 新增關係</button>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="viewseg" id="rel-view">
+              <button type="button" class="on" data-relview="graph">關係圖</button>
+              <button type="button" data-relview="list">清單</button>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="openRelationModal()">＋ 新增關係</button>
+          </div>
         </div>
         <div id="relations-risk"></div>
-        <div id="relations-groups" style="padding:12px 0 4px">
+        <div id="relations-graph"></div>
+        <div id="relations-groups" class="is-hidden" style="padding:12px 0 4px">
           <div class="empty"><div class="spinner"></div></div>
         </div>
       </div>
@@ -1713,6 +1743,20 @@ function rowActions(u) {
     <button class="btn btn-ghost-danger btn-sm" onclick="deleteUser('${u.id}',${esc(JSON.stringify(u.name))})">刪除</button>
   </div>`;
 }
+function personCard(u, { roles = false } = {}) {
+  const facts = [
+    u.phone   ? `<div><span class="k">☎</span><a href="tel:${esc(u.phone)}">${esc(u.phone)}</a></div>` : '',
+    u.address ? `<div><span class="k">◎</span><span>${esc(u.address)}</span></div>` : '',
+  ].join('');
+  return `<div class="person">
+    ${rowActions(u)}
+    <div class="person-top"><div class="person-name">${esc(u.name)}</div></div>
+    ${roles ? `<div class="person-roles">${u.roles.map(r =>
+      `<span class="badge ${ROLE_BADGE[r]||'badge-gray'}">${esc(ROLE_LABEL[r]||r)}</span>`).join('')}</div>` : ''}
+    ${facts ? `<div class="person-facts">${facts}</div>` : ''}
+    <div class="person-foot">${lineBadge(u)}${activeBadge(u)}</div>
+  </div>`;
+}
 let elderlyAll = [], elderlyFilter = '', volunteersAll = [], volunteerFilter = '';
 const ELDER_FILTERS = {
   bound:    { label: '已綁定 LINE', test: u => !!u.line_uid },
@@ -1740,23 +1784,15 @@ function renderElderly(data) {
   const hit = u => !q || [u.name, u.phone, u.address].some(v => (v || '').toLowerCase().includes(q));
   const rows = all.filter(u => (!elderlyFilter || ELDER_FILTERS[elderlyFilter].test(u)) && hit(u));
 
-  const tbody = document.getElementById('elderly-tbody');
+  const grid = document.getElementById('elderly-grid');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
       <div class="empty-icon">👴</div>
       <div class="empty-text">${all.length ? '這個條件下沒有長者，換個篩選或清掉搜尋字' : '尚未新增長者'}</div>
-    </div></td></tr>`;
+    </div>`;
     return;
   }
-  tbody.innerHTML = rows.map(u => `
-    <tr>
-      <td><strong>${esc(u.name)}</strong></td>
-      <td class="muted">${esc(u.phone) || '—'}</td>
-      <td class="muted" style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(u.address) || '—'}</td>
-      <td>${lineBadge(u)}</td>
-      <td>${activeBadge(u)}</td>
-      <td>${rowActions(u)}</td>
-    </tr>`).join('');
+  grid.innerHTML = rows.map(u => personCard(u)).join('');
 }
 
 // ════════════════════════════════════════════════
@@ -1784,23 +1820,29 @@ function renderVolunteers(data) {
   const hit = u => !q || [u.name, u.phone].some(v => (v || '').toLowerCase().includes(q));
   const rows = all.filter(u => (!volunteerFilter || u.roles.includes(volunteerFilter)) && hit(u));
 
-  const tbody = document.getElementById('volunteers-tbody');
+  const board = document.getElementById('volunteers-board');
   if (!rows.length) {
-    tbody.innerHTML = `<tr><td colspan="6"><div class="empty">
+    board.innerHTML = `<div class="empty" style="grid-column:1/-1">
       <div class="empty-icon">🙋</div>
       <div class="empty-text">${all.length ? '這個條件下沒有成員，換個篩選或清掉搜尋字' : '尚未新增志工或家屬'}</div>
-    </div></td></tr>`;
+    </div>`;
     return;
   }
-  tbody.innerHTML = rows.map(u => `
-    <tr>
-      <td><strong>${esc(u.name)}</strong></td>
-      <td>${u.roles.map(r => `<span class="badge ${ROLE_BADGE[r]||'badge-gray'}" style="margin-right:3px">${esc(ROLE_LABEL[r]||r)}</span>`).join('')}</td>
-      <td class="muted">${esc(u.phone) || '—'}</td>
-      <td>${lineBadge(u)}</td>
-      <td>${activeBadge(u)}</td>
-      <td>${rowActions(u)}</td>
-    </tr>`).join('');
+  // 依角色分欄；同時具備多個角色的人會出現在每一欄，因為每一欄問的是
+  //「這個角色現在有誰」，不是「把人分到互斥的格子裡」。
+  const cols = ['volunteer', 'family', 'field_staff'].filter(r => !volunteerFilter || r === volunteerFilter);
+  const other = rows.filter(u => !cols.some(r => u.roles.includes(r)));
+  board.innerHTML = cols.map(role => {
+    const list = rows.filter(u => u.roles.includes(role));
+    return `<div class="board-col">
+      <div class="board-head"><span>${esc(ROLE_LABEL[role] || role)}</span><b>${list.length}</b></div>
+      <div class="board-body">${list.length ? list.map(u => personCard(u)).join('')
+        : '<div class="board-empty">目前沒有人</div>'}</div>
+    </div>`;
+  }).join('') + (other.length ? `<div class="board-col">
+      <div class="board-head"><span>其他角色</span><b>${other.length}</b></div>
+      <div class="board-body">${other.map(u => personCard(u, { roles: true })).join('')}</div>
+    </div>` : '');
 }
 
 // ════════════════════════════════════════════════
@@ -2057,6 +2099,8 @@ async function loadRelations() {
           `<button class="btn btn-ghost btn-sm" onclick="openRelationModal('${u.id}')">${esc(u.name)}　＋ 設定聯絡人</button>`).join('')}</div>
       </div>` : '';
 
+    renderRelationGraph(rels, elderly);
+
     const groups = document.getElementById('relations-groups');
     if (!rels.length) {
       groups.innerHTML = `<div class="empty">
@@ -2128,6 +2172,97 @@ async function deleteRelation(id, elderly, contact) {
   if (!confirm(`確定刪除「${elderly} ↔ ${contact}」的照護關係？`)) return;
   await fetch(`/api/dashboard/relations/${id}`, { method: 'DELETE' });
   loadRelations();
+}
+
+// 手畫 SVG，不引進圖表函式庫：CDN 被擋掉時這頁的主畫面不該整個不見。
+function renderRelationGraph(rels, elderly) {
+  const host = document.getElementById('relations-graph');
+  const covered = new Set(rels.map(r => String(r.elderly_id)));
+  const alone = elderly.filter(u => !covered.has(String(u.id)));
+  const elderRows = [...new Map(rels.map(r => [String(r.elderly_id), r])).values()]
+    .map(r => ({ id: String(r.elderly_id), name: r.elderly_name }));
+  const contactRows = [...new Map(rels.map(r => [String(r.contact_id), r])).values()]
+    .map(r => ({ id: String(r.contact_id), name: r.contact_name }));
+
+  if (!elderRows.length && !alone.length) { host.innerHTML = ''; return; }
+
+  const GAP = 46, TOP = 34, BOXW = 150, BOXH = 30, LEFT = 24, RIGHT = 520;
+  const ALONE_COLS = 4, ALONE_GAP = 38;
+  const aloneRows = Math.ceil(alone.length / ALONE_COLS);
+  const rows = Math.max(elderRows.length, contactRows.length, alone.length ? 1 : 0);
+  const H = TOP + Math.max(rows, 1) * GAP + (alone.length ? aloneRows * ALONE_GAP + 34 : 0);
+  const yOf = (list, id) => TOP + list.findIndex(n => n.id === id) * GAP + BOXH / 2;
+
+  // 一個聯絡人被幾位長者指定 —— 掛太多人是單點風險，直接標在節點旁邊。
+  const load = {};
+  rels.forEach(r => { load[String(r.contact_id)] = (load[String(r.contact_id)] || 0) + 1; });
+
+  const edges = rels.map(r => {
+    const y1 = yOf(elderRows, String(r.elderly_id)), y2 = yOf(contactRows, String(r.contact_id));
+    const x1 = LEFT + BOXW, x2 = RIGHT, mid = (x1 + x2) / 2;
+    return `<path class="edge" data-e="${esc(String(r.elderly_id))}" data-c="${esc(String(r.contact_id))}"
+      d="M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}"/>
+      <text class="order" x="${mid}" y="${(y1 + y2) / 2 - 4}" text-anchor="middle">${r.notify_order}</text>`;
+  }).join('');
+
+  const box = (n, x, y, cls, extra = '') => `<g class="node ${cls}" data-id="${esc(n.id)}">
+    <rect x="${x}" y="${y - BOXH / 2}" width="${BOXW}" height="${BOXH}"/>
+    <text x="${x + 11}" y="${y}">${esc(n.name)}</text>${extra}</g>`;
+
+  const elderBoxes = elderRows.map(n => box(n, LEFT, yOf(elderRows, n.id), 'elder')).join('');
+  const contactBoxes = contactRows.map(n => {
+    const y = yOf(contactRows, n.id);
+    const count = load[n.id] || 0;
+    const tag = count > 1 ? `<text class="load" x="${RIGHT + BOXW - 10}" y="${y}" text-anchor="end">${count} 位</text>` : '';
+    return box(n, RIGHT, y, 'contact', tag);
+  }).join('');
+
+  const aloneTop = TOP + Math.max(rows, 1) * GAP + 18;
+  const aloneBoxes = alone.length
+    ? `<text class="col-label" x="${LEFT}" y="${aloneTop - 10}">沒有任何聯絡人 ${alone.length} 位 — 點一下直接設定</text>` +
+      alone.map((u, i) => box({ id: String(u.id), name: u.name },
+        LEFT + (i % ALONE_COLS) * (BOXW + 12),
+        aloneTop + Math.floor(i / ALONE_COLS) * ALONE_GAP + BOXH / 2, 'alone')).join('')
+    : '';
+
+  host.innerHTML = `<div class="relgraph">
+    <svg viewBox="0 0 ${RIGHT + BOXW + 24} ${H}" role="img" aria-label="照護關係網絡圖">
+      <text class="col-label" x="${LEFT}" y="18">長者</text>
+      <text class="col-label" x="${RIGHT}" y="18">聯絡人</text>
+      ${edges}${elderBoxes}${contactBoxes}${aloneBoxes}
+    </svg></div>`;
+
+  // 滑到節點時，把跟它無關的連線和節點壓暗，才看得出這個人到底連到誰。
+  const wrap = host.querySelector('.relgraph');
+  wrap.querySelectorAll('.node').forEach(node => {
+    const id = node.dataset.id;
+    node.addEventListener('mouseenter', () => {
+      wrap.classList.add('dim');
+      wrap.querySelectorAll('.edge').forEach(edge => {
+        const lit = edge.dataset.e === id || edge.dataset.c === id;
+        edge.classList.toggle('lit', lit);
+        if (lit) {
+          wrap.querySelector(`.node[data-id="${edge.dataset.e}"]`)?.classList.add('lit');
+          wrap.querySelector(`.node[data-id="${edge.dataset.c}"]`)?.classList.add('lit');
+        }
+      });
+      node.classList.add('lit');
+    });
+    node.addEventListener('mouseleave', () => {
+      wrap.classList.remove('dim');
+      wrap.querySelectorAll('.lit').forEach(el => el.classList.remove('lit'));
+    });
+    if (node.classList.contains('elder') || node.classList.contains('alone')) {
+      node.addEventListener('click', () => openRelationModal(id));
+    }
+  });
+}
+
+function setRelationView(view) {
+  document.getElementById('relations-graph').classList.toggle('is-hidden', view !== 'graph');
+  document.getElementById('relations-groups').classList.toggle('is-hidden', view !== 'list');
+  document.querySelectorAll('#rel-view [data-relview]').forEach(b =>
+    b.classList.toggle('on', b.dataset.relview === view));
 }
 
 async function moveRelation(id, direction) {
@@ -2268,6 +2403,8 @@ document.addEventListener('DOMContentLoaded', () => {
   if (es) es.addEventListener('input', () => renderElderly());
   const vs = document.getElementById('volunteers-search');
   if (vs) vs.addEventListener('input', () => renderVolunteers());
+  document.querySelectorAll('#rel-view [data-relview]').forEach(b =>
+    b.addEventListener('click', () => setRelationView(b.dataset.relview)));
 });
 
 async function addDocument() {
