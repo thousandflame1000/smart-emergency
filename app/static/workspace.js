@@ -17,7 +17,7 @@ function iconSvg(kind) { return `<svg viewBox="0 0 24 24" fill="none" stroke="cu
 const STATUS = {active:'啟用', inactive:'停用'};
 const state = {id:null, revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
   undo:[], redo:[], hidden:new Set(), report:null, connect:null, preview:null, editVersion:0, documentVersion:0, importVersion:0};
-let map, mapLayers, cy;
+let map, mapLayers, markerCluster, cy;
 let principalRoles = ['admin']; // 保守預設：拿到真正的角色前先當作管理員，載入完成後 init() 會校正。
 function isAdmin() { return principalRoles.includes('admin'); }
 function rememberWorkspace(id){try{if(id)localStorage.setItem('emergency:last-workspace',id);else localStorage.removeItem('emergency:last-workspace');}catch(e){}}
@@ -158,6 +158,7 @@ function renderSelection() {
 function renderCanvas() {
   if(!map)return;
   mapLayers.clearLayers();
+  markerCluster.clearLayers();
   const nodes=new Map(state.graph.nodes.filter(visible).map(n=>[n.id,n]));
   const critical=new Set(state.report?.critical_edges||[]);
   if(state.view==='map'){
@@ -166,11 +167,14 @@ function renderCanvas() {
       const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color,weight:state.selected?.id===e.id?6:2,dashArray:e.status==='inactive'?'5 5':'7 5'}).addTo(mapLayers);
       line.bindTooltip(document.createTextNode(`${e.label} · ${STATUS[e.status]}${e.directed?' · 有方向':''}`));line.on('click',event=>{L.DomEvent.stopPropagation(event);select('edge',e.id);});
     }
+    const markers=[];
     for(const n of nodes.values()){if(n.lat===null)continue;const size=n.kind==='incident'?26:22;
-      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}">${iconSvg(n.kind)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})}).addTo(mapLayers);
+      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}">${iconSvg(n.kind)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
       marker.bindTooltip(document.createTextNode(`${n.label} · ${TYPES[n.kind]}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});
+      markers.push(marker);
     }
+    markerCluster.addLayers(markers);
   }else renderGraph(nodes,critical);
 }
 function renderGraph(nodes,critical) {
@@ -228,7 +232,12 @@ async function init(){
   catch(e){/* 查不到身分就維持保守預設（管理員），不擋任何操作——伺服器端還是會照角色擋 */}
   map=L.map('map',{preferCanvas:true}).setView([23.7,121],7);
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
-  mapLayers=L.layerGroup().addTo(map);map.on('click',e=>addNode(e.latlng));
+  mapLayers=L.layerGroup().addTo(map);
+  // Thousands of individual markers (e.g. legacy road-node meshes) get slow to render and
+  // pan/zoom once on the map at once; cluster them so only nearby markers group into one
+  // DOM element until you zoom in. Edges stay in mapLayers (lines aren't clusterable).
+  markerCluster=L.markerClusterGroup({chunkedLoading:true, maxClusterRadius:60, spiderfyOnMaxZoom:true}).addTo(map);
+  map.on('click',e=>addNode(e.latlng));
   initComparison();
   initAllocation();
   initOperations();
