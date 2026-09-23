@@ -18,6 +18,7 @@ const STATUS = {active:'啟用', inactive:'停用'};
 const state = {id:null, revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
   undo:[], redo:[], hidden:new Set(), report:null, connect:null, preview:null, editVersion:0, documentVersion:0, importVersion:0};
 let map, mapLayers, markerCluster, cy;
+let roadHighlightEdges = new Set(), roadHighlightNodes = new Set();
 let principalRoles = ['admin']; // 保守預設：拿到真正的角色前先當作管理員，載入完成後 init() 會校正。
 function isAdmin() { return principalRoles.includes('admin'); }
 function rememberWorkspace(id){try{if(id)localStorage.setItem('emergency:last-workspace',id);else localStorage.removeItem('emergency:last-workspace');}catch(e){}}
@@ -163,13 +164,14 @@ function renderCanvas() {
   const critical=new Set(state.report?.critical_edges||[]);
   if(state.view==='map'){
     for(const e of state.graph.edges){const a=nodes.get(e.source),b=nodes.get(e.target);if(!a||!b||a.lat===null||b.lat===null)continue;
-      const color=state.selected?.id===e.id?'#eda51c':e.status==='inactive'?'#9ca9a0':critical.has(e.id)?'#9a5b9e':'#2c8fad';
-      const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color,weight:state.selected?.id===e.id?6:2,dashArray:e.status==='inactive'?'5 5':'7 5'}).addTo(mapLayers);
+      const roadHit=roadHighlightEdges.has(e.id);
+      const color=roadHit?'#e0218a':state.selected?.id===e.id?'#eda51c':e.status==='inactive'?'#9ca9a0':critical.has(e.id)?'#9a5b9e':'#2c8fad';
+      const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color,weight:roadHit?7:state.selected?.id===e.id?6:2,dashArray:e.status==='inactive'?'5 5':'7 5'}).addTo(mapLayers);
       line.bindTooltip(document.createTextNode(`${e.label} · ${STATUS[e.status]}${e.directed?' · 有方向':''}`));line.on('click',event=>{L.DomEvent.stopPropagation(event);select('edge',e.id);});
     }
     const markers=[];
     for(const n of nodes.values()){if(n.lat===null)continue;const size=n.kind==='incident'?26:22;
-      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}">${iconSvg(n.kind)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
+      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'} ${roadHighlightNodes.has(n.id)?'road-hit':''}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}">${iconSvg(n.kind)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
       marker.bindTooltip(document.createTextNode(`${n.label} · ${TYPES[n.kind]}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});
       markers.push(marker);
@@ -197,7 +199,29 @@ function renderGraph(nodes,critical) {
 }
 function arrangeGraph(){cy.layout({name:cy.nodes().length>600?'grid':'cose',animate:false,randomize:false,nodeRepulsion:8000,idealEdgeLength:95,avoidOverlap:true,nodeDimensionsIncludeLabels:true}).run();fit();}
 function fit(){if(state.view==='map'){const nodes=state.graph.nodes.filter(n=>visible(n)&&n.lat!==null);if(nodes.length)map.fitBounds(nodes.map(n=>[n.lat,n.lng]),{padding:[35,35],maxZoom:16,animate:false});}else if(cy){cy.resize();cy.fit(undefined,45);if(cy.zoom()>1.3){cy.zoom(1.3);cy.center();}}}
-function setView(view){state.view=view;$('map').hidden=view!=='map';$('graph').hidden=view!=='graph';$('locate').hidden=view!=='map';
+// Road nodes/edges imported from OSM carry no name on the point itself (just a raw OSM node
+// id) — the road name only lives on the edges connecting them. So "search a road" means
+// matching edge labels, then highlighting the edges and the nodes they touch.
+function searchRoad(query){
+  query=query.trim().toLowerCase();
+  if(!query){clearRoadHighlight();return;}
+  const matched=state.graph.edges.filter(e=>(e.label||'').toLowerCase().includes(query));
+  roadHighlightEdges=new Set(matched.map(e=>e.id));
+  roadHighlightNodes=new Set();
+  matched.forEach(e=>{roadHighlightNodes.add(e.source);roadHighlightNodes.add(e.target);});
+  $('road-search-clear').hidden=false;
+  $('road-search-result').hidden=false;
+  if(matched.length){
+    const pts=[...roadHighlightNodes].map(id=>nodeById(id)).filter(n=>n&&n.lat!==null).map(n=>[n.lat,n.lng]);
+    if(pts.length&&state.view==='map')map.fitBounds(pts,{padding:[50,50],maxZoom:17});
+    $('road-search-result').textContent=`「${query}」相關路段 ${matched.length} 條，節點 ${roadHighlightNodes.size} 個`;
+  } else {
+    $('road-search-result').textContent=`找不到符合「${query}」的道路`;
+  }
+  renderCanvas();
+}
+function clearRoadHighlight(){roadHighlightEdges=new Set();roadHighlightNodes=new Set();$('road-search-clear').hidden=true;$('road-search-result').hidden=true;renderCanvas();}
+function setView(view){state.view=view;$('map').hidden=view!=='map';$('graph').hidden=view!=='graph';$('locate').hidden=view!=='map';$('road-search').hidden=view!=='map';if(view!=='map')$('road-search-result').hidden=true;
   for(const v of ['map','graph']){$('view-'+v).classList.toggle('active',v===view);$('view-'+v).setAttribute('aria-pressed',String(v===view));}renderCanvas();if(view==='map')map.invalidateSize();fit();}
 function addNode(latlng,position){const kind=$('mode').value;if(!(kind in TYPES))return;const id=crypto.randomUUID();mutate(()=>{state.graph.nodes.push({id,label:`${TYPES[kind]} ${state.graph.nodes.filter(n=>n.kind===kind).length+1}`,kind,lat:latlng?+latlng.lat.toFixed(7):null,lng:latlng?+latlng.lng.toFixed(7):null,quantity:1,available:true,source:'手動建立',properties:position?{_layout:position}:{}});state.selected={type:'node',id};});}
 async function analyze(){const version=state.editVersion;message('正在分析關聯…');const report=await api('/analyze',{graph:state.graph});
@@ -238,6 +262,9 @@ async function init(){
   // DOM element until you zoom in. Edges stay in mapLayers (lines aren't clusterable).
   markerCluster=L.markerClusterGroup({chunkedLoading:true, maxClusterRadius:60, spiderfyOnMaxZoom:true}).addTo(map);
   map.on('click',e=>addNode(e.latlng));
+  $('road-search-go').onclick=()=>searchRoad($('road-search-input').value);
+  $('road-search-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchRoad($('road-search-input').value);}});
+  $('road-search-clear').onclick=()=>{$('road-search-input').value='';clearRoadHighlight();};
   initComparison();
   initAllocation();
   initOperations();

@@ -47,6 +47,10 @@ aside { padding: 18px 14px; overflow: auto; min-width: 0; }
 [hidden] { display: none !important; }
 .locate { position: absolute; z-index: 500; top: 12px; left: 55px; display: flex; padding: 3px; background: white; border-radius: 5px; border: 1px solid var(--line); max-width: calc(100% - 65px); }
 .locate input { width: 97px; border: 0; padding: 5px; }
+.road-search { position: absolute; z-index: 500; top: 12px; right: 12px; display: flex; padding: 3px; background: white; border-radius: 5px; border: 1px solid var(--line); }
+.road-search input { width: 140px; border: 0; padding: 5px; }
+.road-search-result { position: absolute; z-index: 500; top: 52px; right: 12px; max-width: 240px; padding: 7px 11px; background: white; border-radius: 5px; border: 1px solid var(--line); font-size: 13px; box-shadow: 0 2px 10px #263e2520; }
+.map-dot.road-hit { outline: 3px solid #e0218a; box-shadow: 0 0 0 4px rgba(224,33,138,.32), 0 1px 5px #0006; }
 .empty-state { position: absolute; z-index: 500; left: 50%; top: 46%; transform: translate(-50%, -50%); display: flex; gap: 12px; align-items: center; padding: 15px; background: white; border: 1px solid var(--line); border-radius: 6px; white-space: nowrap; box-shadow: 0 3px 18px #263e2520; }
 .connect-state { position: absolute; bottom: 28px; left: 12px; z-index: 500; padding: 8px 14px; border-radius: 4px; background: #253c31; color: white; }
 .map-dot { border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 5px #0006; display: flex; align-items: center; justify-content: center; }

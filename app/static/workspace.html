@@ -77,6 +77,12 @@
         <input id="center-lng" type="number" min="-180" max="180" step="any" placeholder="經度" aria-label="定位經度" required>
         <button title="定位" aria-label="定位"><i data-lucide="locate-fixed"></i></button>
       </form>
+      <div id="road-search" class="road-search">
+        <input id="road-search-input" type="search" placeholder="搜尋道路名稱" aria-label="搜尋道路名稱">
+        <button id="road-search-go" title="搜尋道路" aria-label="搜尋道路"><i data-lucide="search"></i></button>
+        <button id="road-search-clear" title="清除" aria-label="清除搜尋" hidden><i data-lucide="x"></i></button>
+      </div>
+      <div id="road-search-result" class="road-search-result" hidden></div>
       <div id="empty" class="empty-state"><strong>尚未載入事件資料</strong><button id="empty-db" class="primary">讀取平台現況</button><button id="empty-import">匯入檔案</button></div>
       <div id="connect-state" class="connect-state" hidden></div>
     </section>
