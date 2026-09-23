@@ -108,19 +108,22 @@ app.include_router(workspace.router, prefix="/api/workspaces", tags=["事件處�
 app.include_router(zones.router,     prefix="/api/zones",      tags=["分區"])
 
 
+_NO_CACHE = {"Cache-Control": "no-cache"}
+
+
 @app.get("/workspace")
 def workspace_page():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "workspace.html"))
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "workspace.html"), headers=_NO_CACHE)
 
 
 @app.get("/view/console", include_in_schema=False)
 def console_view():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "admin.html"))
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "admin.html"), headers=_NO_CACHE)
 
 
 @app.get("/view/dashboard", include_in_schema=False)
 def dashboard_view():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"))
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"), headers=_NO_CACHE)
 
 
 @app.get("/admin")
@@ -137,7 +140,7 @@ def health():
 
 @app.get("/")
 def dashboard():
-    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "site.html"))
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "site.html"), headers=_NO_CACHE)
 
 # 靜態資源
 @app.post("/api/system/rich-menu/install", tags=["System"])
@@ -212,6 +215,17 @@ def security_status():
         # 沒人登入、也沒開密碼閘時是「open」，後端本來就不分級，前端一律當作全權限。
         "roles": admin["roles"] if admin else (["admin"] if mode == "open" else []),
     }
+
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    """Static JS/CSS carry no Cache-Control by default, so browsers fall back to heuristic
+    freshness and can keep serving a pre-deploy copy well past a normal reload. Force
+    revalidation on every request instead (still cheap: ETag/Last-Modified make it a 304)."""
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 app.mount("/static", StaticFiles(directory=os.path.join(os.path.dirname(__file__), "static")), name="static")
