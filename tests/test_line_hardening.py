@@ -1082,7 +1082,9 @@ def test_user_facing_errors_do_not_leak_raw_status_codes(db):
     message = result.get("error", "")
     assert message, "狀態不符時應該要有錯誤訊息"
     assert "matched" not in message, f"原始狀態碼外洩到使用者訊息：{message}"
-    assert "已派遣" in message
+    # 對照單一來源，不要在測試裡再抄一份說法——那正是這批修正要消滅的東西。
+    from app.labels import need_status
+    assert need_status("matched") in message
 
 
 def test_placeholder_name_never_reaches_the_user(db, line_outbox, monkeypatch):

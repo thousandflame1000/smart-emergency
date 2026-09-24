@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>鄰里守望 — 管理後台</title>
 <script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
+<script src="/static/labels.js"></script>
 <style>.embed .sidebar { display: none !important; }</style>
 <style>
 /* ══════════════════════════════════════════════════════════
@@ -233,6 +234,8 @@ body {
 .badge-green  { background: rgba(24,118,90,.09);  color: var(--success); border-color: rgba(24,118,90,.28); }
 .badge-red    { background: rgba(201,54,75,.09);   color: var(--danger);  border-color: rgba(201,54,75,.28); }
 .badge-amber  { background: rgba(154,101,0,.09);  color: var(--warning); border-color: rgba(154,101,0,.28); }
+/* 側邊欄是深色的，裡面的徽章不能沿用為淺色底挑的色（待審數量原本只有 3.44:1）。 */
+.sidebar .badge-amber { background: rgba(224,165,58,.16); color: #e0a53a; border-color: rgba(224,165,58,.4); }
 .is-hidden { display: none !important; }
 .console { display:grid; grid-template-columns:minmax(0,1.6fr) minmax(340px,1fr);
            grid-template-areas:"ov ov" "main side" "help help"; gap:16px; align-items:start; }
@@ -2761,13 +2764,16 @@ const NEED_TYPE_ICON = { water:'💧', food:'🍱', first_aid:'🩹',
 const NEED_TYPE_LABEL = { water:'飲用水', food:'食物', first_aid:'急救用品', shelter:'庇護所',
                            vehicle:'交通工具', tool:'工具', other:'其他', demo_water:'飲用水（演練）',
                            sos:'緊急求助（需人工聯繫）' };
-const STATUS_BADGE = {
-  open:      '<span class="badge badge-amber">待媒合</span>',
-  suggested: '<span class="badge badge-red">⏳ 待確認</span>',
-  matched:   '<span class="badge badge-blue">已媒合</span>',
-  fulfilled: '<span class="badge badge-green">已完成</span>',
-  cancelled: '<span class="badge badge-gray">已取消</span>',
-};
+// 說法統一在 /static/labels.js，tooltip 講「接下來誰要動作」，
+// 免得使用者盯著「待核准」猜是誰在等誰。
+const STATUS_TONE = { open:'badge-amber', suggested:'badge-red', matched:'badge-blue',
+                      fulfilled:'badge-green', cancelled:'badge-gray' };
+function statusBadge(status) {
+  const label = (window.NEED_STATUS_LABEL || {})[status] || status;
+  const why = (window.NEED_STATUS_WHY || {})[status] || '';
+  return `<span class="badge ${STATUS_TONE[status] || 'badge-gray'}" title="${esc(why)}">${esc(label)}</span>`;
+}
+const STATUS_BADGE = new Proxy({}, { get: (_, key) => statusBadge(String(key)) });
 
 let allNeeds = [];
 let needStatusFilter = '';
@@ -3087,12 +3093,14 @@ async function deleteNeed(needId) {
 // Operational ontology labels
 // ════════════════════════════════════════════════
 function ontologyLabel(value) {
+  // 需求狀態一律查共用表，這裡不要再抄一份（先前這份留著舊說法，
+  // 同一個 suggested 在別的畫面叫「待核准」、在這裡叫「待確認」）。
+  if ((window.NEED_STATUS_LABEL || {})[value]) return window.NEED_STATUS_LABEL[value];
   const labels = {
     Person:'人員', Resource:'物資', ResourceRequest:'資源需求', Facility:'設施',
     Alert:'警報', CheckIn:'關懷回報', CareRelation:'照護關係', DecisionEvent:'決策紀錄',
     critical:'危急', high:'高', medium:'中', low:'低',
-    open:'待處理', suggested:'待確認', matched:'已媒合',
-    delivered:'已送達', cancelled:'已取消', true:'是', false:'否',
+    delivered:'已送達', true:'是', false:'否',
     owns:'持有', requests:'提出需求', matched_to:'媒合至', cares_for:'照護',
     has_alert:'警報', has_checkin:'回報', connects:'連接', located_at:'位於',
     manual_dispatch:'人工派遣', confirm_dispatch:'確認派遣', decline_suggestion:'拒絕建議',

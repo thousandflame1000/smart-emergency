@@ -1,5 +1,5 @@
 'use strict';
-const NEED_STATUS={open:'待處理',suggested:'待核准',matched:'執行中',fulfilled:'已完成',cancelled:'已取消'};
+const NEED_STATUS=window.NEED_STATUS_LABEL;   // 單一來源見 /static/labels.js
 const CHECKIN_STATUS={ok:'平安',safe:'平安',pending:'待回應',no_response:'未回應',help_needed:'需要協助',confirmed:'已確認'};
 const ROLE_NAMES={elderly:'長者',volunteer:'志工',family:'家屬',admin:'管理員'};
 const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'緯度',lng:'經度',address:'地址',is_available:'可用',
