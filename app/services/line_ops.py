@@ -56,7 +56,7 @@ def bubble(title: str, color: str, lines: list[str], buttons: list[dict] | None 
                   {"type": "message", "label": b["label"][:20], "text": b["text"]} if "text" in b else
                   {"type": "postback", "label": b["label"][:20], "data": b["data"]})
         footer.append({"type": "button", "height": "sm", "style": "primary" if i == 0 else "secondary",
-                       **({"color": b.get("color", "#27ae60")} if i == 0 else {}), "action": action})
+                       **({"color": b.get("color", "#1b7a44")} if i == 0 else {}), "action": action})
     out = {
         "type": "bubble", "size": "kilo",
         "header": {"type": "box", "layout": "vertical", "backgroundColor": color,
@@ -273,7 +273,7 @@ def admin_pending_needs(event, db: Session, user: User) -> None:
             buttons.append({"label": "看其他候選", "data": f"action=admin_cands&need_id={n.id}"})
         else:
             lines.append("⚠️ 目前沒有可用的志工物資")
-        bubbles.append(bubble("待派遣", "#e67e22", lines, buttons))
+        bubbles.append(bubble("待派遣", "#c2610a", lines, buttons))
     _flex(event, f"{len(needs)} 筆待派遣需求", carousel(bubbles))
 
 
@@ -628,7 +628,7 @@ def elder_status(event, db: Session, user: User) -> None:
                             "color": "#2471a3"})
         if checkin and checkin.status != "ok":
             buttons.append({"label": "✅ 我確認他平安", "data": f"action=confirm_safe&checkin_id={checkin.id}"})
-        bubbles.append(bubble(f"👴 {elder.name}", "#148f77" if checkin and checkin.status == "ok" else "#e67e22",
+        bubbles.append(bubble(f"👴 {elder.name}", "#148f77" if checkin and checkin.status == "ok" else "#c2610a",
                               [status, f"地址：{elder.address or '未填'}"], buttons))
     _flex(event, "長輩今日狀況", carousel(bubbles))
 

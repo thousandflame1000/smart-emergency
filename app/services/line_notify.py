@@ -151,7 +151,7 @@ def send_checkin_message(line_uid: str, checkin_id: str) -> None:
         "header": {
             "type": "box",
             "layout": "vertical",
-            "backgroundColor": "#27ACB2",
+            "backgroundColor": "#0d7f85",
             "contents": [
                 {"type": "text", "text": "鄰里守望", "color": "#ffffff",
                  "size": "sm", "weight": "bold"},
@@ -175,7 +175,7 @@ def send_checkin_message(line_uid: str, checkin_id: str) -> None:
                 {
                     "type": "button",
                     "style": "primary",
-                    "color": "#27ACB2",
+                    "color": "#0d7f85",
                     "height": "md",
                     "action": {
                         "type": "postback",
@@ -187,7 +187,7 @@ def send_checkin_message(line_uid: str, checkin_id: str) -> None:
                 {
                     "type": "button",
                     "style": "primary",
-                    "color": "#E69F00",
+                    "color": "#8a6000",
                     "height": "md",
                     "action": {
                         "type": "postback",
@@ -229,7 +229,7 @@ def send_alert_message(
         "no_response_1h": (
             f"⚠️ 關懷提醒",
             f"{elderly_name} 今天打卡超過 1 小時未回應，請確認是否安好。",
-            "#FF6B35",
+            "#c94317",
         ),
         "no_response_3h": (
             f"🚨 緊急關懷",
@@ -239,17 +239,17 @@ def send_alert_message(
         "help_needed": (
             f"🆘 需要幫忙",
             f"{elderly_name} 按下了「需要幫忙」，請盡快聯繫。",
-            "#FF6B35",
+            "#c94317",
         ),
         "unwell": (
             f"🤒 身體不舒服",
             f"{elderly_name} 今天回報身體不舒服，建議打個電話關心一下。",
-            "#E69F00",
+            "#8a6000",
         ),
     }
 
     title, body_text, color = messages.get(
-        alert_type, ("📢 通知", f"請確認 {elderly_name} 的狀況", "#27ACB2")
+        alert_type, ("📢 通知", f"請確認 {elderly_name} 的狀況", "#0d7f85")
     )
 
     flex = {
@@ -277,7 +277,7 @@ def send_alert_message(
                 {
                     "type": "button",
                     "style": "primary",
-                    "color": "#27ACB2",
+                    "color": "#0d7f85",
                     "action": {
                         "type": "postback",
                         "label": "✅ 已確認安全",
@@ -318,9 +318,9 @@ def build_task_bubble(
     ]
     if distance_km is not None:
         body_contents.append({"type": "text", "text": f"距離約 {distance_km:.1f} 公里",
-                              "size": "sm", "color": "#888888"})
+                              "size": "sm", "color": "#6d6d6d"})
     body_contents.append({"type": "text", "text": f"您可提供：{resource_name}",
-                          "wrap": True, "color": "#27ACB2"})
+                          "wrap": True, "color": "#0d7f85"})
     footer_contents = []
     if dest_lat is not None and dest_lng is not None:
         footer_contents.append({
@@ -338,7 +338,7 @@ def build_task_bubble(
         from app.services.form_token import form_url
         if not accepted:
             report_buttons.append({
-                "type": "button", "style": "primary", "color": "#e67e22", "height": "sm",
+                "type": "button", "style": "primary", "color": "#c2610a", "height": "sm",
                 "action": {"type": "postback", "label": "🙋 確認接單，我會出發",
                            "data": f"action=task_accept&need_id={need_id}"},
             })
@@ -352,7 +352,7 @@ def build_task_bubble(
         "header": {
             "type": "box",
             "layout": "vertical",
-            "backgroundColor": "#FF6B35",
+            "backgroundColor": "#c94317",
             "contents": [
                 {"type": "text", "text": "🚛 社區支援任務", "color": "#ffffff",
                  "size": "md", "weight": "bold"},
@@ -376,7 +376,7 @@ def build_task_bubble(
                     {
                         "type": "button",
                         "style": "primary",
-                        "color": "#27ACB2",
+                        "color": "#0d7f85",
                         "action": {
                             "type": "postback",
                             "label": "✅ 已送達",
@@ -399,7 +399,7 @@ def build_task_bubble(
     }
     if accepted:
         flex["body"]["contents"].insert(0, {"type": "text", "text": "🙋 您已確認接單", "size": "sm",
-                                            "color": "#27ae60", "weight": "bold"})
+                                            "color": "#1b7a44", "weight": "bold"})
     return flex
 
 
