@@ -1037,7 +1037,25 @@ def handle_follow(event: FollowEvent):
     user = db.query(User).filter(User.line_uid == line_uid).first()
     if not user:
         user = _register_user(db, line_uid)
-    _say(event, _welcome_text(user.name), ask_location=user.lat is None)
+    _send_welcome(event, user)
+
+
+def _send_welcome(event, user: User) -> None:
+    """歡迎詞後面直接附上填資料的表單。
+
+    先前只回一段文字加上「分享位置」的提示，於是一個剛加入的長輩，系統
+    只知道他的 LINE 暱稱——電話、地址一概沒有，而且他沒有任何管道可以補：
+    唯一會寫入那幾欄的路徑是「申請物資」表單。結果是要等到他開口要東西，
+    系統才知道他是誰、住哪裡。派遣演算法沒有位置配不出人，家屬通知沒有
+    電話打不了。資料要在平時就進來，不是等出事才補。
+    """
+    from app.services.form_token import form_url
+    from app.services.line_notify import reply_flex_message
+    reply_flex_message(event.reply_token, "歡迎加入鄰里守望", line_ops.bubble(
+        "👋 歡迎加入鄰里守望", "#1b7a44",
+        [_welcome_text(user.name, with_location_hint=False),
+         "先花一分鐘留下聯絡方式，需要幫忙時志工才找得到您。"],
+        [{"label": "📇 填寫我的資料", "uri": form_url("profile", user.line_uid)}]))
 
 
 @handler.add(MessageEvent, message=LocationMessageContent)

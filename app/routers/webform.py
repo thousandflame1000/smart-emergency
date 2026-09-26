@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 FORM_PAGE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "form.html")
-KINDS = {"need", "res", "apply", "report", "me"}
+KINDS = {"need", "res", "apply", "report", "me", "profile"}
 NEED_CHOICES = {"water", "food", "first_aid", "shelter", "vehicle"}
 PHONE_RE = re.compile(r"^[0-9+\-()\s]{7,20}$")
 
@@ -230,8 +230,18 @@ def my_records(t: str, db: Session = Depends(get_db)):
              .order_by(CommunityNeed.created_at.desc()).limit(30).all())
     contacts = db.query(CareRelation).filter(CareRelation.elderly_id == user.id, CareRelation.is_active == True).all()  # noqa: E712
     elders = db.query(CareRelation).filter(CareRelation.contact_id == user.id, CareRelation.is_active == True).all()  # noqa: E712
+    from app.labels import is_placeholder_name
     out = {
         "name": user.name, "is_staff": _is_staff(user),
+        # 讓人看得到、也改得到自己的資料。先前這些只在「申請物資」表單裡出現，
+        # 所以一個剛加好友的長輩，在他開口要東西之前，系統永遠不知道他住哪、
+        # 電話幾號——而「平時就累積資料」正是這套系統的主張。
+        "profile": {
+            "name": "" if is_placeholder_name(user.name) else (user.name or ""),
+            "phone": user.phone or "",
+            "address": user.address or "",
+            "has_location": user.lat is not None and user.lng is not None,
+        },
         "needs": [{"id": str(n.id), "type": NEED_ZH.get(n.need_type, n.need_type),
                    "status_zh": STATUS_ZH.get(n.status, n.status), "description": n.description,
                    "created": _tw(n.created_at), "can_cancel": n.status in ("open", "suggested", "matched")}
@@ -249,6 +259,30 @@ def my_records(t: str, db: Session = Depends(get_db)):
         out["tasks"] = [{**tk, "report_url": form_url("report", user.line_uid, tk["need_id"])}
                         for tk in dispatch.list_my_tasks(user, db)]
     return out
+
+
+@router.post("/api/profile")
+def save_my_profile(form: _Base, db: Session = Depends(get_db)):
+    """住戶自己填姓名、電話、地址，不必先提出需求。
+
+    先前唯一能寫入這三欄的路徑是送出「申請物資」表單，於是剛加入的人
+    要一直等到他開口要東西，系統才知道他是誰、住哪裡。派遣演算法沒有
+    地址就配不出人，家屬通知沒有電話就打不了——平時該有的資料，平時要能填。
+    """
+    from app.services import places
+    user = _user_from_token(db, form.t)
+    address = _apply_profile(user, form)
+    if address and address != user.address:
+        user.address = address
+        found = places.geocode_address(address)
+        if found:
+            user.lat, user.lng = found
+    db.commit()
+    located = user.lat is not None and user.lng is not None
+    reply = ("✅ 已存好您的資料。" if located else
+             "✅ 已存好您的資料。還差一步：請點下面的按鈕分享位置，志工才找得到您。")
+    _notify(user, reply, not located)
+    return {"ok": True, "message": reply, "need_location": not located}
 
 
 @router.post("/api/cancel_need")

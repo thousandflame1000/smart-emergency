@@ -87,6 +87,10 @@ from app.services.line_notify import send_task_message
 # ──────────────────────────────────────────────────────────
 TYPE_AFFINITY: dict[str, list[tuple[str, float]]] = {
     "water":     [("water", 1.0), ("food", 0.25)],
+    # demo_water 有中文標籤（顯示成「飲用水」），卻一直沒有進這張表。結果是這種
+    # 需求在畫面上看起來完全正常，候選卻永遠是空的，而且不會有任何錯誤訊息——
+    # 正式環境六筆需求就是這樣靜靜地永遠派不出去。缺一列表格就是一條死路。
+    "demo_water": [("water", 1.0), ("food", 0.25)],
     "food":      [("food", 1.0), ("water", 0.25)],
     "first_aid": [("first_aid", 1.0)],
     "shelter":   [("shelter", 1.0)],

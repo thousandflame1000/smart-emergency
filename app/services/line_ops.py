@@ -30,7 +30,8 @@ logger = logging.getLogger(__name__)
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
 ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
-RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "我的紀錄", "刪除我的帳號", "刪除帳號"}
+RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "我的紀錄",
+                     "我的資料", "個人資料", "修改資料", "刪除我的帳號", "刪除帳號"}
 ROLE_CENTER_COMMANDS = {"居民中心", "志工中心", "決策中心"}
 MAINTENANCE_COMMANDS = {"更新選單"}
 COMMAND_WORDS = (VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
@@ -127,7 +128,7 @@ def resident_center(event, db: Session, user: User) -> None:
         ["先處理眼前需要；不確定需求類型時，選「申請需求」即可一次填寫。"],
         [{"label": "申請需求", "text": "申請物資"},
          {"label": "查看進度", "text": "我的需求"},
-         {"label": "我的紀錄", "text": "我的紀錄"}],
+         {"label": "我的資料", "text": "我的資料"}],
     )]
     if "family" in (user.roles or []):
         cards.append(bubble(
@@ -686,6 +687,17 @@ def cancel_my_needs(event, db: Session, user: User) -> None:
          if active else "您目前沒有進行中的需求。")
 
 
+def my_profile_link(event, user: User) -> None:
+    """填過一次之後還是要改得了——搬家、換電話都會發生。"""
+    from app.services.form_token import form_url
+    missing = [n for n, v in (("電話", user.phone), ("地址", user.address)) if not v]
+    lines = ["姓名、電話、地址。需要幫忙時，志工靠這些找到您。"]
+    if missing:
+        lines.append("目前還缺：" + "、".join(missing))
+    _flex(event, "我的資料", bubble("📇 我的資料", "#1b7a44", lines,
+                                 [{"label": "填寫／修改", "uri": form_url("profile", user.line_uid)}]))
+
+
 def my_records_link(event, user: User) -> None:
     from app.services.form_token import form_url
     _flex(event, "我的紀錄", bubble("📁 我的紀錄", "#2c3e50",
@@ -752,6 +764,8 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
         elder_status(event, db, user)
     elif text == "我的紀錄":
         my_records_link(event, user)
+    elif text in ("我的資料", "個人資料", "修改資料"):
+        my_profile_link(event, user)
     elif text in ("刪除我的帳號", "刪除帳號"):
         ask_delete_me(event, db, user)
     else:

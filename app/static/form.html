@@ -153,6 +153,7 @@
     res:   { title: '📦 登記可提供物資', sub: '謝謝您願意分享物資', action: '/f/api/resource', btn: '送出登記' },
     report: { title: '📝 回報任務現況', sub: '寫下現場狀況，管理員會收到通知', action: '/f/api/report', btn: '送出回報' },
     me:    { title: '📁 我的紀錄', sub: '需求、家人、物資與任務', action: '', btn: '' },
+    profile: { title: '📇 我的資料', sub: '留下聯絡方式，志工才找得到您', action: '/f/api/profile', btn: '儲存' },
     apply: { title: '🙋 志工申請', sub: '謝謝您願意幫忙，管理員審核後會通知您', action: '/f/api/apply', btn: '送出申請' }
   };
   var TYPES = [['water','💧 飲用水'],['food','🍱 食物'],['first_aid','🩹 藥品／急救'],['shelter','🏠 庇護所'],['vehicle','🚗 交通接送']];
@@ -348,6 +349,10 @@
       body = { t: TOKEN, need_id: NEED_ID, outcome: document.querySelector('input[name=outcome]:checked').value,
                note: $('report_note').value };
       if (body.outcome === 'issue' && !body.note.trim()) { showError('請寫下現場發生了什麼事。'); return; }
+    } else if (KIND === 'profile') {
+      if (!body.name.trim()) { showError('請填寫姓名。'); return; }
+      // 沒有地址就轉不出座標，派遣演算法看不到這個人——所以這裡是必填。
+      if (!body.address.trim()) { showError('請填寫地址，需要幫忙時志工才找得到您。'); return; }
     } else {
       body.service_area = $('service_area').value;
       if (!body.name.trim()) { showError('請填寫姓名。'); return; }
