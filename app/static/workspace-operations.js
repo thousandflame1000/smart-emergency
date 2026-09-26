@@ -2,7 +2,7 @@
 const NEED_STATUS=window.NEED_STATUS_LABEL;   // 單一來源見 /static/labels.js
 const CHECKIN_STATUS={ok:'平安',safe:'平安',pending:'待回應',no_response:'未回應',help_needed:'需要協助',confirmed:'已確認'};
 const ROLE_NAMES={elderly:'長者',volunteer:'志工',family:'家屬',admin:'管理員'};
-const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'緯度',lng:'經度',address:'地址',is_available:'可用',
+const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'位置',lng:'位置',address:'地址',is_available:'可用',
   capacity:'容量',phone:'電話',operating_hours:'開放時間'};
 const POINT_TYPE_LABELS={shelter:'避難收容所',community:'里民活動中心',hospital:'醫療院所',fire_station:'消防分隊',
   police:'警察局/派出所',store:'物資分發點',warehouse:'物資倉庫',clinic:'衛生所',other:'其他'};
@@ -142,13 +142,14 @@ async function editInventory(node){
     (create&&point?`<label>資源點類型<select id="inventory-point-type">${options(POINT_TYPE_LABELS,staged?.point_type||'other')}</select></label>`:'')+
     `<label>名稱<input id="inventory-name" maxlength="200" required value="${escapeHtml(values.name)}"></label>`+
     (!point?`<label>數量與單位<input id="inventory-quantity" maxlength="80" required value="${escapeHtml(values.quantity)}"></label>`:'')+
-    `<div class="form-grid"><label>緯度<input id="inventory-lat" type="number" min="-90" max="90" step="any" value="${values.lat??''}"></label><label>經度<input id="inventory-lng" type="number" min="-180" max="180" step="any" value="${values.lng??''}"></label></div><label>地址<input id="inventory-address" maxlength="500" value="${escapeHtml(values.address)}"></label>`+
+    `<label>地址<input id="inventory-address" maxlength="500" value="${escapeHtml(values.address)}"></label>`+
     (!point?`<label class="checkbox-label"><input id="inventory-available" type="checkbox" ${values.is_available?'checked':''}>物資可用</label>`
       :`<div class="form-grid"><label>容量<input id="inventory-capacity" type="number" min="0" step="1" value="${values.capacity??''}"></label><label>電話<input id="inventory-phone" maxlength="40" value="${escapeHtml(values.phone||'')}"></label></div><label>開放時間<input id="inventory-hours" maxlength="100" value="${escapeHtml(values.operating_hours||'')}"></label>`);
   $('inventory-form').onsubmit=event=>{
     event.preventDefault();
-    const next={name:$('inventory-name').value,lat:$('inventory-lat').value===''?null:Number($('inventory-lat').value),
-      lng:$('inventory-lng').value===''?null:Number($('inventory-lng').value),address:$('inventory-address').value};
+    // 位置沿用這個節點現有的座標——表單不再要人手填小數點，改用拖曳地圖圖示。
+    const next={name:$('inventory-name').value,lat:node.lat??null,lng:node.lng??null,
+      address:$('inventory-address').value};
     if(point)Object.assign(next,{capacity:$('inventory-capacity').value===''?null:Number($('inventory-capacity').value),
       phone:$('inventory-phone').value,operating_hours:$('inventory-hours').value});
     else Object.assign(next,{quantity:$('inventory-quantity').value,is_available:$('inventory-available').checked});

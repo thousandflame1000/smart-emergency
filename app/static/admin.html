@@ -1126,16 +1126,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <input type="text" class="form-control" id="need-address" placeholder="花蓮縣光復鄉大進街…" oninput="scheduleGeocode('need')" onblur="geocodeNow('need')">
         <span class="form-hint" id="need-geocode-status"></span>
       </div>
-      <div class="form-row col-2">
-        <div class="form-group">
-          <label class="form-label" for="need-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
-          <input type="number" step="0.0001" class="form-control" id="need-lat" placeholder="24.1234">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="need-lng">經度</label>
-          <input type="number" step="0.0001" class="form-control" id="need-lng" placeholder="120.6789">
-        </div>
-      </div>
+      <!-- 座標由地址自動轉出。「23.334300000000002」不是人類可讀的資訊，
+           填錯了也沒有人看得出來；定位結果一律用上面那行狀態文字交代。 -->
+      <input type="hidden" id="need-lat"><input type="hidden" id="need-lng">
       <div class="form-group">
         <label class="form-label" for="need-requester">登記人（選填）</label>
         <select class="form-select" id="need-requester">
@@ -1243,16 +1236,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <button type="button" class="btn btn-ghost-danger btn-sm is-hidden" id="user-unbind-btn" onclick="unlinkLine()">解除綁定</button>
         </div>
       </div>
-      <div class="form-row col-2">
-        <div class="form-group">
-          <label class="form-label" for="user-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
-          <input type="number" step="0.0001" class="form-control" id="user-lat" placeholder="24.1234">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="user-lng">經度</label>
-          <input type="number" step="0.0001" class="form-control" id="user-lng" placeholder="120.6789">
-        </div>
-      </div>
+      <!-- 座標由地址自動轉出。「23.334300000000002」不是人類可讀的資訊，
+           填錯了也沒有人看得出來；定位結果一律用上面那行狀態文字交代。 -->
+      <input type="hidden" id="user-lat"><input type="hidden" id="user-lng">
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-user')">取消</button>
@@ -1341,16 +1327,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <input type="text" class="form-control" id="pt-address" placeholder="花蓮縣光復鄉…" oninput="scheduleGeocode('pt')" onblur="geocodeNow('pt')">
         <span class="form-hint" id="pt-geocode-status"></span>
       </div>
-      <div class="form-row col-2">
-        <div class="form-group">
-          <label class="form-label" for="pt-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
-          <input type="number" step="0.0001" class="form-control" id="pt-lat" placeholder="24.1234">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="pt-lng">經度</label>
-          <input type="number" step="0.0001" class="form-control" id="pt-lng" placeholder="120.6789">
-        </div>
-      </div>
+      <!-- 座標由地址自動轉出。「23.334300000000002」不是人類可讀的資訊，
+           填錯了也沒有人看得出來；定位結果一律用上面那行狀態文字交代。 -->
+      <input type="hidden" id="pt-lat"><input type="hidden" id="pt-lng">
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="pt-capacity">容量（人數）</label>
@@ -1433,16 +1412,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <label class="form-label" for="res-note">備註</label>
         <input type="text" class="form-control" id="res-note">
       </div>
-      <div class="form-row col-2">
-        <div class="form-group">
-          <label class="form-label" for="res-lat">緯度<span class="form-hint">（打完地址自動帶入，不用手填）</span></label>
-          <input type="number" step="0.0001" class="form-control" id="res-lat">
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="res-lng">經度</label>
-          <input type="number" step="0.0001" class="form-control" id="res-lng">
-        </div>
-      </div>
+      <!-- 座標由地址自動轉出。「23.334300000000002」不是人類可讀的資訊，
+           填錯了也沒有人看得出來；定位結果一律用上面那行狀態文字交代。 -->
+      <input type="hidden" id="res-lat"><input type="hidden" id="res-lng">
     </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('modal-resource')">取消</button>
@@ -1506,8 +1478,10 @@ function esc(s) {
 // 這個數字，結果就是留空，留空的紀錄永遠配不到任何候選（本輪從
 // "急需用水"/"水分" 這兩筆卡死的需求上實際踩到）。改成打完地址、
 // 游標移開就自動用既有的 Nominatim 代理（/api/workspaces/places，
-// 工作區選地區功能本來就在用）查座標帶進去，緯經度欄位仍然保留、
-// 可以手動覆蓋，不是拿掉，只是不再要求「必須」手填。
+// 工作區選地區功能本來就在用）查座標帶進去。
+// 欄位後來改成 hidden：一串像「23.334300000000002」的小數不是人類可讀的
+// 資訊，放在畫面上沒有人看得懂，填錯了也沒有人查得出來。定位成功與否改用
+// 地址欄下面那行狀態文字交代（「✅ 已定位：○○」／「找不到這個地址」）。
 // ════════════════════════════════════════════════
 // ── 時間顯示：資料庫時間是 UTC，畫面一律轉成台灣時間（+8）──
 function twTime(value, withSeconds = false) {
@@ -1585,7 +1559,7 @@ async function geocodeNow(prefix) {
     const data = await res.json();
     const places = data.places || [];
     if (!res.ok || !places.length) {
-      if (statusEl) statusEl.textContent = '⚠️ 找不到座標，請確認地址或直接手動輸入緯度／經度';
+      if (statusEl) statusEl.textContent = '⚠️ 找不到這個地址。請寫完整一點（加上縣市與鄉鎮），或改用附近明顯的地標。';
       return;
     }
     const top = places[0];
@@ -1595,7 +1569,7 @@ async function geocodeNow(prefix) {
     if (lngEl) lngEl.value = top.lng.toFixed(6);
     if (statusEl) statusEl.textContent = `✅ 已定位：${esc(top.name)}`;
   } catch (e) {
-    if (statusEl) statusEl.textContent = '⚠️ 定位服務暫時無法使用，請直接手動輸入緯度／經度';
+    if (statusEl) statusEl.textContent = '⚠️ 定位服務暫時無法使用，稍後再試一次；地址仍會照常存下來。';
   }
 }
 

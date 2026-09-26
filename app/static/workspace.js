@@ -144,13 +144,15 @@ function renderSelection() {
   if(item.id.startsWith('db:')){renderOperationalSelection(item,isNode);return;}
   el.innerHTML=`<form id="edit-form"><label>名稱<input id="edit-label" value="${escapeHtml(item.label)}" maxlength="300" required></label>
     <label>類型<select id="edit-kind">${options(isNode?TYPES:RELATIONS,item.kind)}</select></label>
-    ${isNode?`<div class="form-grid"><label>緯度<input id="edit-lat" type="number" step="any" min="-90" max="90" value="${item.lat??''}"></label><label>經度<input id="edit-lng" type="number" step="any" min="-180" max="180" value="${item.lng??''}"></label></div><label>${item.kind==='facility'?'已確認可用容量':'數量'}<input id="edit-quantity" type="number" step="any" min="0" max="1000000000" value="${item.quantity}" required></label><label class="checkbox-label"><input id="edit-available" type="checkbox" ${item.available?'checked':''}>納入分析</label>`:
+    ${isNode?`<p class="muted">位置：${item.lat==null?'尚未定位':'已定位，直接拖曳地圖上的圖示即可調整'}</p><label>${item.kind==='facility'?'已確認可用容量':'數量'}<input id="edit-quantity" type="number" step="any" min="0" max="1000000000" value="${item.quantity}" required></label><label class="checkbox-label"><input id="edit-available" type="checkbox" ${item.available?'checked':''}>納入分析</label>`:
     `<label>起點<select id="edit-source" required>${nodeOptions(item.source)}</select></label><label>終點<select id="edit-target" required>${nodeOptions(item.target)}</select></label><label>狀態<select id="edit-status">${options(STATUS,item.status)}</select></label><label class="checkbox-label"><input id="edit-directed" type="checkbox" ${item.directed?'checked':''}>具方向性</label>`}
     <div class="actions"><button type="submit" class="primary">套用變更</button><button type="button" id="delete-selected" class="danger" title="刪除選取項目" aria-label="刪除選取項目"><i data-lucide="trash-2"></i></button></div>
     ${isNode&&item.properties.operational_status==='unknown'?'<div class="muted">公開地圖設施；營運狀態、容量與庫存未提供。</div>':''}<div class="muted">${escapeHtml(isNode?item.source:item.provenance)}</div><details><summary>原始屬性與識別碼</summary><pre>${escapeHtml(item.id+'\n'+JSON.stringify(item.properties,null,2))}</pre></details></form>`;
   $('edit-form').onsubmit=event=>{event.preventDefault();
     const patch={label:$('edit-label').value,kind:$('edit-kind').value};
-    if(isNode){Object.assign(patch,{lat:$('edit-lat').value===''?null:+$('edit-lat').value,lng:$('edit-lng').value===''?null:+$('edit-lng').value,quantity:+$('edit-quantity').value,available:$('edit-available').checked});if((patch.lat===null)!==(patch.lng===null)){message('經緯度必須成對提供',true);return;}}
+    // 位置不在這張表單裡改：拖曳地圖上的圖示（見 marker 的 dragend）才是人的用法，
+    // 手填小數點座標沒有人看得懂，填錯了也沒有人查得出來。
+    if(isNode){Object.assign(patch,{quantity:+$('edit-quantity').value,available:$('edit-available').checked});}
     else {Object.assign(patch,{source:$('edit-source').value,target:$('edit-target').value,status:$('edit-status').value,directed:$('edit-directed').checked});if(patch.source===patch.target){message('起點與終點不能相同',true);return;}}
     mutate(()=>Object.assign(item,patch));message('已更新，分析結果待重算');};
   $('delete-selected').onclick=()=>mutate(()=>{if(isNode){state.graph.nodes=state.graph.nodes.filter(n=>n.id!==item.id);state.graph.edges=state.graph.edges.filter(e=>e.source!==item.id&&e.target!==item.id);}else state.graph.edges=state.graph.edges.filter(e=>e.id!==item.id);state.selected=null;});
@@ -238,7 +240,7 @@ function invalidatePreview(){state.importVersion++;state.preview=null;$('apply-i
 function mappingFields(){invalidatePreview();const format=$('import-format').value,text=$('import-content').value;let fields=[];
   try{if(format==='csv')fields=Papa.parse(text,{header:true,preview:1,skipEmptyLines:true}).meta.fields||[];
     else if(format==='geojson'){const data=JSON.parse(text);fields=Object.keys((data.features?.[0]||data).properties||{});}}catch(e){fields=[];}
-  const relation=$('import-kind').value==='relations';const names=relation?{id:'識別碼',label:'名稱',source:'起點識別碼',target:'終點識別碼',kind:'關係類型'}:{id:'識別碼',label:'名稱',lat:'緯度',lng:'經度',quantity:'數量',item:'品項',unit:'單位',priority:'需求優先級',dispatch_limit:'出貨上限'};
+  const relation=$('import-kind').value==='relations';const names=relation?{id:'識別碼',label:'名稱',source:'起點識別碼',target:'終點識別碼',kind:'關係類型'}:{id:'識別碼',label:'名稱',lat:'緯度（匯入檔欄位）',lng:'經度（匯入檔欄位）',quantity:'數量',item:'品項',unit:'單位',priority:'需求優先級',dispatch_limit:'出貨上限'};
   const aliases={id:['id','ID','識別碼','編號'],label:['label','name','名稱','姓名','物資名稱','機構名稱'],lat:['lat','latitude','緯度','緯度座標'],lng:['lng','lon','longitude','經度','經度座標'],quantity:['quantity','數量','庫存'],item:['item','品項'],unit:['unit','單位'],priority:['priority','優先級','需求優先級'],dispatch_limit:['dispatch_limit','出貨上限'],source:['source','from','起點'],target:['target','to','終點'],kind:['kind','type','類型']};
   $('field-mapping').innerHTML=format==='json'?'':Object.entries(names).filter(([k])=>format==='csv'||!['lat','lng'].includes(k)).map(([key,label])=>{const guess=fields.find(f=>aliases[key].includes(f));return `<label>${label}<select data-field="${key}"><option value="">使用預設值</option>${fields.map(f=>`<option value="${escapeHtml(f)}" ${f===guess?'selected':''}>${escapeHtml(f)}</option>`).join('')}</select></label>`;}).join('');
   $('field-mapping').querySelectorAll('select').forEach(s=>s.onchange=invalidatePreview);
@@ -249,7 +251,7 @@ async function previewImport(event){event.preventDefault();$('preview-import').d
     const result=await api('/import-preview',{format:$('import-format').value,kind:$('import-kind').value,content:$('import-content').value,source:$('import-source').value||'匯入資料',mapping,base:$('import-replace').checked?{nodes:[],edges:[]}:state.graph});
     if(importVersion!==state.importVersion)return;
     state.preview=result;state.previewVersion=state.editVersion;
-    $('import-result').innerHTML=`<strong>新增 ${result.added_nodes} 個物件、${result.added_edges} 條連線</strong>${result.warnings.map(w=>`<p>${escapeHtml(w)}</p>`).join('')}<table class="preview-table"><tr><th>名稱</th><th>類型</th><th>經緯度</th></tr>${result.graph.nodes.slice(-5).map(n=>`<tr><td>${escapeHtml(n.label)}</td><td>${TYPES[n.kind]}</td><td>${n.lat??'無'} / ${n.lng??'無'}</td></tr>`).join('')}</table>`;$('apply-import').disabled=false;
+    $('import-result').innerHTML=`<strong>新增 ${result.added_nodes} 個物件、${result.added_edges} 條連線</strong>${result.warnings.map(w=>`<p>${escapeHtml(w)}</p>`).join('')}<table class="preview-table"><tr><th>名稱</th><th>類型</th><th>定位</th></tr>${result.graph.nodes.slice(-5).map(n=>`<tr><td>${escapeHtml(n.label)}</td><td>${TYPES[n.kind]}</td><td>${n.lat==null?'⚠️ 無位置，不會被媒合':'✅ 已定位'}</td></tr>`).join('')}</table>`;$('apply-import').disabled=false;
   }catch(e){$('import-result').textContent=e.message;}finally{$('preview-import').disabled=false;}}
 function exportDocument(){const data={format:'smart-emergency-workspace-v1',name:$('workspace-name').value,graph:state.graph,baseline:state.baseline||null};const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=($('workspace-name').value||'工作區')+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 async function init(){
@@ -277,7 +279,21 @@ async function init(){
   run('export',exportDocument);run('analyze',analyze);
   $('workspace-list').onchange=async()=>{const id=$('workspace-list').value;if(!id){$('workspace-list').value=state.id||'';return;}if(!discardConfirmed()){$('workspace-list').value=state.id||'';return;}try{loadDocument(await api('/'+id));message('已載入工作區');}catch(e){message(e.message,true);}};
   $('workspace-name').oninput=changed;$('search').oninput=renderObjects;$('mode').onchange=()=>{state.connect=null;render();};
-  $('locate').onsubmit=e=>{e.preventDefault();map.setView([+$('center-lat').value,+$('center-lng').value],15);};
+  $('locate').onsubmit=async e=>{
+    e.preventDefault();
+    const q=$('locate-place').value.trim(); const box=$('locate-status');
+    if(!q)return;
+    const say=(text,bad)=>{box.textContent=text;box.hidden=false;box.classList.toggle('error',!!bad);};
+    say('搜尋中…');
+    try{
+      const res=await fetch('/api/workspaces/places?q='+encodeURIComponent(q));
+      const places=(await res.json()).places||[];
+      if(!res.ok||!places.length){say(`找不到「${q}」。試試加上縣市鄉鎮，或改用附近明顯的地標。`,true);return;}
+      const top=places[0];
+      map.setView([top.lat,top.lng],15);
+      say(`已跳到：${top.name}`);
+    }catch(err){say('地點查詢暫時無法使用，稍後再試。',true);}
+  };
   $('import-form').onsubmit=previewImport;$('import-content').oninput=mappingFields;$('import-format').onchange=mappingFields;$('import-kind').onchange=mappingFields;$('import-source').oninput=invalidatePreview;$('import-replace').onchange=invalidatePreview;
   $('import-file').onchange=async()=>{const file=$('import-file').files[0];if(!file)return;if(file.size>5_000_000){$('import-result').textContent='檔案上限為 5 MB，請分區匯入';return;}
     const text=await file.text();$('import-content').value=text;$('import-source').value=file.name;

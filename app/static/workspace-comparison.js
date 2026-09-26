@@ -1,6 +1,6 @@
 'use strict';
 let comparisonRequest=0;
-const COMPARISON_FIELDS={label:'名稱',kind:'類型',lat:'緯度',lng:'經度',quantity:'數量',available:'納入分析',source:'來源／起點',target:'終點',status:'關係狀態',directed:'方向性',provenance:'資料來源',properties:'原始屬性',logistics:'品項庫存與需求'};
+const COMPARISON_FIELDS={label:'名稱',kind:'類型',lat:'位置',lng:'位置',quantity:'數量',available:'納入分析',source:'來源／起點',target:'終點',status:'關係狀態',directed:'方向性',provenance:'資料來源',properties:'原始屬性',logistics:'品項庫存與需求'};
 function currentBaseline(){return {name:$('workspace-name').value.trim()||'未命名工作區',graph:structuredClone(state.graph),captured_at:new Date().toISOString(),workspace_id:state.id||null,revision:state.revision||0,unsaved:state.dirty};}
 function comparisonMessage(text,error=false){$('comparison-status').textContent=text;$('comparison-status').classList.toggle('error',error);}
 function invalidateComparison(){comparisonRequest++;state.comparison=null;state.comparisonInputs=null;$('export-comparison').disabled=true;$('run-comparison').disabled=false;$('comparison-result').replaceChildren();comparisonMessage('目前變更尚未比較');}

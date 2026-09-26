@@ -73,11 +73,13 @@
     </aside>
     <section class="canvas-region" aria-label="拓樸畫布">
       <div id="map"></div><div id="graph" hidden></div>
+      <!-- 原本這裡是兩個要人手填緯度、經度的數字欄。調度者記不住小數點座標，
+           打地名才是人的用法；旁邊的道路搜尋也是同一個道理。 -->
       <form id="locate" class="locate">
-        <input id="center-lat" type="number" min="-85" max="85" step="any" placeholder="緯度" aria-label="定位緯度" required>
-        <input id="center-lng" type="number" min="-180" max="180" step="any" placeholder="經度" aria-label="定位經度" required>
-        <button title="定位" aria-label="定位"><i data-lucide="locate-fixed"></i></button>
+        <input id="locate-place" type="search" placeholder="跳到地點（例如 光復鄉公所）" aria-label="跳到地點" required>
+        <button title="跳到這個地點" aria-label="跳到這個地點"><i data-lucide="locate-fixed"></i></button>
       </form>
+      <div id="locate-status" class="road-search-result" role="status" hidden></div>
       <div id="road-search" class="road-search">
         <input id="road-search-input" type="search" placeholder="搜尋道路名稱" aria-label="搜尋道路名稱">
         <button id="road-search-go" title="搜尋道路" aria-label="搜尋道路"><i data-lucide="search"></i></button>
