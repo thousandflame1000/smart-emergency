@@ -1,4 +1,7 @@
-:root { color-scheme: light; --ink: #25342f; --muted: #69766f; --line: #dce3de; --accent: #087f72; --red: #c34736; --paper: #fff; --bg: #f3f6f3; }
+/* --muted 與 --accent 的深度是算出來的，不是挑好看的：兩者都要在最淺的底色
+   (--paper #fff)、面板底色 (--bg #f3f6f3) 和選中膠囊 (#e0f1e9) 上都過 4.5:1。
+   原本的 #69766f/#087f72 在後兩者上只有 4.36/4.18，指標標籤和「地圖」按鈕因此不合格。 */
+:root { color-scheme: light; --ink: #25342f; --muted: #5f6c65; --line: #dce3de; --accent: #076a5f; --red: #c34736; --paper: #fff; --bg: #f3f6f3; }
 * { box-sizing: border-box; letter-spacing: 0; }
 body { margin: 0; color: var(--ink); background: var(--paper); font: 14px/1.5 system-ui, -apple-system, "Microsoft JhengHei", sans-serif; height:100dvh; display:flex; flex-direction:column; overflow:hidden; }
 body > :not(main) { flex-shrink:0; }
@@ -24,7 +27,8 @@ header select { width: 190px; } #workspace-name { width: 190px; } #workspace-fol
 .spacer { flex: 1; }
 .metrics { display: flex; border-bottom: 1px solid var(--line); background: var(--bg); min-height: 67px; overflow-x: auto; }
 .metric { padding: 10px 22px; min-width: 125px; border-right: 1px solid var(--line); }
-.metric span { display: block; font-size: 11px; color: var(--muted); } .metric strong { font-size: 21px; font-weight: 600; }
+/* 12px 是中文可讀的下限，11px 的字面太擠、筆劃會糊在一起。 */
+.metric span { display: block; font-size: 12px; color: var(--muted); } .metric strong { font-size: 21px; font-weight: 600; }
 .metric.alert strong { color: var(--red); }
 main { display: grid; grid-template-columns: 220px minmax(280px, 1fr) 310px; flex:1; min-height:0; }
 aside { padding: 18px 14px; overflow: auto; min-width: 0; }

@@ -170,7 +170,9 @@ function renderCanvas() {
       line.bindTooltip(document.createTextNode(`${e.label} · ${STATUS[e.status]}${e.directed?' · 有方向':''}`));line.on('click',event=>{L.DomEvent.stopPropagation(event);select('edge',e.id);});
     }
     const markers=[];
-    for(const n of nodes.values()){if(n.lat===null)continue;const size=n.kind==='incident'?26:22;
+    for(const n of nodes.values()){if(n.lat===null)continue;// 24px 是 WCAG 2.5.8 的觸控目標下限。群集打開時看不出差別，但 zoom 到底、
+// 群集停用後每個標記都是獨立的點——那正是調度者要用手指點它的時候。
+const size=n.kind==='incident'?28:24;
       const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'} ${roadHighlightNodes.has(n.id)?'road-hit':''}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}">${iconSvg(n.kind)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
       marker.bindTooltip(document.createTextNode(`${n.label} · ${TYPES[n.kind]}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});

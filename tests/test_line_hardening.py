@@ -1154,16 +1154,23 @@ def test_every_rich_menu_label_works_when_typed(db, line_outbox, monkeypatch):
     monkeypatch.setattr(line_ops, "_flex", lambda *a, **k: None)
     monkeypatch.setattr(lb, "_flex", lambda *a, **k: None, raising=False)
 
-    unheard = []
+    unheard, skipped = [], []
     for label in sorted(labels):
         line_outbox.sent.clear()
         try:
             say("Umenu", label)
-        except Exception:
-            continue          # 送 Flex 的路徑在測試環境會失敗，但那代表指令有被接住
+        except Exception as exc:
+            # 例外代表指令有被某個 handler 接住（只是送訊息在測試環境失敗），
+            # 但這條路徑沒被真正驗到，要記下來，不能默默跳過讓測試空過。
+            skipped.append(f"{label}({type(exc).__name__})")
+            continue
         if any("傳「幫助」可查看可用指令" in t for t in replies(line_outbox)):
             unheard.append(label)
     assert not unheard, f"這些按鈕上的字，打出來系統聽不懂：{unheard}"
+    # 防止「每個標籤都丟例外 → unheard 是空的 → 測試空過」。
+    # 目前 16 個標籤全部走得完整條路徑。若哪天有路徑開始丟例外，
+    # 要立刻知道，而不是讓它被 continue 吃掉、測試照樣綠燈。
+    assert not skipped, f"這些標籤沒被真正驗到：{skipped}"
 
 
 def test_first_message_does_not_ask_for_location_twice(db, line_outbox):
