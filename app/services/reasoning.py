@@ -38,10 +38,10 @@ PLAYBOOK_ACTIONS: dict[str, dict[str, Any]] = {
         ],
     },
     "confirm_dispatch": {
-        "title": "處理待確認派遣",
+        "title": "處理待核准派遣",
         "summary": "確認待處理的派遣建議，或釋放預留資源。",
         "checklist": [
-            "開啟每筆逾期待確認建議。",
+            "開啟每筆逾期待核准建議。",
             "候選資源仍可用時確認派遣。",
             "拒絕失效建議，讓資源重新可用。",
         ],
@@ -368,8 +368,8 @@ def _request_risks(db: Session, findings: list[dict[str, Any]], now: datetime) -
                     fid=f"matched_need_overdue:{need.id}",
                     severity="high",
                     category="dispatch",
-                    title="已媒合需求尚未確認完成",
-                    summary=f"{label} 已媒合 {event_age} 分鐘，尚未確認送達。",
+                    title="執行中需求尚未確認完成",
+                    summary=f"{label} 已進入執行中 {event_age} 分鐘，尚未確認送達。",
                     affected_objects=[_obj("ResourceRequest", need.id, label)],
                     evidence={"age_minutes": event_age, "matched_resource_id": str(need.matched_resource_id)},
                     recommended_action={

@@ -229,7 +229,7 @@ def decision_center(event, db: Session, user: User) -> None:
         bubble(
             "決策中心", "#2471a3",
             [stats["mode"],
-             f"緊急求救 {stats['sos']}｜待派 {stats['open']}｜建議待確認 {stats['suggested']}",
+             f"緊急求救 {stats['sos']}｜待派 {stats['open']}｜建議{_status_label('suggested')} {stats['suggested']}",
              f"進行中 {stats['matched']}｜志工待審 {stats['apps']}"],
             [{"label": "緊急求救", "text": "求救單"},
              {"label": "待派需求", "text": "待派"},

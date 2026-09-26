@@ -692,7 +692,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <div class="form-row col-2" style="margin-bottom:12px">
             <div class="form-group">
               <label class="form-label" for="doc-source">來源名稱 <span class="req">*</span></label>
-              <input type="text" id="doc-source" class="form-control" placeholder="例如：台中市急救手冊 v1.0">
+              <input type="text" id="doc-source" class="form-control" placeholder="例如：花蓮縣急救手冊 v1.0">
             </div>
             <div class="form-group">
               <label class="form-label" for="doc-category">分類</label>
@@ -781,8 +781,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <div style="display:flex;gap:6px">
             <button class="filter-btn active" data-status="" onclick="filterNeeds(this,'')">全部</button>
             <button class="filter-btn" data-status="open" onclick="filterNeeds(this,'open')">待媒合</button>
-            <button class="filter-btn" data-status="suggested" onclick="filterNeeds(this,'suggested')">⏳ 待確認</button>
-            <button class="filter-btn" data-status="matched" onclick="filterNeeds(this,'matched')">已媒合</button>
+            <button class="filter-btn" data-status="suggested" onclick="filterNeeds(this,'suggested')">⏳ 待核准</button>
+            <button class="filter-btn" data-status="matched" onclick="filterNeeds(this,'matched')">執行中</button>
             <button class="filter-btn" data-status="fulfilled" onclick="filterNeeds(this,'fulfilled')">已完成</button>
             <button class="filter-btn" data-status="cancelled" onclick="filterNeeds(this,'cancelled')">已取消</button>
           </div>
@@ -1123,7 +1123,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label" for="need-address">需求地址 <span class="req">*</span></label>
-        <input type="text" class="form-control" id="need-address" placeholder="台中市南區崇倫街…" oninput="scheduleGeocode('need')" onblur="geocodeNow('need')">
+        <input type="text" class="form-control" id="need-address" placeholder="花蓮縣光復鄉大進街…" oninput="scheduleGeocode('need')" onblur="geocodeNow('need')">
         <span class="form-hint" id="need-geocode-status"></span>
       </div>
       <div class="form-row col-2">
@@ -1226,7 +1226,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label" for="user-address">地址</label>
-        <input type="text" class="form-control" id="user-address" placeholder="台中市南區…" oninput="scheduleGeocode('user')" onblur="geocodeNow('user')">
+        <input type="text" class="form-control" id="user-address" placeholder="花蓮縣光復鄉…" oninput="scheduleGeocode('user')" onblur="geocodeNow('user')">
         <span class="form-hint" id="user-geocode-status"></span>
       </div>
       <div class="form-group">
@@ -1338,7 +1338,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label" for="pt-address">地址</label>
-        <input type="text" class="form-control" id="pt-address" placeholder="台中市南區…" oninput="scheduleGeocode('pt')" onblur="geocodeNow('pt')">
+        <input type="text" class="form-control" id="pt-address" placeholder="花蓮縣光復鄉…" oninput="scheduleGeocode('pt')" onblur="geocodeNow('pt')">
         <span class="form-hint" id="pt-geocode-status"></span>
       </div>
       <div class="form-row col-2">
@@ -2543,7 +2543,7 @@ async function testQuery() {
 // Dispatch
 // ════════════════════════════════════════════════
 async function runDispatch(btn) {
-  if (!await askConfirm('執行物資自動媒合', '<p>系統需在緊急模式下才會媒合。</p><p class="form-hint" style="margin-top:6px">個人物資只會產生「待確認」建議，要到調度畫面逐筆確認後才會通知志工，不會直接發出去。</p>', '開始媒合')) return;
+  if (!await askConfirm('執行物資自動媒合', '<p>系統需在緊急模式下才會媒合。</p><p class="form-hint" style="margin-top:6px">個人物資只會產生「待核准」建議，要到調度畫面逐筆確認後才會通知志工，不會直接發出去。</p>', '開始媒合')) return;
   const original = btn.textContent;
   btn.disabled = true; btn.textContent = '媒合中…';
   try {
@@ -2555,7 +2555,7 @@ async function runDispatch(btn) {
       // 曾經「跳過 N 筆」只給一個數字，管理員要自己一筆筆點「查看詳情」
       // 才查得出原因——這裡直接把後端已經算好的 details 攤開分組顯示，
       // 不用再逐筆點。
-      let summary = `媒合完成！\n⏳ 待確認建議：${data.suggested} 筆（需到「緊急需求」頁確認才會通知志工）\n✅ 資源點直接媒合：${data.matched} 筆\n⏭️ 跳過：${data.skipped} 筆`;
+      let summary = `媒合完成！\n⏳ 待核准建議：${data.suggested} 筆（需到「緊急需求」頁確認才會通知志工）\n✅ 資源點直接媒合：${data.matched} 筆\n⏭️ 跳過：${data.skipped} 筆`;
       const skippedDetails = (data.details || []).filter(d => d.result === 'skipped');
       if (skippedDetails.length) {
         const byReason = {};
@@ -2743,10 +2743,10 @@ async function pointCheckout(id) {
 }
 
 async function seedPoints() {
-  if (!await askConfirm('匯入政府開放資料', '從政府開放資料匯入台中市資源點。已存在的同名資源點不會被覆蓋。', '開始匯入')) return;
+  if (!await askConfirm('匯入政府開放資料', '從政府開放資料匯入花蓮縣資源點。已存在的同名資源點不會被覆蓋。', '開始匯入')) return;
   const noticeEl = document.getElementById('seed-notice');
   try {
-    const res  = await fetch('/api/resources/points/seed?city=台中市', { method: 'POST' });
+    const res  = await fetch('/api/resources/points/seed?city=花蓮縣', { method: 'POST' });
     const data = await res.json();
     showNotice('seed-notice', 'info', data.message || '正在匯入…');
     setTimeout(loadPoints, 4000);
@@ -2829,13 +2829,13 @@ async function loadNeeds() {
     allNeeds = [...open, ...suggested, ...matched, ...fulfilled, ...cancelled];
     document.getElementById('needs-stats').innerHTML = `
       <div class="stat-tile"><div class="stat-tile-label">待媒合</div><div class="stat-tile-value ${open.length>0?'warn':''}">${open.length}</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">待確認</div><div class="stat-tile-value ${suggested.length>0?'danger':''}">${suggested.length}</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">已媒合</div><div class="stat-tile-value">${matched.length}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">待核准</div><div class="stat-tile-value ${suggested.length>0?'danger':''}">${suggested.length}</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">執行中</div><div class="stat-tile-value">${matched.length}</div></div>
       <div class="stat-tile"><div class="stat-tile-label">已完成</div><div class="stat-tile-value ok">${fulfilled.length}</div></div>
       <div class="stat-tile"><div class="stat-tile-label">已取消</div><div class="stat-tile-value">${cancelled.length}</div></div>`;
     const lbl = document.getElementById('needs-count-label');
     if (lbl) lbl.textContent =
-      `待媒合 ${open.length} 筆 · 待確認 ${suggested.length} 筆 · 已媒合 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆 · 已取消 ${cancelled.length} 筆`;
+      `待媒合 ${open.length} 筆 · 待核准 ${suggested.length} 筆 · 執行中 ${matched.length} 筆 · 已完成 ${fulfilled.length} 筆 · 已取消 ${cancelled.length} 筆`;
     renderNeeds(allNeeds);
     loadCandidateSummaries(allNeeds);
   } catch(e) {
@@ -3056,7 +3056,7 @@ function renderNeedEvents(events) {
 }
 
 async function matchNeed(needId, resourceId) {
-  if (!await askConfirm('手動媒合？', '確定以此物資手動媒合？這一步會立即發 LINE 通知志工，不經過待確認關卡。', '媒合', 'btn-success')) return;
+  if (!await askConfirm('手動媒合？', '確定以此物資手動媒合？這一步會立即發 LINE 通知志工，不經過待核准關卡。', '媒合', 'btn-success')) return;
   const res  = await fetch(`/api/resources/needs/${needId}/match?resource_id=${resourceId}`, { method: 'POST' });
   const data = await res.json();
   if (data.error) { toast('danger', '媒合失敗：' + esc(data.error)); return; }
@@ -3111,12 +3111,12 @@ function ontologyLabel(value) {
     confirm_pending_dispatch:'確認待處理派遣',
     open_overflow_facility:'增開備援設施', monitor_current_plan:'維持目前方案',
     open_requests:'待處理需求', uncovered_open:'無支援需求', urgent_uncovered:'緊急且無支援需求',
-    requests_with_candidate:'有候選資源的需求', suggested_requests:'待確認派遣', matched_requests:'已媒合需求',
+    requests_with_candidate:'有候選資源的需求', suggested_requests:'待核准派遣', matched_requests:'執行中需求',
     supply_gaps:'物資缺口', facility_pressure:'設施壓力',
     avg_projected_local_score:'預估在地評分', changed_requests:'受影響需求',
     urgent_uncovered_delta:'緊急無支援需求變化', uncovered_open_delta:'無支援需求變化',
-    requests_with_candidate_delta:'有候選資源需求變化', suggested_requests_delta:'待確認派遣變化',
-    matched_requests_delta:'已媒合需求變化', avg_top_distance_km_delta:'平均距離變化（公里）',
+    requests_with_candidate_delta:'有候選資源需求變化', suggested_requests_delta:'待核准派遣變化',
+    matched_requests_delta:'執行中需求變化', avg_top_distance_km_delta:'平均距離變化（公里）',
     age_minutes:'已等待分鐘', urgency:'緊急程度', need_type:'需求類型', candidate_count:'候選數量',
     source_count:'來源數量', open_count:'待處理數量', load_ratio:'負載比例', capacity:'容量',
     current_load:'目前負載', active_task_count:'進行中任務', resource_available:'物資可用',
@@ -3139,7 +3139,7 @@ async function loadOntology() {
     const m = graph.metrics || {};
     statsEl.innerHTML = `
       <div class="stat-tile"><div class="stat-tile-label">人員</div><div class="stat-tile-value">${m.people ?? 0}</div><div class="stat-tile-sub">${m.active_people ?? 0} 位啟用中</div></div>
-      <div class="stat-tile"><div class="stat-tile-label">待處理需求</div><div class="stat-tile-value ${(m.open_requests ?? 0)>0?'warn':''}">${m.open_requests ?? 0}</div><div class="stat-tile-sub">${m.suggested_requests ?? 0} 筆待確認</div></div>
+      <div class="stat-tile"><div class="stat-tile-label">待處理需求</div><div class="stat-tile-value ${(m.open_requests ?? 0)>0?'warn':''}">${m.open_requests ?? 0}</div><div class="stat-tile-sub">${m.suggested_requests ?? 0} 筆待核准</div></div>
       <div class="stat-tile"><div class="stat-tile-label">物資</div><div class="stat-tile-value ok">${m.available_resources ?? 0}</div><div class="stat-tile-sub">目前可用</div></div>
       <div class="stat-tile"><div class="stat-tile-label">警報</div><div class="stat-tile-value ${(m.active_alerts ?? 0)>0?'danger':''}">${m.active_alerts ?? 0}</div><div class="stat-tile-sub">${m.risky_checkins_today ?? 0} 筆今日異常回報</div></div>
       <div class="stat-tile"><div class="stat-tile-label">決策紀錄</div><div class="stat-tile-value">${m.decision_events ?? 0}</div><div class="stat-tile-sub">行動歷程</div></div>`;

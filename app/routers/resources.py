@@ -622,7 +622,7 @@ def delete_resource_point(point_id: str, db: Session = Depends(get_db),
 
 
 @router.post("/points/seed")
-def seed_resource_points(city: str = "台中市", clear: bool = False,
+def seed_resource_points(city: str = "花蓮縣", clear: bool = False,
                          _principal: dict | None = Depends(require_admin)):
     """從政府開放資料匯入固定資源點（管理員觸發）"""
     import threading

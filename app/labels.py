@@ -29,6 +29,70 @@ def need_status(value: str | None) -> str:
     return NEED_STATUS_ZH.get(value or "", value or "未知")
 
 
+# LINE 訊息配一個圖示比較好認，但**詞要跟網頁一樣**。先前 LINE 自己留了一份表，
+# 同一筆需求在 LINE 叫「已派遣」、在後台叫「執行中」、在住戶表單又叫「已派遣」，
+# 住戶打電話問調度者時兩邊講的不是同一個詞。圖示是裝飾，詞不是。
+NEED_STATUS_EMOJI = {
+    "open": "⏳",
+    "suggested": "🔎",
+    "matched": "🚚",
+    "fulfilled": "✅",
+    "cancelled": "",
+}
+
+
+def need_status_line(value: str | None) -> str:
+    """給 LINE 用：圖示 + 跟網頁完全相同的那個詞。"""
+    label = need_status(value)
+    icon = NEED_STATUS_EMOJI.get(value or "", "")
+    return f"{icon} {label}".strip()
+
+
+# 後端會送出四種警報，但總覽頁的對照表只收了三種，獨漏 unwell——而 unwell 正是
+# 日常最常出現的那一種。缺的那一筆會走 `labels[type] || type` 的退路，於是調度者
+# 在警報列上看到的是英文字串「unwell」。這種表只要分成兩份就會再漏一次。
+ALERT_TYPE_ZH = {
+    "help_needed": "主動求助",
+    "unwell": "身體不舒服",
+    "no_response_1h": "超過 1 小時未回應",
+    "no_response_3h": "超過 3 小時未回應",
+}
+
+
+def alert_type(value: str | None) -> str:
+    return ALERT_TYPE_ZH.get(value or "", value or "未知")
+
+
+# 需求／物資的品項名稱。先前 linebot.py 與 dispatch.py 各有一份：dispatch 把
+# other 叫「物資」、LINE 叫「其他物資」，而 tool 只有 dispatch 收錄，住戶在表單
+# 選了「🔧 工具」之後，LINE 回覆裡就會出現英文的 tool。
+NEED_TYPE_ZH = {
+    "water": "飲用水",
+    "demo_water": "飲用水",
+    "food": "食物",
+    "first_aid": "急救用品",
+    "shelter": "庇護所",
+    "vehicle": "交通工具",
+    "tool": "工具",
+    "other": "其他物資",
+    "sos": "緊急求助",
+}
+
+NEED_TYPE_EMOJI = {
+    "water": "💧", "demo_water": "💧", "food": "🍱", "first_aid": "🩹",
+    "shelter": "🏠", "vehicle": "🚗", "tool": "🔧", "other": "📦", "sos": "🆘",
+}
+
+
+def need_type(value: str | None) -> str:
+    return NEED_TYPE_ZH.get(value or "", value or "未知")
+
+
+def need_type_line(value: str | None) -> str:
+    """給 LINE 用：圖示 + 跟網頁完全相同的那個詞。"""
+    return f"{NEED_TYPE_EMOJI.get(value or '', '')}{need_type(value)}".strip()
+
+
 # 取不到 LINE 顯示名稱時的佔位字。先前用的是「用戶_」加 LINE UID 末六碼，
 # 那串東西會被當成姓名存進資料庫，然後出現在歡迎詞、後台名單、派遣卡片與
 # 家屬通知裡——調度者看到「用戶_4f8a2c」根本不知道那是誰。

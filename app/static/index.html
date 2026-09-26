@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>鄰里守望 · 照護現況</title>
 <script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
+<!-- 說法的單一來源。沒有 defer：renderAlerts 會直接呼叫 alertTypeLabel，
+     這支必須比頁面腳本先到位。 -->
+<script src="/static/labels.js"></script>
 <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -150,7 +153,7 @@ tbody tr[data-row]{cursor:pointer}
       <div class="metrics">
         <div class="metric ok"><span>今日平安</span><strong id="m-ok">-</strong><small>已完成打卡</small></div>
         <div class="metric danger"><span>需要關注</span><strong id="m-risk">-</strong><small>未回應或求助</small></div>
-        <div class="metric warning"><span>等待回覆</span><strong id="m-pending">-</strong><small>今日待確認</small></div>
+        <div class="metric warning"><span>等待回覆</span><strong id="m-pending">-</strong><small>今日尚未回覆</small></div>
         <div class="metric danger"><span>未解警報</span><strong id="m-alerts">-</strong><small>待聯繫處理</small></div>
         <div class="metric"><span>待處理需求</span><strong id="m-needs">-</strong><small>事件處置工作區</small></div>
         <div class="metric"><span>可用物資</span><strong id="m-resources">-</strong><small>正式登記資料</small></div>
@@ -319,10 +322,9 @@ function renderOverviewList(){
 }
 function renderAlerts(rows){
   $('alert-count').textContent=rows.length+' 筆';
-  const labels={help_needed:'主動求助',no_response_1h:'超過 1 小時未回應',no_response_3h:'超過 3 小時未回應'};
   $('alerts').innerHTML=rows.length?rows.map(row=>{
     const high=row.alert_type==='help_needed'||row.alert_type==='no_response_3h';
-    return `<div class="alert-row"${row.elderly_id?` data-row="${esc(row.elderly_id)}" tabindex="0"`:''}><span class="dot ${high?'high':''}"></span><div><strong>${esc(row.elderly)}</strong><p>${esc(labels[row.alert_type]||row.alert_type)}</p></div><time>${clock(row.created_at)}</time><div class="row-actions">${row.elderly_id?`<button class="mini warn" data-resolve="${esc(row.elderly_id)}" data-who="${esc(row.elderly)}">處理</button>`:''}</div></div>`;
+    return `<div class="alert-row"${row.elderly_id?` data-row="${esc(row.elderly_id)}" tabindex="0"`:''}><span class="dot ${high?'high':''}"></span><div><strong>${esc(row.elderly)}</strong><p>${esc(alertTypeLabel(row.alert_type))}</p></div><time>${clock(row.created_at)}</time><div class="row-actions">${row.elderly_id?`<button class="mini warn" data-resolve="${esc(row.elderly_id)}" data-who="${esc(row.elderly)}">處理</button>`:''}</div></div>`;
   }).join(''):'<div class="empty">目前沒有未解警報<br><span class="muted" style="font-size:13px">長者未回應或主動求助時會出現在這裡</span></div>';
   $('alerts').querySelectorAll('[data-row]').forEach(el=>{
     const open=()=>openDrawer(el.dataset.row);

@@ -20,6 +20,8 @@ from app.services.task_line_execution import TaskLineExecutionService
 from app.services.task_line_messages import reply_task_progress_message
 from app.services.task_line_security import TaskLineSecurityError
 from app.models.user import User
+from app.labels import NEED_STATUS_ZH, need_status_line, need_type_line
+from app.labels import NEED_TYPE_ZH as NEED_TYPE_ZH_SOURCE
 from app.timeutil import now_utc, today_tw
 
 logger = logging.getLogger(__name__)
@@ -33,11 +35,10 @@ STAFF_ROLES = ["volunteer", "family", "admin"]
 EMERGENCY_TIP = "🚨 如果有生命危險（大量出血、意識不清、呼吸困難、火災），請立刻撥打 119，不要等訊息回覆。"
 LOCATION_HINT = "📍 我們還不知道您在哪裡，志工可能找不到您。請點下面的按鈕分享位置（或點 LINE 的「＋」→「位置資訊」）。"
 
-NEED_ZH = {"water": "💧飲用水", "food": "🍱食物", "first_aid": "🩹急救用品",
-           "shelter": "🏠庇護所", "vehicle": "🚗交通工具", "other": "📦其他物資",
-           "sos": "🆘 緊急求助", "demo_water": "💧飲用水"}
-STATUS_ZH = {"open": "⏳ 待媒合", "suggested": "🔎 系統已建議，等待管理員核准",
-             "matched": "🚚 已派遣，志工正在處理", "fulfilled": "✅ 已完成", "cancelled": "已取消"}
+# 同樣從 app/labels.py 長出來。圖示是 LINE 專有的裝飾，詞跟網頁一致。
+NEED_ZH = {key: need_type_line(key) for key in NEED_TYPE_ZH_SOURCE}
+# 從 app/labels.py 長出來，不再自己維護一份。LINE 多一個圖示，詞跟網頁一模一樣。
+STATUS_ZH = {key: need_status_line(key) for key in NEED_STATUS_ZH}
 RES_TYPE_ZH = {"water": "飲用水", "food": "食物", "first_aid": "急救用品", "shelter": "庇護所",
                "vehicle": "交通工具", "tool": "工具", "other": "其他"}
 
@@ -405,7 +406,7 @@ def _continue_flow(event, db, user, text, state) -> bool:
                 return True
             phone = digits
         conversation.advance(db, user.line_uid, state, "area", phone=phone)
-        _say(event, "最後一題：您方便服務的區域？（例如「台中市南區」，或傳「略過」）")
+        _say(event, "最後一題：您方便服務的區域？（例如「花蓮縣光復鄉」，或傳「略過」）")
         return True
     if step == "area":
         area = None if text in ("略過", "跳過") else text
@@ -486,7 +487,7 @@ def _handle_volunteer_commands(event, db, user, text) -> bool:
     if staff and prefix:
         rest = text[len(prefix):].strip()
         if not rest:
-            _say(event, "請用以下格式：\n新增長者 [姓名] [地址]\n\n範例：\n新增長者 王奶奶 台中市南區崇倫街88號")
+            _say(event, "請用以下格式：\n新增長者 [姓名] [地址]\n\n範例：\n新增長者 王奶奶 花蓮縣光復鄉大進街48號")
             return True
         from app.models.care_relation import CareRelation
         parts = rest.split(None, 1)

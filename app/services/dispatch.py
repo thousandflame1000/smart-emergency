@@ -160,11 +160,8 @@ def _log_dispatch_event(
     return event
 
 
-NEED_TYPE_ZH = {
-    "water": "飲用水", "food": "食物", "first_aid": "急救用品", "shelter": "庇護所",
-    "vehicle": "交通工具", "tool": "工具", "other": "物資", "sos": "緊急求助",
-    "demo_water": "飲用水",
-}
+# 單一來源在 app/labels.py；這裡保留名字是因為底下十幾處都這樣引用。
+from app.labels import NEED_TYPE_ZH  # noqa: E402
 
 
 def _push_text(line_uid: str | None, text: str) -> bool:
@@ -796,7 +793,8 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
     if not need or not resource:
         return {"error": "need or resource not found"}
     if need.status not in ("open", "suggested"):
-        return {"error": f"需求目前狀態為「{need_status(need.status)}」，只有待媒合或待確認的需求可以手動指派。"}
+        return {"error": f"需求目前狀態為「{need_status(need.status)}」，"
+                         f"只有{need_status('open')}或{need_status('suggested')}的需求可以手動指派。"}
     if need.need_type == "sos":
         return {"error": "緊急求助是人身安全事件，不是物資需求，請直接聯絡當事人或撥打 119。"}
     if resource.owner_id == need.requester_id:
@@ -884,7 +882,7 @@ def confirm_dispatch(need_id: str, db: Session, expected_version: str | None = N
     """
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need or need.status != "suggested":
-        return {"error": "此需求目前沒有待確認的媒合建議"}
+        return {"error": f"此需求目前沒有{need_status('suggested')}的媒合建議"}
 
     from app.services.record_version import row_predicates, row_version
     if expected_version and expected_version != row_version(need):
@@ -956,7 +954,7 @@ def decline_suggestion(need_id: str, db: Session, expected_version: str | None =
     """管理員否決一筆自動媒合建議 —— 釋放物資、需求退回待媒合佇列。"""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need or need.status != "suggested":
-        return {"error": "此需求目前沒有待確認的媒合建議"}
+        return {"error": f"此需求目前沒有{need_status('suggested')}的媒合建議"}
 
     previous_status = need.status
     previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None

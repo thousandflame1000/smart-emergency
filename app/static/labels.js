@@ -26,3 +26,16 @@ window.NEED_STATUS_WHY = {
 window.needStatusLabel = function (value) {
   return window.NEED_STATUS_LABEL[value] || value || '未知';
 };
+
+/* 警報類型。後端送四種，總覽頁原本只認三種，unwell 沒收錄就直接把英文字串
+   印在警報列上給調度者看。同樣由 tests/test_status_labels.py 核對兩邊一致。 */
+window.ALERT_TYPE_LABEL = {
+  help_needed:    '主動求助',
+  unwell:         '身體不舒服',
+  no_response_1h: '超過 1 小時未回應',
+  no_response_3h: '超過 3 小時未回應',
+};
+
+window.alertTypeLabel = function (value) {
+  return window.ALERT_TYPE_LABEL[value] || value || '未知';
+};
