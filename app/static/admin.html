@@ -712,6 +712,25 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- ══════════════════════════════════════════════ -->
     <!-- 知識庫                                          -->
     <!-- ══════════════════════════════════════════════ -->
+    <div class="page" id="page-zones">
+      <div class="card">
+        <div class="card-header"><div class="card-title">分區</div></div>
+        <div style="padding:14px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
+          <label>名稱<br><input class="form-control" id="zone-name" placeholder="台南永康區" maxlength="100"></label>
+          <label>中心地點<br><input class="form-control" id="zone-place" placeholder="永康區公所"></label>
+          <label>半徑 km<br><input class="form-control" id="zone-radius" type="number" min="0.5" step="0.5" value="5" style="width:90px"></label>
+          <button class="btn btn-primary" onclick="addZone()">＋ 新增</button>
+        </div>
+        <div class="muted" style="padding:0 18px 10px">只影響之後新登記的需求與物資</div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>名稱</th><th>中心</th><th>半徑</th><th>物資</th><th>需求</th><th></th></tr></thead>
+            <tbody id="zones-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-kb">
 
       <!-- 統計 -->
@@ -1412,6 +1431,7 @@ const PAGE_TITLE = {
   'page-relations': '照護關係',
   'page-needs':     '調度',
   'page-kb':        '知識庫',
+  'page-zones':     '分區',
 };
 let allUsers = [];
 
@@ -1592,6 +1612,7 @@ function showPage(id) {
   if (id === 'page-relations') loadRelations();
   if (id === 'page-needs')     { loadNeeds(); loadPoints(); }
   if (id === 'page-kb')        loadKB();
+  if (id === 'page-zones')     loadZones();
   if (id === 'page-volunteers') { loadVolunteerApplications(); loadKitTesters(); }
 }
 
@@ -1773,6 +1794,46 @@ async function runKit(action, status) {
     loadKitTesters();
     if (action === 'cleanup' || action === 'family-alert') loadAll();
   } catch (e) { out.textContent = '⚠️ ' + e.message; }
+}
+
+async function loadZones() {
+  const tbody = document.getElementById('zones-tbody');
+  try {
+    const zones = await fetch('/api/zones').then(r => r.json());
+    tbody.innerHTML = zones.map(z => `<tr>
+      <td><strong>${esc(z.name)}</strong></td>
+      <td class="muted">${z.center_lat != null ? z.center_lat.toFixed(4) + ', ' + z.center_lng.toFixed(4) : '—'}</td>
+      <td>${z.radius_km != null ? z.radius_km + ' km' : '—'}</td>
+      <td>${z.resource_count}</td><td>${z.need_count}</td>
+      <td>${z.is_general ? '<span class="muted">預設</span>' : `<button class="btn btn-ghost-danger btn-sm" onclick="deleteZone('${esc(z.id)}','${esc(z.name)}')">刪除</button>`}</td>
+    </tr>`).join('');
+  } catch (e) { tbody.innerHTML = `<tr><td colspan="6" style="color:var(--danger)">${esc(e.message)}</td></tr>`; }
+}
+async function addZone() {
+  const name = document.getElementById('zone-name').value.trim();
+  const place = document.getElementById('zone-place').value.trim();
+  const radius = document.getElementById('zone-radius').value;
+  if (!name) { notify('請輸入名稱'); return; }
+  if (!place) { notify('請輸入中心地點'); return; }
+  const found = await fetch(`/api/workspaces/places?q=${encodeURIComponent(place)}`).then(r => r.json()).catch(() => ({}));
+  const spot = (found.places || [])[0];
+  if (!spot) { notify('找不到這個地點，換個寫法'); return; }
+  const p = new URLSearchParams({ name, center_lat: spot.lat, center_lng: spot.lng, radius_km: radius });
+  const res = await fetch(`/api/zones?${p}`, { method: 'POST' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { toast('danger', data.error || data.detail || '新增失敗'); return; }
+  toast('success', `已新增 ${name}`);
+  document.getElementById('zone-name').value = '';
+  document.getElementById('zone-place').value = '';
+  loadZones();
+}
+async function deleteZone(id, name) {
+  if (!await askConfirm(`刪除 ${name}？`, '', '刪除', 'btn-danger')) return;
+  const res = await fetch(`/api/zones/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { toast('danger', data.error || data.detail || '刪除失敗'); return; }
+  toast('success', `已刪除 ${name}`);
+  loadZones();
 }
 
 async function loadAll() {
