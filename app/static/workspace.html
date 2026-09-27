@@ -30,7 +30,7 @@
     <div class="workspace-picker">
       <select id="workspace-list" aria-label="已儲存的工作區"><option value="">未儲存工作區</option></select>
       <input id="workspace-name" aria-label="工作區名稱" value="未命名工作區" maxlength="120">
-      <input id="workspace-folder" aria-label="工作區資料夾" placeholder="工作區資料夾（選填）" list="workspace-folder-options" maxlength="120">
+      <input id="workspace-folder" aria-label="工作區資料夾" list="workspace-folder-options" maxlength="120">
       <datalist id="workspace-folder-options"></datalist>
     </div>
     <div class="header-actions">
@@ -91,7 +91,7 @@
           </div>
         </div>
       </div>
-      <input id="search" type="search" placeholder="搜尋名稱、識別碼" aria-label="搜尋物件">
+      <input id="search" type="search" aria-label="搜尋物件">
       <div id="objects" class="object-list"></div>
       <div id="operation-tasks" class="object-list" hidden></div>
       <div id="operation-resources" class="object-list" hidden></div>
@@ -101,12 +101,12 @@
       <!-- 原本這裡是兩個要人手填緯度、經度的數字欄。調度者記不住小數點座標，
            打地名才是人的用法；旁邊的道路搜尋也是同一個道理。 -->
       <form id="locate" class="locate">
-        <input id="locate-place" type="search" placeholder="跳到地點（例如 光復鄉公所）" aria-label="跳到地點" required>
+        <input id="locate-place" type="search" aria-label="跳到地點" required>
         <button title="跳到這個地點" aria-label="跳到這個地點"><i data-lucide="locate-fixed"></i></button>
       </form>
       <div id="locate-status" class="road-search-result" role="status" hidden></div>
       <div id="road-search" class="road-search">
-        <input id="road-search-input" type="search" placeholder="搜尋道路名稱" aria-label="搜尋道路名稱">
+        <input id="road-search-input" type="search" aria-label="搜尋道路名稱">
         <button id="road-search-go" title="搜尋道路" aria-label="搜尋道路"><i data-lucide="search"></i></button>
         <button id="road-search-clear" title="清除" aria-label="清除搜尋" hidden><i data-lucide="x"></i></button>
       </div>
@@ -142,7 +142,7 @@
     <div class="comparison-actions"><button id="run-allocation" class="primary"><i data-lucide="package-check"></i>計算分配</button><button id="allocation-baseline" title="將目前資料固定為比較基準" aria-label="將目前資料固定為比較基準"><i data-lucide="flag"></i></button><button id="allocation-copy" title="另存物資情境" aria-label="另存物資情境"><i data-lucide="copy"></i></button><button id="allocation-save" title="儲存目前工作區" aria-label="儲存目前工作區"><i data-lucide="save"></i></button><button id="allocation-export" disabled title="匯出分配報告與資料快照" aria-label="匯出分配報告與資料快照"><i data-lucide="download"></i></button></div>
     <p id="allocation-status" role="status"></p><div id="allocation-result"></div>
   </dialog>
-  <dialog id="allocation-node-dialog" aria-labelledby="allocation-node-title"><div class="dialog-heading"><h2 id="allocation-node-title">選擇物件位置</h2><button id="close-allocation-node" aria-label="關閉物件選擇"><i data-lucide="x"></i></button></div><input id="allocation-node-query" type="search" placeholder="名稱、識別碼" aria-label="搜尋物件位置"><div id="allocation-node-results" class="object-list"></div></dialog>
+  <dialog id="allocation-node-dialog" aria-labelledby="allocation-node-title"><div class="dialog-heading"><h2 id="allocation-node-title">選擇物件位置</h2><button id="close-allocation-node" aria-label="關閉物件選擇"><i data-lucide="x"></i></button></div><input id="allocation-node-query" type="search" aria-label="搜尋物件位置"><div id="allocation-node-results" class="object-list"></div></dialog>
   <dialog id="confirm-dialog" aria-labelledby="confirm-dialog-title">
     <div class="dialog-heading"><h2 id="confirm-dialog-title">確認</h2><button id="close-confirm-dialog" aria-label="關閉"><i data-lucide="x"></i></button></div>
     <div id="confirm-dialog-body" class="muted"></div>
@@ -156,11 +156,8 @@
   </dialog>
   <dialog id="region-dialog" aria-labelledby="region-title">
     <div class="dialog-heading"><h2 id="region-title">選擇地區</h2><button type="button" id="close-region" aria-label="關閉"><i data-lucide="x"></i></button></div>
-    <form id="region-form" class="form-grid">
-      <input id="region-query" placeholder="台南市永康區" aria-label="地區或地標" minlength="2" maxlength="120" required>
-      <button id="region-search" type="submit">搜尋</button>
-    </form>
-    <div id="region-results" class="object-list" role="radiogroup" aria-label="搜尋結果"></div>
+    <form id="region-form"><label>搜尋地區<input id="region-query" type="search" maxlength="120" autocomplete="off"></label></form>
+    <div id="region-results" class="object-list region-results" role="radiogroup" aria-label="候選地區"></div>
     <label>範圍<select id="region-radius"><option value="500">500 公尺</option><option value="1000" selected>1 公里</option><option value="2000">2 公里</option><option value="3000">3 公里</option></select></label>
     <div class="dialog-actions"><button id="region-load" class="primary" disabled>載入</button></div>
   </dialog>
@@ -172,7 +169,7 @@
         <label>資料格式<select id="import-format"><option value="geojson">GeoJSON</option><option value="csv">CSV</option><option value="json">工作區 JSON</option></select></label>
         <label>點資料類型<select id="import-kind"><option value="person">人員</option><option value="supply">物資</option><option value="facility">設施</option><option value="incident">事件</option><option value="custom">自訂物件</option><option value="relations">關係（CSV）</option></select></label>
       </div>
-      <label>資料來源／授權<input id="import-source" placeholder="資料集名稱、發布單位或網址" maxlength="500"></label>
+      <label>資料來源／授權<input id="import-source" maxlength="500"></label>
       <details><summary>貼上資料</summary><textarea id="import-content" rows="5" aria-label="資料內容"></textarea></details>
       <div id="field-mapping" class="form-grid"></div>
       <label class="checkbox-label"><input id="import-replace" type="checkbox">取代目前工作區內容</label>

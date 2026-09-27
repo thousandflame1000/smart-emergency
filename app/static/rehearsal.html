@@ -113,8 +113,8 @@
           <h2>演練設定</h2>
           <p class="lede">先填這四格就開始。建議用居民手機、志工手機、管理者筆電三個畫面；第一次只求走完，不求漂亮。</p>
           <div class="meta-grid">
-            <label><span>填寫人</span><input id="participant-name" maxlength="120" placeholder="例如：王小明"></label>
-            <label><span>本輪名稱</span><input id="session-name" maxlength="120" placeholder="例如：第一次全流程"></label>
+            <label><span>填寫人</span><input id="participant-name" maxlength="120"></label>
+            <label><span>本輪名稱</span><input id="session-name" maxlength="120"></label>
             <label><span>演練日期</span><input id="rehearsal-date" type="date"></label>
             <label><span>事件情境</span><select id="scenario"><option value="光復鄉馬太鞍溪洪災">光復鄉馬太鞍溪洪災</option><option value="尼泊爾 Rasuwa 洪災">尼泊爾 Rasuwa 洪災</option><option value="社區本機驗證資料">社區本機驗證資料</option></select></label>
           </div>
@@ -170,8 +170,8 @@
         <section id="summary">
           <h2>本輪總結</h2>
           <div class="final-fields">
-            <label><span>整體觀察、最不放心的地方</span><textarea id="overall-notes" maxlength="8000" placeholder="把你剛才猶豫、等待、找不到按鈕或講不清楚的地方都寫下來。"></textarea></label>
-            <label><span>下一個最小行動</span><textarea id="next-action" maxlength="2000" placeholder="只寫一件下一步，例如：重練管理者派遣 2 次。"></textarea></label>
+            <label><span>整體觀察、最不放心的地方</span><textarea id="overall-notes" maxlength="8000"></textarea></label>
+            <label><span>下一個最小行動</span><textarea id="next-action" maxlength="2000"></textarea></label>
           </div>
           <p id="save-status" class="save-status" role="status">輸入內容會暫存在此瀏覽器；按「送出給 Codex」才會寫入 workspace。</p>
         </section>
@@ -252,11 +252,11 @@
       ['q-ai','為什麼不用更強的 AI 模型直接決定派遣？'],
     ];
 
-    function routeHtml(item){const [id,step,title,goal]=item;return `<div class="route-row" data-route-id="${id}"><div class="route-name"><span class="step">${step}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>結果</span><select class="status-select" data-field="status"><option value="untested">未測</option><option value="passed">通過</option><option value="blocked">卡住</option></select></label><label><span>實際看到／做到什麼</span><textarea data-field="observation" maxlength="4000" placeholder="寫具體畫面、訊息或狀態。"></textarea></label><label><span>卡點／錯誤／疑問</span><textarea data-field="blocker" maxlength="4000" placeholder="按鈕難找、等待太久、文字看不懂都寫。"></textarea></label></div>`;}
-    function rubricHtml(item){const [id,title,goal]=item;return `<div class="rubric-row" data-rubric-id="${id}"><div class="rubric-name"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>自評 0–5</span><input class="score-input" data-field="score" type="number" min="0" max="5" step="1"></label><label><span>目前證據</span><textarea data-field="evidence" maxlength="4000" placeholder="哪個畫面、操作或數據能證明？"></textarea></label><label><span>還缺什麼</span><textarea data-field="improvement" maxlength="4000" placeholder="下一次具體改善。"></textarea></label></div>`;}
+    function routeHtml(item){const [id,step,title,goal]=item;return `<div class="route-row" data-route-id="${id}"><div class="route-name"><span class="step">${step}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>結果</span><select class="status-select" data-field="status"><option value="untested">未測</option><option value="passed">通過</option><option value="blocked">卡住</option></select></label><label><span>實際看到／做到什麼</span><textarea data-field="observation" maxlength="4000"></textarea></label><label><span>卡點／錯誤／疑問</span><textarea data-field="blocker" maxlength="4000"></textarea></label></div>`;}
+    function rubricHtml(item){const [id,title,goal]=item;return `<div class="rubric-row" data-rubric-id="${id}"><div class="rubric-name"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>自評 0–5</span><input class="score-input" data-field="score" type="number" min="0" max="5" step="1"></label><label><span>目前證據</span><textarea data-field="evidence" maxlength="4000"></textarea></label><label><span>還缺什麼</span><textarea data-field="improvement" maxlength="4000"></textarea></label></div>`;}
     function render(){
       for(const group of ['resident','volunteer','admin'])$(group+'-routes').innerHTML=routeGroups[group].map(routeHtml).join('');
-      $('timing-list').innerHTML=timingItems.map(([id,slot,title,goal])=>`<div class="timing-row" data-timing-id="${id}"><div class="route-name"><strong>${slot} · ${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>實際秒數</span><input data-field="actual_seconds" type="number" min="0" max="1800" step="1" placeholder="秒"></label><label><span>講稿摘要／卡詞處</span><textarea data-field="script_notes" maxlength="4000"></textarea></label></div>`).join('');
+      $('timing-list').innerHTML=timingItems.map(([id,slot,title,goal])=>`<div class="timing-row" data-timing-id="${id}"><div class="route-name"><strong>${slot} · ${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>實際秒數</span><input data-field="actual_seconds" type="number" min="0" max="1800" step="1"></label><label><span>講稿摘要／卡詞處</span><textarea data-field="script_notes" maxlength="4000"></textarea></label></div>`).join('');
       for(const group of ['demo','booth','performance','written'])$(group+'-rubric').innerHTML=rubricGroups[group].map(rubricHtml).join('');
       $('question-list').innerHTML=questions.map(([id,title])=>`<div class="question-row" data-question-id="${id}"><div class="question-name"><strong>${escapeHtml(title)}</strong><small>一句結論 + 一個證據 + 一個誠實邊界</small></div><label><span>你的回答</span><textarea data-field="answer" maxlength="6000"></textarea></label></div>`).join('');
       document.querySelectorAll('.status-select').forEach(select=>select.onchange=()=>{select.dataset.value=select.value;updateProgress();});

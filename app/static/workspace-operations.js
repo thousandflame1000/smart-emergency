@@ -174,7 +174,7 @@ async function loadOperationEvents(node){
   }catch(e){operationEvents.delete(key);if(state.selected?.id===node.id&&$('operation-events'))$('operation-events').textContent=e.message;}
 }
 async function messageAssignee(node){
-  const body='<textarea id="assignee-message" rows="4" maxlength="500" placeholder="例：改走台9線，先送到光復國小收容所"></textarea>';
+  const body='<textarea id="assignee-message" rows="4" maxlength="500"></textarea>';
   if(!await askConfirm('傳訊息給志工',body,'傳送 LINE'))return;
   const text=($('assignee-message')?.value||'').trim();
   if(!text){message('沒有輸入內容，未傳送',true);return;}

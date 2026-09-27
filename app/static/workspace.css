@@ -229,3 +229,7 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 
 .zone-picker { display: grid; gap: 4px; margin-bottom: 18px; font-size: 13px; color: var(--muted, #5f6c65); }
 .zone-picker select { width: 100%; }
+.region-results { max-height: 320px; overflow: auto; margin: 10px 0; }
+.region-results button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; }
+.region-results button small { color: var(--muted, #5f6c65); white-space: nowrap; }
+.region-results button.selected { outline: 2px solid #189b87; }

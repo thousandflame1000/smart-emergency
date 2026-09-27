@@ -613,7 +613,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </button>
         </div>
         <div class="list-toolbar">
-          <input type="search" id="elderly-search" placeholder="搜尋姓名、電話或地址" aria-label="搜尋長者">
+          <input type="search" id="elderly-search" aria-label="搜尋長者">
           <div id="elderly-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
         <div id="elderly-grid" class="people-grid">
@@ -670,7 +670,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增成員</button>
         </div>
         <div class="list-toolbar">
-          <input type="search" id="volunteers-search" placeholder="搜尋姓名或電話" aria-label="搜尋成員">
+          <input type="search" id="volunteers-search" aria-label="搜尋成員">
           <div id="volunteers-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
         <div id="volunteers-board" class="board">
@@ -716,8 +716,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="card">
         <div class="card-header"><div class="card-title">分區</div></div>
         <div style="padding:14px 18px;display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end">
-          <label>名稱<br><input class="form-control" id="zone-name" placeholder="台南永康區" maxlength="100"></label>
-          <label>中心地點<br><input class="form-control" id="zone-place" placeholder="永康區公所"></label>
+          <label>名稱<br><input class="form-control" id="zone-name" maxlength="100"></label>
+          <label>中心地點<br><input class="form-control" id="zone-place"></label>
           <label>半徑 km<br><input class="form-control" id="zone-radius" type="number" min="0.5" step="0.5" value="5" style="width:90px"></label>
           <button class="btn btn-primary" onclick="addZone()">＋ 新增</button>
         </div>
@@ -766,7 +766,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <div class="form-row col-2" style="margin-bottom:12px">
             <div class="form-group">
               <label class="form-label" for="doc-source">來源名稱 <span class="req">*</span></label>
-              <input type="text" id="doc-source" class="form-control" placeholder="例如：花蓮縣急救手冊 v1.0">
+              <input type="text" id="doc-source" class="form-control">
             </div>
             <div class="form-group">
               <label class="form-label" for="doc-category">分類</label>
@@ -781,8 +781,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </div>
           <div class="form-group" style="margin-bottom:10px">
             <label class="form-label" for="doc-content">文件內容 <span class="req">*</span></label>
-            <textarea id="doc-content" class="form-control" rows="7"
-              placeholder="貼上 SOP、指引、注意事項等…&#10;系統將自動切段（每 400 字一段）並向量化。"></textarea>
+            <textarea id="doc-content" class="form-control" rows="7"></textarea>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between">
             <span style="font-size: 13px;color:var(--muted)" id="doc-char-count">0 字</span>
@@ -809,8 +808,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header"><div class="card-title">🔍 測試 RAG 查詢</div></div>
         <div class="card-body">
           <div style="display:flex;gap:8px">
-            <input type="text" id="kb-test-q" class="form-control"
-              placeholder="例如：CPR 步驟" onkeydown="if(event.key==='Enter') testQuery()">
+            <input type="text" id="kb-test-q" class="form-control" onkeydown="if(event.key==='Enter') testQuery()">
             <button class="btn btn-primary" onclick="testQuery()">查詢</button>
           </div>
           <div id="kb-test-result" class="rag-test-output" style="display:none"></div>
@@ -1098,11 +1096,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label" for="need-desc">說明</label>
-        <input type="text" class="form-control" id="need-desc" placeholder="例：一家 4 口，需要 3 天份食物">
+        <input type="text" class="form-control" id="need-desc">
       </div>
       <div class="form-group">
         <label class="form-label" for="need-address">需求地址 <span class="req">*</span></label>
-        <input type="text" class="form-control" id="need-address" placeholder="花蓮縣光復鄉大進街…" oninput="scheduleGeocode('need')" onblur="geocodeNow('need')">
+        <input type="text" class="form-control" id="need-address" oninput="scheduleGeocode('need')" onblur="geocodeNow('need')">
         <span class="form-hint" id="need-geocode-status"></span>
       </div>
       <!-- 座標由地址自動轉出。「23.334300000000002」不是人類可讀的資訊，
@@ -1176,7 +1174,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="user-name">姓名 <span class="req">*</span></label>
-          <input type="text" class="form-control" id="user-name" placeholder="王大明">
+          <input type="text" class="form-control" id="user-name">
         </div>
         <div class="form-group">
           <label class="form-label" for="user-role">角色 <span class="req">*</span></label>
@@ -1193,12 +1191,12 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="user-phone">電話</label>
-          <input type="text" class="form-control" id="user-phone" placeholder="0912345678">
+          <input type="text" class="form-control" id="user-phone">
         </div>
       </div>
       <div class="form-group">
         <label class="form-label" for="user-address">地址</label>
-        <input type="text" class="form-control" id="user-address" placeholder="花蓮縣光復鄉…" oninput="scheduleGeocode('user')" onblur="geocodeNow('user')">
+        <input type="text" class="form-control" id="user-address" oninput="scheduleGeocode('user')" onblur="geocodeNow('user')">
         <span class="form-hint" id="user-geocode-status"></span>
       </div>
       <div class="form-group">
@@ -1284,7 +1282,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="pt-name">名稱 <span class="req">*</span></label>
-          <input type="text" class="form-control" id="pt-name" placeholder="例：崇倫國小避難所">
+          <input type="text" class="form-control" id="pt-name">
         </div>
         <div class="form-group">
           <label class="form-label" for="pt-type">類型</label>
@@ -1303,7 +1301,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="form-group">
         <label class="form-label" for="pt-address">地址</label>
-        <input type="text" class="form-control" id="pt-address" placeholder="花蓮縣光復鄉…" oninput="scheduleGeocode('pt')" onblur="geocodeNow('pt')">
+        <input type="text" class="form-control" id="pt-address" oninput="scheduleGeocode('pt')" onblur="geocodeNow('pt')">
         <span class="form-hint" id="pt-geocode-status"></span>
       </div>
       <!-- 座標由地址自動轉出。「23.334300000000002」不是人類可讀的資訊，
@@ -1312,22 +1310,22 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="pt-capacity">容量（人數）</label>
-          <input type="number" class="form-control" id="pt-capacity" placeholder="200">
+          <input type="number" class="form-control" id="pt-capacity">
         </div>
         <div class="form-group">
           <label class="form-label" for="pt-load">目前使用人數</label>
-          <input type="number" min="0" class="form-control" id="pt-load" placeholder="0">
+          <input type="number" min="0" class="form-control" id="pt-load">
         </div>
       </div>
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="pt-phone">電話</label>
-          <input type="text" class="form-control" id="pt-phone" placeholder="04-22xxxxxx">
+          <input type="text" class="form-control" id="pt-phone">
         </div>
       </div>
       <div class="form-group">
         <label class="form-label" for="pt-hours">開放時間</label>
-        <input type="text" class="form-control" id="pt-hours" placeholder="24h 或 08:00-22:00">
+        <input type="text" class="form-control" id="pt-hours">
       </div>
       <div class="form-group">
         <label class="form-label" for="pt-note">備註</label>
@@ -1355,7 +1353,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="res-name">名稱 <span class="req">*</span></label>
-          <input type="text" class="form-control" id="res-name" placeholder="備用飲用水">
+          <input type="text" class="form-control" id="res-name">
         </div>
         <div class="form-group">
           <label class="form-label" for="res-type">類型</label>
@@ -1373,7 +1371,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       <div class="form-row col-2">
         <div class="form-group">
           <label class="form-label" for="res-quantity">數量</label>
-          <input type="text" class="form-control" id="res-quantity" placeholder="約 50 公升">
+          <input type="text" class="form-control" id="res-quantity">
         </div>
         <div class="form-group">
           <label class="form-label" for="res-owner-id">登記人（志工）</label>

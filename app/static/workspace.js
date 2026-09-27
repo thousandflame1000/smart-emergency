@@ -136,16 +136,53 @@ async function deleteWorkspace() {
   await loadLiveWorkspace();await listWorkspaces();message(data.message);
 }
 // 選擇地區：搜尋地點 → 選範圍 → 載入周邊公開設施，地圖移過去，未命名的工作區順便以地區命名。
-let regionPick=null;
-function openRegion(){regionPick=null;$('region-results').innerHTML='';$('region-load').disabled=true;$('region-dialog').showModal();$('region-query').focus();}
-async function searchRegion(){
-  const q=$('region-query').value.trim();if(q.length<2)return;
-  $('region-results').textContent='搜尋中…';
-  const data=await api('/places?q='+encodeURIComponent(q));
-  const places=data.places||[];
-  $('region-results').innerHTML=places.length?places.map((p,i)=>`<button type="button" role="radio" aria-checked="false" data-i="${i}">${escapeHtml(p.name)}</button>`).join(''):'<p class="muted">找不到</p>';
+let regionPick=null,regionTimer=null,regionSeq=0;
+const TW_PLACES=[
+  ['臺南市永康區',23.0264,120.2573,'鄉鎮'],['花蓮縣光復鄉',23.669,121.423,'鄉鎮'],['花蓮縣瑞穗鄉',23.4972,121.376,'鄉鎮'],['花蓮縣富里鄉',23.1797,121.2482,'鄉鎮'],
+  ['臺東縣臺東市',22.7563,121.144,'鄉鎮'],['臺東縣成功鎮',23.0998,121.3765,'鄉鎮'],['臺東縣長濱鄉',23.3155,121.4513,'鄉鎮'],['臺東縣關山鎮',23.0474,121.1631,'鄉鎮'],['臺東縣池上鄉',23.1225,121.2195,'鄉鎮'],
+  ['臺北市',25.0375,121.5637,'縣市'],['新北市',25.012,121.4658,'縣市'],['基隆市',25.1276,121.7392,'縣市'],['桃園市',24.9936,121.301,'縣市'],['新竹市',24.8138,120.9675,'縣市'],['新竹縣',24.8387,121.0177,'縣市'],
+  ['苗栗縣',24.5602,120.8214,'縣市'],['臺中市',24.1477,120.6736,'縣市'],['彰化縣',24.0518,120.5161,'縣市'],['南投縣',23.9609,120.9719,'縣市'],['雲林縣',23.7092,120.4313,'縣市'],['嘉義市',23.4801,120.4491,'縣市'],
+  ['嘉義縣',23.4518,120.2555,'縣市'],['臺南市',22.9999,120.227,'縣市'],['高雄市',22.6273,120.3014,'縣市'],['屏東縣',22.5519,120.5487,'縣市'],['宜蘭縣',24.7021,121.7378,'縣市'],['花蓮縣',23.9872,121.6015,'縣市'],
+  ['臺東縣',22.7583,121.1444,'縣市'],['澎湖縣',23.5711,119.5793,'縣市'],['金門縣',24.4493,118.3767,'縣市'],['連江縣',26.1602,119.9517,'縣市'],
+].map(([name,lat,lng,tag])=>({name,lat,lng,tag}));
+const sameTai=s=>String(s).replace(/台/g,'臺');
+// 候選地區：分區、需求所在的鄉鎮市區、事件，不用打字就能選。
+async function regionCandidates(){
+  let nodes=state.graph.nodes;
+  if(!nodes.some(n=>n.properties.db==='need')){try{nodes=nodes.concat((await api('/operational-data')).graph.nodes);}catch(e){}}
+  const out=zoneList.filter(z=>z.center_lat!=null).map(z=>({name:z.name,lat:z.center_lat,lng:z.center_lng,tag:'分區'}));
+  const towns=new Map();
+  for(const n of nodes){
+    if(n.properties.db!=='need'||n.lat==null)continue;
+    const m=sameTai(n.properties.address||'').match(/([一-鿿]{2}[縣市])([一-鿿]{1,3}?[鄉鎮市區])?/);
+    if(!m)continue;
+    const key=m[0],t=towns.get(key)||{name:key,lat:0,lng:0,count:0};
+    t.lat+=n.lat;t.lng+=n.lng;t.count++;towns.set(key,t);
+  }
+  [...towns.values()].sort((a,b)=>b.count-a.count).forEach(t=>out.push({name:t.name,lat:t.lat/t.count,lng:t.lng/t.count,tag:`${t.count} 筆需求`}));
+  nodes.filter(n=>n.kind==='incident'&&n.lat!=null).forEach(n=>out.push({name:n.label,lat:n.lat,lng:n.lng,tag:'事件'}));
+  const seen=new Set(out.map(p=>sameTai(p.name)));
+  return out.concat(TW_PLACES.filter(p=>!seen.has(p.name)));
+}
+function showRegionChoices(places){
+  $('region-results').innerHTML=places.length?places.map((p,i)=>`<button type="button" role="radio" aria-checked="false" data-i="${i}"><span>${escapeHtml(p.name)}</span>${p.tag?`<small>${escapeHtml(p.tag)}</small>`:''}</button>`).join(''):'<p class="muted">找不到</p>';
   $('region-results').querySelectorAll('button').forEach(b=>b.onclick=()=>{regionPick=places[+b.dataset.i];$('region-results').querySelectorAll('button').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-checked',String(x===b));});$('region-load').disabled=false;});
-  if(places.length===1)$('region-results').querySelector('button').click();
+}
+async function openRegion(){
+  regionPick=null;$('region-query').value='';$('region-load').disabled=true;
+  $('region-results').textContent='';$('region-dialog').showModal();$('region-query').focus();
+  showRegionChoices(await regionCandidates());
+}
+async function searchRegion(){
+  const q=$('region-query').value.trim(),seq=++regionSeq;
+  regionPick=null;$('region-load').disabled=true;
+  const all=await regionCandidates();
+  if(!q){showRegionChoices(all);return;}
+  const local=all.filter(p=>sameTai(p.name).includes(sameTai(q)));
+  showRegionChoices(local);
+  if(q.length<2)return;
+  const data=await api('/places?q='+encodeURIComponent(q)).catch(()=>({places:[]}));
+  if(seq===regionSeq)showRegionChoices(local.concat((data.places||[]).map(p=>({...p,tag:'搜尋'}))));
 }
 async function loadRegion(){
   if(!regionPick)return;
@@ -371,7 +408,9 @@ async function init(){
   initOperations();
   $('zone-select').onchange=()=>selectZone().catch(e=>message(e.message,true));loadZoneOptions();
   $('open-region').onclick=openRegion;$('close-region').onclick=()=>$('region-dialog').close();
-  $('region-form').onsubmit=event=>{event.preventDefault();searchRegion().catch(e=>{$('region-results').textContent=e.message;});};
+  const regionSearch=()=>searchRegion().catch(e=>{$('region-results').textContent=e.message;});
+  $('region-form').onsubmit=event=>{event.preventDefault();clearTimeout(regionTimer);regionSearch();};
+  $('region-query').oninput=()=>{clearTimeout(regionTimer);regionTimer=setTimeout(regionSearch,450);};
   run('region-load',()=>loadRegion());
   run('save',()=>save());run('duplicate',()=>save(true));run('delete-workspace',()=>deleteWorkspace());run('new',async()=>{if(await discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});

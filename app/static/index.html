@@ -165,14 +165,14 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
       </div>
       <div class="grid">
         <article class="panel"><div class="panel-head"><h2>未解警報</h2><span class="badge b-muted" id="alert-count">0 筆</span></div><div class="alert-list" id="alerts"></div></article>
-        <article class="panel"><div class="panel-head"><h2>今日打卡</h2><input id="overview-search" placeholder="搜尋姓名" aria-label="搜尋姓名"></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="overview-elderly"></tbody></table></div></article>
+        <article class="panel"><div class="panel-head"><h2>今日打卡</h2><input id="overview-search" aria-label="搜尋姓名"></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="overview-elderly"></tbody></table></div></article>
       </div>
     </section>
     <section class="page" id="page-elderly">
       <div class="page-heading"><div><h2>長者狀態</h2><p id="elderly-count">0 位</p></div>
         <div style="display:flex;gap:8px;align-items:center">
           <div class="viewseg" id="elder-view"><button type="button" data-elderview="list" class="on">清單</button><button type="button" data-elderview="map">地圖</button></div>
-          <input id="elderly-search" placeholder="搜尋姓名或地址" aria-label="搜尋姓名或地址">
+          <input id="elderly-search" aria-label="搜尋姓名或地址">
         </div>
       </div>
       <div class="chips" id="elderly-chips"></div>
@@ -189,7 +189,7 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
     </section>
     <section class="page" id="page-ai-page">
       <div class="page-heading"><div><h2>AI 知識查詢</h2><p>依已核准知識庫回覆</p></div></div>
-      <article class="panel ask"><form class="query-row" id="rag-form"><input id="rag-question" required maxlength="500" placeholder="輸入急救、避難或照護問題"><button class="primary" id="rag-submit">查詢</button></form><div class="answer" id="rag-answer" hidden></div><div class="sources" id="rag-sources" hidden></div></article>
+      <article class="panel ask"><form class="query-row" id="rag-form"><input id="rag-question" required maxlength="500"><button class="primary" id="rag-submit">查詢</button></form><div class="answer" id="rag-answer" hidden></div><div class="sources" id="rag-sources" hidden></div></article>
     </section>
   </div>
 </main>
