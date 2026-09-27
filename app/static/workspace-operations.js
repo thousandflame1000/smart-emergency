@@ -73,7 +73,7 @@ async function refreshOperations(options={}){
   const documentVersion=state.documentVersion;
   for(const id of ['sync-db','layer-db'])$(id).disabled=true;
   operationRequest=(async()=>{
-    const snapshot=await api('/operational-data');
+    const snapshot=await api('/operational-data'+(state.zone?'?zone_id='+encodeURIComponent(state.zone):''));
     if(documentVersion!==state.documentVersion)return;
     operationOwners=snapshot.owners;
     operationEvents.clear();

@@ -16,7 +16,7 @@ const ICON_PATHS = {
 function iconSvg(kind) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[kind]||''}</svg>`; }
 const STATUS = {active:'啟用', inactive:'停用'};
 const LIVE_WORKSPACE_ID='__live__';
-const state = {id:null, live:false, revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
+const state = {id:null, live:false, zone:'', revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
   undo:[], redo:[], hidden:new Set(), report:null, connect:null, preview:null, editVersion:0, documentVersion:0, importVersion:0};
 let map, mapLayers, markerCluster, cy;
 let roadHighlightEdges = new Set(), roadHighlightNodes = new Set();
@@ -69,7 +69,8 @@ function loadDocument(data) {
   operationEvents.clear();
   state.documentVersion++;
   if(cy){cy.destroy();cy=null;}
-  state.id=data.id; state.live=false; state.revision=data.revision; state.graph=data.graph; state.selected=null; state.report=null;
+  state.id=data.id; state.live=false; state.revision=data.revision; state.graph=data.graph;
+  state.zone=data.zone_id&&data.zone_id!=='general'?data.zone_id:''; if($('zone-select'))$('zone-select').value=state.zone; state.selected=null; state.report=null;
   state.undo=[];state.redo=[];state.dirty=false;state.editVersion++;state.connect=null;
   $('workspace-name').value=data.name; $('workspace-folder').value=data.folder||''; $('workspace-list').value=data.id||'';
   state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateComparison();invalidateAllocation();
@@ -116,7 +117,7 @@ async function save(copy=false) {
   const version=state.editVersion, documentVersion=state.documentVersion, graph=structuredClone(state.graph), name=$('workspace-name').value.trim()||'未命名工作區';
   const folder=$('workspace-folder').value.trim();
   const id=copy?null:state.id;
-  const data=await api(id?'/'+id:'',{name,graph,baseline:state.baseline||null,revision:state.revision,folder},id?'PUT':'POST');
+  const data=await api(id?'/'+id:'',{name,graph,baseline:state.baseline||null,revision:state.revision,folder,zone_id:state.zone||'general'},id?'PUT':'POST');
   if(documentVersion!==state.documentVersion){await listWorkspaces();message('先前工作區已儲存');return;}
   state.id=data.id;state.live=false;state.revision=data.revision;
   workspaceUrl(data.id);
@@ -158,6 +159,21 @@ async function loadRegion(){
   $('region-dialog').close();
   if(state.view==='map')map.setView([regionPick.lat,regionPick.lng],radius<=500?16:radius<=1000?15:14);
   message(`${short}：加入 ${fresh.length} 個設施`);
+}
+// 選擇分區：只看這個分區的需求與物資（派遣本來就只在同分區內配對），地圖移到分區中心。
+let zoneList=[];
+async function loadZoneOptions(){
+  try{zoneList=await fetch('/api/zones').then(r=>r.ok?r.json():[]);}catch(e){zoneList=[];}
+  $('zone-select').innerHTML='<option value="">全部分區</option>'+zoneList.map(z=>`<option value="${escapeHtml(z.id)}">${escapeHtml(z.name)}</option>`).join('');
+  $('zone-select').value=zoneList.some(z=>z.id===state.zone)?state.zone:'';
+}
+async function selectZone(){
+  state.zone=$('zone-select').value;
+  const zone=zoneList.find(z=>z.id===state.zone);
+  if(zone&&zone.center_lat!=null&&state.view==='map')map.setView([zone.center_lat,zone.center_lng],zone.radius_km<=3?14:zone.radius_km<=8?13:12);
+  if(!state.live&&state.id){state.dirty=true;$('save-state').textContent='有未儲存變更';}
+  await refreshOperations();
+  message(zone?`分區：${zone.name}`:'全部分區');
 }
 function options(items, value) { return Object.entries(items).map(([k,v])=>`<option value="${escapeHtml(k)}" ${k===value?'selected':''}>${escapeHtml(v)}</option>`).join(''); }
 function nodeOptions(value='', placeholder='選擇物件') { return `<option value="">${placeholder}</option>`+state.graph.nodes.map(n=>`<option value="${escapeHtml(n.id)}" ${n.id===value?'selected':''}>${escapeHtml(n.label)} (${TYPES[n.kind]})</option>`).join(''); }
@@ -353,6 +369,7 @@ async function init(){
   initComparison();
   initAllocation();
   initOperations();
+  $('zone-select').onchange=()=>selectZone().catch(e=>message(e.message,true));loadZoneOptions();
   $('open-region').onclick=openRegion;$('close-region').onclick=()=>$('region-dialog').close();
   $('region-form').onsubmit=event=>{event.preventDefault();searchRegion().catch(e=>{$('region-results').textContent=e.message;});};
   run('region-load',()=>loadRegion());

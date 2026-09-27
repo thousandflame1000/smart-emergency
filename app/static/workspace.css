@@ -226,3 +226,6 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
   .inspector-backdrop { position:fixed; z-index:1190; inset:0; display:block; border:0; border-radius:0; background:rgba(20,38,31,.34); }
   .analysis-section { border-top:1px solid var(--line); padding-top:18px; margin-top:20px; }
 }
+
+.zone-picker { display: grid; gap: 4px; margin-bottom: 18px; font-size: 13px; color: var(--muted, #5f6c65); }
+.zone-picker select { width: 100%; }
