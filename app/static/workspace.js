@@ -134,6 +134,31 @@ async function deleteWorkspace() {
   state.dirty=false;inventoryDrafts.clear();
   await loadLiveWorkspace();await listWorkspaces();message(data.message);
 }
+// 選擇地區：搜尋地點 → 選範圍 → 載入周邊公開設施，地圖移過去，未命名的工作區順便以地區命名。
+let regionPick=null;
+function openRegion(){regionPick=null;$('region-results').innerHTML='';$('region-load').disabled=true;$('region-dialog').showModal();$('region-query').focus();}
+async function searchRegion(){
+  const q=$('region-query').value.trim();if(q.length<2)return;
+  $('region-results').textContent='搜尋中…';
+  const data=await api('/places?q='+encodeURIComponent(q));
+  const places=data.places||[];
+  $('region-results').innerHTML=places.length?places.map((p,i)=>`<button type="button" role="radio" aria-checked="false" data-i="${i}">${escapeHtml(p.name)}</button>`).join(''):'<p class="muted">找不到</p>';
+  $('region-results').querySelectorAll('button').forEach(b=>b.onclick=()=>{regionPick=places[+b.dataset.i];$('region-results').querySelectorAll('button').forEach(x=>{x.classList.toggle('selected',x===b);x.setAttribute('aria-checked',String(x===b));});$('region-load').disabled=false;});
+  if(places.length===1)$('region-results').querySelector('button').click();
+}
+async function loadRegion(){
+  if(!regionPick)return;
+  const radius=+$('region-radius').value;
+  const data=await api('/area-facilities',{lat:regionPick.lat,lng:regionPick.lng,radius_m:radius});
+  const existing=new Set(state.graph.nodes.map(n=>n.id));
+  const fresh=data.nodes.filter(n=>!existing.has(n.id));
+  const short=regionPick.name.split(',')[0].trim();
+  mutate(()=>{state.graph.nodes.push(...fresh);});
+  if($('workspace-name').value==='未命名工作區'||!$('workspace-name').value.trim())$('workspace-name').value=`${short} 周邊 ${radius>=1000?radius/1000+' 公里':radius+' 公尺'}`;
+  $('region-dialog').close();
+  if(state.view==='map')map.setView([regionPick.lat,regionPick.lng],radius<=500?16:radius<=1000?15:14);
+  message(`${short}：加入 ${fresh.length} 個設施`);
+}
 function options(items, value) { return Object.entries(items).map(([k,v])=>`<option value="${escapeHtml(k)}" ${k===value?'selected':''}>${escapeHtml(v)}</option>`).join(''); }
 function nodeOptions(value='', placeholder='選擇物件') { return `<option value="">${placeholder}</option>`+state.graph.nodes.map(n=>`<option value="${escapeHtml(n.id)}" ${n.id===value?'selected':''}>${escapeHtml(n.label)} (${TYPES[n.kind]})</option>`).join(''); }
 function nodeById(id) { return state.graph.nodes.find(n=>n.id===id); }
@@ -328,6 +353,9 @@ async function init(){
   initComparison();
   initAllocation();
   initOperations();
+  $('open-region').onclick=openRegion;$('close-region').onclick=()=>$('region-dialog').close();
+  $('region-form').onsubmit=event=>{event.preventDefault();searchRegion().catch(e=>{$('region-results').textContent=e.message;});};
+  run('region-load',()=>loadRegion());
   run('save',()=>save());run('duplicate',()=>save(true));run('delete-workspace',()=>deleteWorkspace());run('new',async()=>{if(await discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());

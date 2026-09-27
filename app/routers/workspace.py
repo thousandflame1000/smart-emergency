@@ -131,6 +131,24 @@ def places(q: str = Query(min_length=2, max_length=120)):
         raise HTTPException(400, "無法解析地區資料，請換個地區名稱重試") from exc
 
 
+class AreaRequest(BaseModel):
+    lat: float = Field(ge=-85, le=85, allow_inf_nan=False)
+    lng: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    radius_m: int = Field(ge=100, le=3000)
+
+
+@router.post("/area-facilities")
+def area_facilities(body: AreaRequest, _principal: dict | None = Depends(require_staff)):
+    """選擇地區：取回周邊公開設施（醫院、消防、學校、避難處、超商…），由前端加入工作區。"""
+    from app.services.area_facilities import facilities_around
+    try:
+        return facilities_around(body.lat, body.lng, body.radius_m)
+    except ConnectionError as exc:
+        raise HTTPException(502, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
 @router.post("/allocate")
 def allocate_graph(body: AllocationRequest):
     try:

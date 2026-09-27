@@ -71,6 +71,7 @@
   <main>
     <aside class="catalog">
       <button id="layer-db" class="primary wide" title="長者、需求單、志工物資、社區資源點"><i data-lucide="database"></i>讀取平台現況</button>
+      <button id="open-region" class="wide"><i data-lucide="map-pin"></i>選擇地區</button>
       <details><summary>資料圖層</summary><div id="layers"></div></details>
       <div class="segmented catalog-tabs"><button id="catalog-objects" class="active">物件</button><button id="catalog-tasks">需求</button><button id="catalog-resources">物資</button></div>
       <div class="catalog-heading">
@@ -151,6 +152,16 @@
     <div class="comparison-baseline"><div><span class="muted">固定比較基準</span><strong id="baseline-name"></strong><span id="baseline-time" class="muted"></span></div><button id="capture-baseline" title="將目前拓樸設為新基準" aria-label="將目前拓樸設為新基準"><i data-lucide="flag"></i></button></div>
     <div class="comparison-actions"><button id="run-comparison" class="primary"><i data-lucide="git-compare-arrows"></i>重新比較</button><button id="copy-scenario"><i data-lucide="copy"></i>另存情境</button><button id="export-comparison" disabled title="匯出比較報告與輸入快照" aria-label="匯出比較報告與輸入快照"><i data-lucide="download"></i></button></div>
     <p id="comparison-status" role="status"></p><div id="comparison-result"></div>
+  </dialog>
+  <dialog id="region-dialog" aria-labelledby="region-title">
+    <div class="dialog-heading"><h2 id="region-title">選擇地區</h2><button type="button" id="close-region" aria-label="關閉"><i data-lucide="x"></i></button></div>
+    <form id="region-form" class="form-grid">
+      <input id="region-query" placeholder="台南市永康區" aria-label="地區或地標" minlength="2" maxlength="120" required>
+      <button id="region-search" type="submit">搜尋</button>
+    </form>
+    <div id="region-results" class="object-list" role="radiogroup" aria-label="搜尋結果"></div>
+    <label>範圍<select id="region-radius"><option value="500">500 公尺</option><option value="1000" selected>1 公里</option><option value="2000">2 公里</option><option value="3000">3 公里</option></select></label>
+    <div class="dialog-actions"><button id="region-load" class="primary" disabled>載入</button></div>
   </dialog>
   <dialog id="import-dialog">
     <form id="import-form">
