@@ -7,12 +7,13 @@ import logging
 import os
 import re
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, Depends, Request
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.config import settings
 from app.errors import ApiError
 from app.models.user import User
 from app.services.form_token import verify_token
@@ -28,10 +29,11 @@ PHONE_RE = re.compile(r"^[0-9+\-()\s]{7,20}$")
 
 
 class _Base(BaseModel):
-    t: str = Field(min_length=10, max_length=600)
+    t: str = Field(default="", max_length=600)
     name: str | None = Field(default=None, max_length=100)
     phone: str | None = Field(default=None, max_length=40)
     address: str | None = Field(default=None, max_length=200)
+    privacy_acknowledged: bool = False
 
 
 class NeedForm(_Base):
@@ -48,19 +50,27 @@ class ResourceForm(_Base):
 
 
 class ReportForm(BaseModel):
-    t: str = Field(min_length=10, max_length=600)
+    t: str = Field(default="", max_length=600)
     need_id: str = Field(min_length=8, max_length=64)
     outcome: str
     note: str | None = Field(default=None, max_length=500)
+    privacy_acknowledged: bool = False
 
 
 class MeAction(BaseModel):
-    t: str = Field(min_length=10, max_length=600)
+    t: str = Field(default="", max_length=600)
     target_id: str | None = Field(default=None, max_length=64)
 
 
 class ApplyForm(_Base):
     service_area: str | None = Field(default=None, max_length=200)
+
+
+class FormSessionRequest(BaseModel):
+    token: str = Field(min_length=10, max_length=600)
+
+
+FORM_SESSION_COOKIE = "form_session"
 
 
 def _user_from_token(db: Session, token: str) -> User:
@@ -73,6 +83,10 @@ def _user_from_token(db: Session, token: str) -> User:
     if user.is_active is False:
         raise ApiError(403, "您的帳號目前已停用，請聯絡管理員。")
     return user
+
+
+def _user_from_request(db: Session, request: Request, token: str = "") -> User:
+    return _user_from_token(db, token or request.cookies.get(FORM_SESSION_COOKIE, ""))
 
 
 def _clean(value: str | None) -> str | None:
@@ -91,6 +105,13 @@ def _apply_profile(user: User, form: _Base) -> str | None:
             raise ApiError(422, "電話格式不正確，只能有數字、加號、括號、橫線與空白。")
         user.phone = phone
     return _clean(form.address)
+
+
+def _record_privacy_acknowledgement(db: Session, user: User, acknowledged: bool, source: str) -> None:
+    if not acknowledged:
+        raise ApiError(422, "請先閱讀並確認個人資料告知事項。")
+    from app.services.privacy import record_notice_acknowledgement
+    record_notice_acknowledgement(db, user, source=source)
 
 
 def _notify(user: User, text: str, ask_location: bool) -> None:
@@ -121,10 +142,11 @@ def _task_for(db: Session, user: User, need_id: str):
 
 
 @router.get("/api/context")
-def form_context(t: str, n: str | None = None, db: Session = Depends(get_db)):
+def form_context(request: Request, t: str = "", n: str | None = None,
+                 db: Session = Depends(get_db)):
     from app.routers.linebot import NEED_ZH, STATUS_ZH, _is_staff
     from app.labels import is_placeholder_name
-    user = _user_from_token(db, t)
+    user = _user_from_request(db, request, t)
     # 佔位姓名不要回填到表單——居民看到姓名欄已經填著系統給的字串，
     # 多半會直接送出，那個假名字就被固定下來了。
     out = {"name": "" if is_placeholder_name(user.name) else user.name,
@@ -139,12 +161,13 @@ def form_context(t: str, n: str | None = None, db: Session = Depends(get_db)):
 
 
 @router.post("/api/report")
-def submit_report_form(form: ReportForm, db: Session = Depends(get_db)):
+def submit_report_form(form: ReportForm, request: Request, db: Session = Depends(get_db)):
     from app.services.dispatch import REPORT_OUTCOME_ZH, report_task
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     need = _task_for(db, user, form.need_id)
     if form.outcome not in REPORT_OUTCOME_ZH:
         raise ApiError(422, "請選擇回報結果。")
+    _record_privacy_acknowledgement(db, user, form.privacy_acknowledged, "task_report")
     result = report_task(str(need.id), db, outcome=form.outcome, note=form.note,
                          actor_id=str(user.id), actor_label="volunteer:web")
     if result.get("error") == "invalid task state":
@@ -160,13 +183,14 @@ def submit_report_form(form: ReportForm, db: Session = Depends(get_db)):
 
 
 @router.post("/api/need")
-def submit_need_form(form: NeedForm, db: Session = Depends(get_db)):
+def submit_need_form(form: NeedForm, request: Request, db: Session = Depends(get_db)):
     from app.routers.linebot import submit_needs
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     types = list(dict.fromkeys(form.types))
     if not types or any(t not in NEED_CHOICES for t in types):
         raise ApiError(422, "請至少勾選一項需要的物資。")
     address = _apply_profile(user, form)
+    _record_privacy_acknowledgement(db, user, form.privacy_acknowledged, "need_form")
     description = "網頁表單申請" + (f"（{form.people}人）" if form.people else "")
     if _clean(form.note):
         description += f"｜補充：{_clean(form.note)}"
@@ -176,9 +200,9 @@ def submit_need_form(form: NeedForm, db: Session = Depends(get_db)):
 
 
 @router.post("/api/resource")
-def submit_resource_form(form: ResourceForm, db: Session = Depends(get_db)):
+def submit_resource_form(form: ResourceForm, request: Request, db: Session = Depends(get_db)):
     from app.routers.linebot import _is_staff, save_resource
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     if not _is_staff(user):
         raise ApiError(403, "只有志工可以登記物資。想當志工請先送出志工申請。")
     if form.rtype not in RESOURCE_TYPES - {"sos"}:
@@ -187,20 +211,22 @@ def submit_resource_form(form: ResourceForm, db: Session = Depends(get_db)):
     if not quantity:
         raise ApiError(422, "請填寫數量。")
     address = _apply_profile(user, form)
+    _record_privacy_acknowledgement(db, user, form.privacy_acknowledged, "resource_form")
     reply, ask = save_resource(db, user, form.rtype, quantity, address, _clean(form.resource_name))
     _notify(user, reply, ask)
     return {"ok": True, "message": reply, "need_location": ask}
 
 
 @router.post("/api/apply")
-def submit_apply_form(form: ApplyForm, db: Session = Depends(get_db)):
+def submit_apply_form(form: ApplyForm, request: Request, db: Session = Depends(get_db)):
     from app.routers.linebot import _is_staff
     from app.services.volunteer_application import submit
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     if _is_staff(user):
         raise ApiError(409, "您已經是志工／家屬／管理員了，不用重新申請。")
     name = check_name(form.name, what="姓名")
     _apply_profile(user, form)
+    _record_privacy_acknowledgement(db, user, form.privacy_acknowledged, "volunteer_application")
     application = submit(db, line_uid=user.line_uid, name=name, phone=_clean(form.phone),
                          service_area=_clean(form.service_area))
     reply = (f"📋 已收到您的志工申請，{name}！\n管理員審核後會透過 LINE 通知您結果，不用再重複申請。\n"
@@ -218,14 +244,14 @@ def _tw(value) -> str:
 
 
 @router.get("/api/me")
-def my_records(t: str, db: Session = Depends(get_db)):
+def my_records(request: Request, t: str = "", db: Session = Depends(get_db)):
     """Everything this person can see or manage about themselves, in one page."""
     from app.models.care_relation import CareRelation
     from app.models.need import CommunityNeed
     from app.routers.linebot import NEED_ZH, STATUS_ZH, _is_staff
     from app.services import dispatch
     from app.services.form_token import form_url
-    user = _user_from_token(db, t)
+    user = _user_from_request(db, request, t)
     needs = (db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id)
              .order_by(CommunityNeed.created_at.desc()).limit(30).all())
     contacts = db.query(CareRelation).filter(CareRelation.elderly_id == user.id, CareRelation.is_active == True).all()  # noqa: E712
@@ -262,7 +288,7 @@ def my_records(t: str, db: Session = Depends(get_db)):
 
 
 @router.post("/api/profile")
-def save_my_profile(form: _Base, db: Session = Depends(get_db)):
+def save_my_profile(form: _Base, request: Request, db: Session = Depends(get_db)):
     """住戶自己填姓名、電話、地址，不必先提出需求。
 
     先前唯一能寫入這三欄的路徑是送出「申請物資」表單，於是剛加入的人
@@ -270,9 +296,12 @@ def save_my_profile(form: _Base, db: Session = Depends(get_db)):
     地址就配不出人，家屬通知沒有電話就打不了——平時該有的資料，平時要能填。
     """
     from app.services import places
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     address = _apply_profile(user, form)
-    if address and address != user.address:
+    _record_privacy_acknowledgement(db, user, form.privacy_acknowledged, "profile_form")
+    if address and (
+        address != user.address or user.lat is None or user.lng is None
+    ):
         user.address = address
         found = places.geocode_address(address)
         if found:
@@ -286,10 +315,10 @@ def save_my_profile(form: _Base, db: Session = Depends(get_db)):
 
 
 @router.post("/api/cancel_need")
-def cancel_my_need(form: MeAction, db: Session = Depends(get_db)):
+def cancel_my_need(form: MeAction, request: Request, db: Session = Depends(get_db)):
     from app.models.need import CommunityNeed
     from app.services import dispatch
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     try:
         need = db.query(CommunityNeed).filter(CommunityNeed.id == form.target_id,
                                               CommunityNeed.requester_id == user.id).first()
@@ -304,9 +333,9 @@ def cancel_my_need(form: MeAction, db: Session = Depends(get_db)):
 
 
 @router.post("/api/withdraw_resource")
-def withdraw_my_resource(form: MeAction, db: Session = Depends(get_db)):
+def withdraw_my_resource(form: MeAction, request: Request, db: Session = Depends(get_db)):
     from app.models.resource import CommunityResource
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     try:
         res = db.query(CommunityResource).filter(CommunityResource.id == form.target_id,
                                                  CommunityResource.owner_id == user.id).first()
@@ -322,19 +351,19 @@ def withdraw_my_resource(form: MeAction, db: Session = Depends(get_db)):
 
 
 @router.post("/api/invite")
-def make_family_invite(form: MeAction, db: Session = Depends(get_db)):
+def make_family_invite(form: MeAction, request: Request, db: Session = Depends(get_db)):
     from app.services.line_notify import oa_message_link
     from app.services.line_ops import create_invite
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     code = create_invite(db, user)
     return {"ok": True, "code": code, "link": oa_message_link(f"綁定 {code}")}
 
 
 @router.post("/api/unbind")
-def unbind_relation(form: MeAction, db: Session = Depends(get_db)):
+def unbind_relation(form: MeAction, request: Request, db: Session = Depends(get_db)):
     """Either side of a family link can end it."""
     from app.models.care_relation import CareRelation
-    user = _user_from_token(db, form.t)
+    user = _user_from_request(db, request, form.t)
     try:
         rel = db.query(CareRelation).filter(CareRelation.id == form.target_id).first()
     except Exception:
@@ -344,6 +373,23 @@ def unbind_relation(form: MeAction, db: Session = Depends(get_db)):
     db.delete(rel)
     db.commit()
     return {"ok": True}
+
+
+@router.post("/api/session")
+def establish_form_session(body: FormSessionRequest):
+    if not verify_token(body.token):
+        raise ApiError(401, "這個表單連結已過期或無效，請回到 LINE 重新開啟表單。")
+    response = JSONResponse({"ok": True})
+    response.set_cookie(
+        FORM_SESSION_COOKIE,
+        body.token,
+        max_age=3 * 60 * 60,
+        httponly=True,
+        secure=settings.APP_ENV == "production",
+        samesite="lax",
+        path="/f",
+    )
+    return response
 
 
 @router.get("/{kind}")

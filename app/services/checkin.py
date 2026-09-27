@@ -1,5 +1,6 @@
 from datetime import date
 import logging
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.timeutil import now_utc, today_tw
@@ -7,6 +8,7 @@ from app.database import SessionLocal
 from app.models.user import User
 from app.models.checkin import DailyCheckin
 from app.services.line_notify import send_checkin_message
+from app.services.outbox import OutboxService, finish_inline_delivery
 
 logger = logging.getLogger(__name__)
 
@@ -45,17 +47,25 @@ def send_daily_checkins() -> None:
                 status="pending",
             )
             db.add(checkin)
-            db.commit()
-            db.refresh(checkin)
-
-            # 單一使用者發送失敗（LINE ID 失效、API 暫時性錯誤…）不該讓
-            # 整個迴圈中斷——後面排隊的其他長者當天就完全收不到打卡
-            # 訊息了。打卡記錄已經建立，只是這次推播沒送到，不影響
-            # 之後補打卡或管理員後台判斷。
             try:
-                send_checkin_message(elderly.line_uid, str(checkin.id))
-            except Exception as e:
-                logger.error(f"[checkin] 發送打卡訊息失敗（{elderly.name}）：{e}")
+                db.flush()
+                delivery = OutboxService(db).enqueue_checkin(checkin, elderly)
+                delivery_id = str(delivery.id)
+                db.commit()
+            except IntegrityError:
+                # 多個 web process 的排程可能同時啟動；唯一約束讓後到者安全略過。
+                db.rollback()
+                continue
+
+            if delivery.status == "PROCESSING":
+                try:
+                    send_checkin_message(elderly.line_uid, str(checkin.id))
+                except Exception as exc:
+                    finish_inline_delivery(db, delivery_id, exc)
+                    logger.error("[checkin] 發送打卡訊息失敗（%s）：%s", elderly.name, exc)
+                else:
+                    checkin.prompt_sent_at = now_utc()
+                    finish_inline_delivery(db, delivery_id)
 
     finally:
         db.close()
@@ -88,14 +98,19 @@ def mark_checkin(checkin_id: str, status: str, db: Session) -> DailyCheckin | No
     if was_alerted and recipients:
         # 長者遲到才回報平安：之前警報永遠停在「未解除」，家屬也不知道人其實沒事。
         from app.models.user import User
-        from app.services.line_notify import send_text
+        from app.services.outbox import send_text_reliably
         elder_name = checkin.elderly.name if checkin.elderly else "長者"
         for contact in db.query(User).filter(User.id.in_(list(recipients))).all():
             if contact.line_uid:
-                try:
-                    send_text(contact.line_uid, f"✅ {elder_name} 已回報平安，先前的未回應警報已解除，不用再擔心了。")
-                except Exception as e:
-                    logger.error(f"[checkin] 通知聯絡人平安失敗（{contact.name}）：{e}")
+                content = f"✅ {elder_name} 已回報平安，先前的未回應警報已解除，不用再擔心了。"
+                if not send_text_reliably(
+                    aggregate_type="DailyCheckin",
+                    aggregate_id=str(checkin.id),
+                    destination=contact.line_uid,
+                    content=content,
+                    dedupe_key=f"checkin-resolved:{checkin.id}:{contact.id}",
+                ):
+                    logger.warning("[checkin] 聯絡人平安通知已排入重試（%s）", contact.name)
     return checkin
 
 

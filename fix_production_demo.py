@@ -84,24 +84,49 @@ def plan_changes():
     changes = []
 
     hero = next((u for u in users if u.get("name") == HERO_NAME), None)
+    # 這支腳本會被重跑。名字池若從頭數起，第二次就會把已經在用的名字再發一次，
+    # 名單上出現兩個「林阿枝」比原本的假名更難解釋。
+    taken = {str(u.get("name") or "") for u in users}
+
+    def take(pool):
+        for candidate in pool:
+            if candidate not in taken:
+                taken.add(candidate)
+                return candidate
+        return None
+
     elder_i, vol_i = 0, 0
 
     for u in users:
         name, addr = str(u.get("name") or ""), str(u.get("address") or "")
-        dirty = "情境模擬" in name or "TYPHOON_SIM" in addr or "[" in addr
+        # 「張志工甲」這種編號式假名、以及還留在台中的地址，跟花東的其他人
+        # 擺在同一份名單上，評審一眼就看得出來是湊出來的。
+        dirty = ("情境模擬" in name or "TYPHOON_SIM" in addr or "[" in addr
+                 or "台中" in addr or "臺中" in addr
+                 or any(k in name for k in ("志工甲", "志工乙", "志工丙", "居民")))
         if not dirty or u is hero:
             continue
         _, town, roads = place_for(u.get("lat"))
         is_vol = "volunteer" in (u.get("roles") or [])
+        pool = (VOL_NAMES if is_vol else NEW_NAMES)
+        new_name = take(pool + [p + "○" for p in pool])
+        if not new_name:
+            continue
         if is_vol:
-            new_name = VOL_NAMES[vol_i % len(VOL_NAMES)]
             vol_i += 1
         else:
-            new_name = NEW_NAMES[elder_i % len(NEW_NAMES)]
             elder_i += 1
-        changes.append(("user", u["id"], u.get("name"), {
-            "name": new_name,
-            "address": f"{town}{roads[elder_i % len(roads)]}{11 + elder_i * 7}號"}))
+        fields = {"name": new_name,
+                  "address": f"{town}{roads[elder_i % len(roads)]}{11 + elder_i * 7}號"}
+        # 台中那批的座標在 24.1x。只換地址不換座標的話，地圖上他們還是在台中，
+        # 地址與圖釘互相打臉——比原本的髒資料更難解釋。
+        lat = u.get("lat")
+        if lat is None or not (22.9 <= lat <= 23.8):
+            ref, town2, _ = place_for(23.33 if lat is None else 23.33)
+            fields["lat"] = round(ref + (elder_i % 5) * 0.004, 5)
+            fields["lng"] = round(121.3177 + (elder_i % 4 - 1.5) * 0.005, 5)
+            fields["address"] = f"{town2}{roads[0]}{11 + elder_i * 7}號"
+        changes.append(("user", u["id"], u.get("name"), fields))
 
     # 主角的地址也帶著標記，但姓名是對的，只換地址。
     if hero and "[" in str(hero.get("address") or ""):
@@ -116,8 +141,17 @@ def plan_changes():
             "lng": round(HERO_AT[1] + (i % 2 - 0.5) * 0.005, 5),
             "address": f"花蓮縣玉里鎮中正路{20 + i * 13}號"}))
 
-    # 物資跟著搬，並確認有可用的飲用水——demo 的需求就是水。
-    for i, r in enumerate(resources[:4]):
+    # 只搬離所有需求都太遠的物資。先前這裡無條件動前四筆，重跑一次就把
+    # 已經散到各鄉鎮的志工站又全部拉回玉里，等於把上一輪的修正做掉。
+    def far_from_every_need(r):
+        if not r.get("lat"):
+            return True
+        return all(abs(r["lat"] - (n.get("lat") or 0)) > 0.05
+                   for n in rows(get("/api/resources/needs"), "needs", "items", "data")
+                   if n.get("lat"))
+
+    stranded = [r for r in resources if far_from_every_need(r)]
+    for i, r in enumerate(stranded[:4]):
         changes.append(("resource", r["id"], r.get("name"), {
             "lat": round(HERO_AT[0] + (i - 1.5) * 0.004, 5),
             "lng": round(HERO_AT[1] + (i % 2 - 0.5) * 0.005, 5),
@@ -139,6 +173,28 @@ def plan_changes():
             "address": f"花蓮縣玉里鎮中正路{20 + i * 13}號",
             "lat": round(HERO_AT[0] + (i - 1) * 0.004, 5),
             "lng": round(HERO_AT[1] + (i % 2 - 0.5) * 0.005, 5)}))
+
+    # 剩下的需求散在花東縱谷各鄉鎮，離主角那批志工五十公里以上，點開一樣是
+    # 「無候選資源」。評審會點，所以每一筆附近都要有人接得起來。
+    needs = rows(get("/api/resources/needs"), "needs", "items", "data")
+    for i, n in enumerate(needs):
+        if not n.get("lat") or n.get("need_type") == "sos":
+            continue
+        cand = get(f"/api/resources/needs/{n['id']}/candidates")
+        if [c for c in cand.get("candidates", []) if c.get("source") == "resource"]:
+            continue
+        owner = vols[i % len(vols)] if vols else None
+        if not owner:
+            break
+        _, town, roads = place_for(n["lat"])
+        changes.append(("new_resource", n["id"], f"（{town}的需求附近）", {
+            "resource_type": "water",
+            "name": f"{town}志工站的桶裝飲用水",
+            "owner_id": owner["id"],
+            "quantity": "2箱",
+            "address": f"{town}{roads[0]}{8 + i * 6}號",
+            "lat": round(n["lat"] + 0.003, 5),
+            "lng": round(n["lng"] + 0.003, 5)}))
 
     # 一位管理員，LINE 的決策中心選單才有人拿得到。
     if not any("admin" in (u.get("roles") or []) for u in users):

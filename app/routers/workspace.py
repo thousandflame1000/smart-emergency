@@ -74,7 +74,8 @@ def serialize(row, detail=True):
 
 
 @router.get("")
-def list_workspaces(zone_id: str | None = None, db: Session = Depends(get_db)):
+def list_workspaces(zone_id: str | None = None, db: Session = Depends(get_db),
+                    _principal: dict | None = Depends(require_staff)):
     q = db.query(TopologyWorkspace)
     if zone_id is not None:
         q = q.filter(TopologyWorkspace.zone_id == zone_id)
@@ -82,7 +83,8 @@ def list_workspaces(zone_id: str | None = None, db: Session = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-def create_workspace(body: WorkspaceWrite, db: Session = Depends(get_db)):
+def create_workspace(body: WorkspaceWrite, db: Session = Depends(get_db),
+                     _principal: dict | None = Depends(require_staff)):
     from app.models.zone import Zone
     if not db.get(Zone, body.zone_id):
         raise HTTPException(400, "找不到這個分區")
@@ -138,7 +140,9 @@ def allocate_graph(body: AllocationRequest):
 
 
 @router.post("/database-merge")
-def database_merge(body: DatabaseMergeRequest, zone_id: str | None = None, db: Session = Depends(get_db)):
+def database_merge(body: DatabaseMergeRequest, zone_id: str | None = None,
+                   db: Session = Depends(get_db),
+                   _principal: dict | None = Depends(require_staff)):
     """把平台資料庫的長者、需求、志工物資、資源點併入傳來的圖資料（不儲存）。
 
     帶 zone_id 時只併入該分區的物資／需求；不帶則維持併入全系統資料（例如管理員總覽）。"""
@@ -150,7 +154,8 @@ def database_merge(body: DatabaseMergeRequest, zone_id: str | None = None, db: S
 
 
 @router.get("/operational-data")
-def get_operational_data(zone_id: str | None = None, db: Session = Depends(get_db)):
+def get_operational_data(zone_id: str | None = None, db: Session = Depends(get_db),
+                         _principal: dict | None = Depends(require_staff)):
     """Read-only projection. No graph upload, persistence, notifications or stock mutations."""
     return operational_snapshot(db, zone_id)
 
@@ -223,15 +228,33 @@ def apply_allocation(body: ApplyAllocationRequest, db: Session = Depends(get_db)
 
 
 @router.get("/{workspace_id}")
-def get_workspace(workspace_id: str, db: Session = Depends(get_db)):
+def get_workspace(workspace_id: str, db: Session = Depends(get_db),
+                  _principal: dict | None = Depends(require_staff)):
     row = db.get(TopologyWorkspace, workspace_id)
     if not row:
         raise HTTPException(404, "找不到工作區")
     return serialize(row)
 
 
+@router.delete("/{workspace_id}")
+def delete_workspace(workspace_id: str, db: Session = Depends(get_db),
+                     _principal: dict | None = Depends(require_admin)):
+    """刪除不需要的工作區快照；只刪圖資料，不動平台上的需求、物資與人員。"""
+    from app.services.workspace_scenarios import workspace_scenarios
+    if workspace_id in {s.id for s in workspace_scenarios()}:
+        raise HTTPException(409, "內建演練案例每次啟動都會自動補回，不能刪除；不需要時切換到其他工作區即可。")
+    row = db.get(TopologyWorkspace, workspace_id)
+    if not row:
+        raise HTTPException(404, "找不到工作區")
+    name = row.name
+    db.delete(row)
+    db.commit()
+    return {"message": f"已刪除工作區「{name}」", "id": workspace_id}
+
+
 @router.put("/{workspace_id}")
-def save_workspace(workspace_id: str, body: WorkspaceWrite, db: Session = Depends(get_db)):
+def save_workspace(workspace_id: str, body: WorkspaceWrite, db: Session = Depends(get_db),
+                   _principal: dict | None = Depends(require_staff)):
     row = db.get(TopologyWorkspace, workspace_id)
     if "baseline" not in body.model_fields_set:
         previous = json.loads(row.document).get("baseline") if row else None

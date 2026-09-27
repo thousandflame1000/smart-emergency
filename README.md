@@ -84,6 +84,7 @@ cp .env.example .env   # 填入 LINE/GEMINI 金鑰
 uvicorn app.main:app --reload --port 8080
 python seed.py              # 基本測試資料
 python seed_rich_demo.py    # 決賽用豐富示範資料（附加式，不清空既有資料）
+python seed_workspace_scenarios.py  # 新增尼泊爾與光復演練工作區（可重複執行）
 python ingest_kb.py         # 建置知識庫向量
 ```
 

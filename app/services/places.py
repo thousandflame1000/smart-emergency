@@ -36,7 +36,10 @@ def search_places(query: str, *, timeout: float = 15) -> list[dict]:
         params = urlencode({"q": query, "format": "jsonv2", "limit": 6, "accept-language": "zh-TW"})
         endpoint = os.getenv("NOMINATIM_SEARCH_URL", "https://nominatim.openstreetmap.org/search")
         request = Request(endpoint + "?" + params, headers={
-            "User-Agent": "SmartEmergency/1.0 (https://smart-emergency-production-d744.up.railway.app)",
+            "User-Agent": os.getenv(
+                "NOMINATIM_USER_AGENT",
+                "SmartEmergency/1.0 (https://smart-emergency-production-d744.up.railway.app)",
+            ),
             "Accept": "application/json",
         })
         _last_request = time.monotonic()

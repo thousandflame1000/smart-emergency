@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>決賽演練驗收表 | 鄰里守望</title>
+  <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.js"></script>
+  <style>
+    :root { color-scheme:light; --ink:#25342f; --muted:#5f6c65; --line:#d8e0db; --paper:#fff; --bg:#f3f6f3; --accent:#076a5f; --blue:#266f98; --amber:#a95f0a; --red:#b73b31; }
+    * { box-sizing:border-box; letter-spacing:0; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; color:var(--ink); background:var(--paper); font:14px/1.55 system-ui,-apple-system,"Microsoft JhengHei",sans-serif; }
+    button,input,select,textarea { font:inherit; color:inherit; }
+    button { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:38px; padding:7px 12px; border:1px solid var(--line); border-radius:5px; background:var(--paper); cursor:pointer; }
+    button:hover { background:#eaf2ed; border-color:#9eb5a7; }
+    button.primary { color:white; background:var(--accent); border-color:var(--accent); }
+    button svg { width:17px; height:17px; }
+    input,select,textarea { width:100%; min-width:0; padding:8px 9px; border:1px solid #cbd6cf; border-radius:4px; background:white; }
+    textarea { min-height:86px; resize:vertical; }
+    input:focus,select:focus,textarea:focus,button:focus-visible { outline:2px solid #159681; outline-offset:2px; }
+    .topbar { position:sticky; z-index:20; top:0; display:flex; align-items:center; gap:16px; min-height:64px; padding:10px max(18px,calc((100% - 1180px)/2)); color:white; background:#16231f; }
+    .topbar h1 { margin:0; font-size:18px; }
+    .topbar p { margin:1px 0 0; color:#cad8d0; font-size:12px; }
+    .topbar-title { min-width:225px; }
+    .progress { flex:1; min-width:120px; }
+    .progress-line { height:6px; overflow:hidden; background:#42534c; border-radius:3px; }
+    .progress-line span { display:block; width:0; height:100%; background:#51c6a8; transition:width .2s; }
+    .progress small { display:block; margin-top:3px; color:#dbe6e0; text-align:right; }
+    .topbar-actions { display:flex; gap:7px; }
+    .topbar-actions button { color:var(--ink); }
+    .layout { display:grid; grid-template-columns:210px minmax(0,1fr); max-width:1400px; margin:0 auto; }
+    nav { position:sticky; top:64px; align-self:start; height:calc(100dvh - 64px); padding:22px 16px; border-right:1px solid var(--line); background:var(--bg); }
+    nav a { display:block; margin-bottom:3px; padding:8px 9px; color:var(--ink); border-radius:4px; text-decoration:none; }
+    nav a:hover { color:var(--accent); background:#e2eee7; }
+    nav strong { display:block; margin:18px 9px 7px; color:var(--muted); font-size:11px; text-transform:uppercase; }
+    main { min-width:0; }
+    section { padding:30px clamp(18px,4vw,58px) 36px; border-bottom:1px solid var(--line); scroll-margin-top:64px; }
+    section:nth-child(even) { background:#fafcfb; }
+    h2 { margin:0 0 5px; font-size:21px; }
+    h3 { margin:22px 0 8px; font-size:16px; }
+    .lede { max-width:820px; margin:0 0 22px; color:var(--muted); }
+    .notice { margin:16px 0; padding:11px 13px; border-left:4px solid var(--blue); background:#edf5f9; }
+    .notice.warn { border-color:var(--amber); background:#fff5e8; }
+    .meta-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px 18px; max-width:850px; }
+    label span,.field-label { display:block; margin-bottom:5px; font-weight:650; }
+    .route-list,.timing-list,.rubric-list,.question-list { border-top:1px solid var(--line); }
+    .route-row,.timing-row,.rubric-row,.question-row { display:grid; gap:12px 16px; padding:18px 0; border-bottom:1px solid var(--line); }
+    .route-row { grid-template-columns:185px 150px minmax(210px,1fr) minmax(210px,1fr); }
+    .route-name strong,.rubric-name strong,.question-name strong { display:block; }
+    .route-name small,.rubric-name small,.question-name small { display:block; margin-top:4px; color:var(--muted); }
+    .route-name .step { display:inline-block; min-width:30px; margin-bottom:5px; color:var(--accent); font-weight:750; }
+    .status-select[data-value="passed"] { border-color:#4a9b79; background:#eff8f3; }
+    .status-select[data-value="blocked"] { border-color:#d47b6d; background:#fff1ef; }
+    .timing-row { grid-template-columns:165px 145px minmax(300px,1fr); }
+    .rubric-row { grid-template-columns:210px 100px minmax(230px,1fr) minmax(230px,1fr); }
+    .question-row { grid-template-columns:260px minmax(300px,1fr); }
+    .score-input { font-size:20px; font-weight:700; text-align:center; }
+    .rubric-total { display:flex; align-items:baseline; gap:10px; margin:18px 0; }
+    .rubric-total strong { font-size:30px; color:var(--accent); }
+    .official-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:1px; overflow:hidden; border:1px solid var(--line); background:var(--line); }
+    .official-grid div { padding:14px; background:white; }
+    .official-grid strong { display:block; font-size:19px; }
+    .official-grid span { color:var(--muted); }
+    .final-fields { display:grid; grid-template-columns:2fr 1fr; gap:18px; }
+    .save-status { min-height:22px; margin-top:10px; color:var(--muted); }
+    .save-status.good { color:var(--accent); }
+    .save-status.bad { color:var(--red); }
+    footer { padding:24px; color:var(--muted); text-align:center; }
+    @media (max-width:980px) {
+      .layout { display:block; }
+      nav { position:static; height:auto; overflow-x:auto; padding:8px 12px; border-right:0; border-bottom:1px solid var(--line); white-space:nowrap; }
+      nav strong { display:none; } nav a { display:inline-block; margin:0; }
+      .route-row,.rubric-row { grid-template-columns:165px 135px minmax(220px,1fr); }
+      .route-row > :last-child,.rubric-row > :last-child { grid-column:3; }
+    }
+    @media (max-width:640px) {
+      .topbar { position:static; flex-wrap:wrap; padding:10px 12px; }
+      .topbar-title { flex:1; min-width:190px; }
+      .progress { order:3; flex-basis:100%; }
+      .topbar-actions button span { display:none; }
+      .meta-grid,.official-grid,.final-fields { grid-template-columns:1fr; }
+      section { padding:24px 15px 30px; scroll-margin-top:0; }
+      .route-row,.timing-row,.rubric-row,.question-row { grid-template-columns:1fr; gap:9px; }
+      .route-row > :last-child,.rubric-row > :last-child { grid-column:auto; }
+    }
+    @media print {
+      .topbar,nav { position:static; } .topbar-actions { display:none; }
+      .layout { display:block; } nav { display:none; } section { break-inside:avoid; padding:18px 0; }
+      body { font-size:11px; } textarea { min-height:55px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-title"><h1>決賽演練驗收表</h1><p>居民 → 志工 → 管理者 → 評分與問答</p></div>
+    <div class="progress"><div class="progress-line"><span id="progress-bar"></span></div><small id="progress-text">尚未開始</small></div>
+    <div class="topbar-actions">
+      <button id="print" type="button"><i data-lucide="printer"></i><span>列印</span></button>
+      <button id="export" type="button"><i data-lucide="download"></i><span>匯出</span></button>
+      <button id="submit" type="button" class="primary"><i data-lucide="send"></i><span>送出給 Codex</span></button>
+    </div>
+  </header>
+  <div class="layout">
+    <nav aria-label="表單章節">
+      <strong>操作驗收</strong>
+      <a href="#setup">演練設定</a><a href="#resident">居民</a><a href="#volunteer">志工</a><a href="#admin">管理者</a>
+      <strong>決賽準備</strong>
+      <a href="#timing">5 分鐘展演</a><a href="#rubric">決賽評分</a><a href="#written">書面一致性</a><a href="#qna">問答</a><a href="#summary">總結</a>
+    </nav>
+    <main>
+      <form id="rehearsal-form">
+        <section id="setup">
+          <h2>演練設定</h2>
+          <p class="lede">先填這四格就開始。建議用居民手機、志工手機、管理者筆電三個畫面；第一次只求走完，不求漂亮。</p>
+          <div class="meta-grid">
+            <label><span>填寫人</span><input id="participant-name" maxlength="120" placeholder="例如：王小明"></label>
+            <label><span>本輪名稱</span><input id="session-name" maxlength="120" placeholder="例如：第一次全流程"></label>
+            <label><span>演練日期</span><input id="rehearsal-date" type="date"></label>
+            <label><span>事件情境</span><select id="scenario"><option value="光復鄉馬太鞍溪洪災">光復鄉馬太鞍溪洪災</option><option value="尼泊爾 Rasuwa 洪災">尼泊爾 Rasuwa 洪災</option><option value="社區本機驗證資料">社區本機驗證資料</option></select></label>
+          </div>
+          <div class="notice warn"><strong>安全界線：</strong>正式 LINE 帳號測試緊急求助時，只開到二次確認卡，不要誤送真實求救；完整派遣演練使用專用測試帳號與測試需求。</div>
+        </section>
+
+        <section id="resident">
+          <h2>居民路線</h2><p class="lede">目標：證明長者熟悉的 LINE 操作，真的會留下可供災時判斷的資料。</p>
+          <div id="resident-routes" class="route-list"></div>
+        </section>
+
+        <section id="volunteer">
+          <h2>志工路線</h2><p class="lede">目標：證明志工能登記供給、接收派遣、回報現況，流程不是只停在媒合結果。</p>
+          <div id="volunteer-routes" class="route-list"></div>
+        </section>
+
+        <section id="admin">
+          <h2>管理者路線</h2><p class="lede">目標：把平時資料、災時需求、可解釋分數、人工核准與稽核紀錄串成閉環。</p>
+          <div id="admin-routes" class="route-list"></div>
+        </section>
+
+        <section id="timing">
+          <h2>5 分鐘正式展演</h2>
+          <p class="lede">官方規定為 5 分鐘展演加 5 分鐘問答。每段計一次實際秒數，把卡詞處直接寫下來。</p>
+          <div id="timing-list" class="timing-list"></div>
+        </section>
+
+        <section id="rubric">
+          <h2>決賽評分細項</h2>
+          <p class="lede">決賽占總成績 60%。以下依官方三大項拆解；官方未公布「作品展演」五個子項各自權重，因此每項用 0–5 做內部自評。</p>
+          <div class="official-grid">
+            <div><strong>60 分</strong><span>作品展演：展說、實用性、新穎性、產業性、實體完整度</span></div>
+            <div><strong>20 分</strong><span>展位準備：摺頁、影片、海報、道具</span></div>
+            <div><strong>20 分</strong><span>整體表現：應答、臺風、團隊合作度</span></div>
+          </div>
+          <div class="rubric-total"><span>換算自評</span><strong id="weighted-score">尚未評分</strong><span>／100，僅供練習</span></div>
+          <h3>作品展演 60 分</h3><div id="demo-rubric" class="rubric-list"></div>
+          <h3>展位準備 20 分</h3><div id="booth-rubric" class="rubric-list"></div>
+          <h3>整體表現 20 分</h3><div id="performance-rubric" class="rubric-list"></div>
+        </section>
+
+        <section id="written">
+          <h2>初賽書面一致性複核</h2>
+          <p class="lede">初賽占總成績 40%，分數已由書面審查決定；這裡用來避免現場說法和計畫書互相矛盾。</p>
+          <div id="written-rubric" class="rubric-list"></div>
+        </section>
+
+        <section id="qna">
+          <h2>5 分鐘問答</h2><p class="lede">不要背長文。每題先寫「一句結論」，再補一個產品畫面、資料或誠實限制。</p>
+          <div id="question-list" class="question-list"></div>
+        </section>
+
+        <section id="summary">
+          <h2>本輪總結</h2>
+          <div class="final-fields">
+            <label><span>整體觀察、最不放心的地方</span><textarea id="overall-notes" maxlength="8000" placeholder="把你剛才猶豫、等待、找不到按鈕或講不清楚的地方都寫下來。"></textarea></label>
+            <label><span>下一個最小行動</span><textarea id="next-action" maxlength="2000" placeholder="只寫一件下一步，例如：重練管理者派遣 2 次。"></textarea></label>
+          </div>
+          <p id="save-status" class="save-status" role="status">輸入內容會暫存在此瀏覽器；按「送出給 Codex」才會寫入 workspace。</p>
+        </section>
+      </form>
+      <footer>鄰里守望平台 · 2026 第十屆全國慈悲科技創新競賽演練</footer>
+    </main>
+  </div>
+  <script>
+    'use strict';
+    const $=id=>document.getElementById(id), escapeHtml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const routeGroups={
+      resident:[
+        ['r-profile','R1','我的中心與個人資料','LINE 傳「我的中心」，確認居民、家屬與需求入口容易找到。'],
+        ['r-checkin','R2','平安回報','傳「我很好」，管理者總覽應看到今日已回報平安。'],
+        ['r-need','R3','提出物資需求','從「申請需求」送出測試飲用水需求，再用「我的需求」確認狀態。'],
+        ['r-sos','R4','緊急求助防誤觸','只確認會先出現二次確認與 119 提醒；正式帳號不要送出測試求救。'],
+      ],
+      volunteer:[
+        ['v-center','V1','單一選單的志工功能','LINE 傳「我的中心」，確認原居民入口仍在，並可找到接單、我的任務與登記物資。'],
+        ['v-stock','V2','登記可提供物資','用測試志工登記與居民需求同品項、同單位的物資，確認位置完整。'],
+        ['v-receive','V3','收到並接受派遣','管理者核准後，志工收到任務卡，能看需求、位置與安全提醒並確認接單。'],
+        ['v-report','V4','回報現況與送達','從「我的任務」填現況或按已送達，居民與管理者看到狀態更新。'],
+      ],
+      admin:[
+        ['a-overview','A1','查看平時照護資料','總覽能看到居民平安回報、異常狀態與照護關係。'],
+        ['a-workspace','A2','讀取事件現況','事件處置工作區按「更新現況」，需求、人員、物資與關係使用同一份資料。'],
+        ['a-context','A3','檢查需求與候選依據','打開需求，確認緊急度、脆弱度、距離、品項與志工負荷可以解釋。'],
+        ['a-plan','A4','物資分配試算','選正確品項／單位執行試算，確認優先級、數量與未滿足需求。'],
+        ['a-approve','A5','人工核准派遣','送到待核准後再次確認，核准前不通知；核准後志工才收到任務。'],
+        ['a-audit','A6','完成與稽核閉環','志工送達後更新現況，需求進入已完成，事件紀錄留下操作者與狀態。'],
+        ['a-scenario','A7','跨情境展示','切換光復或尼泊爾演練工作區，指出來源、近似座標與測試數量標記。'],
+      ],
+    };
+    const timingItems=[
+      ['t-open','0:00–0:35','痛點與一句主張','平時 LINE 關懷資料，災時直接成為物資調度依據。'],
+      ['t-resident','0:35–1:20','居民操作','平安回報或提出需求，讓評審看到零學習成本與資料落地。'],
+      ['t-volunteer','1:20–2:00','志工操作','展示物資與任務入口，說明供給端怎麼進入系統。'],
+      ['t-admin','2:00–3:35','管理者調度','更新現況、候選分數、試算、人工核准；這是主秀。'],
+      ['t-close-loop','3:35–4:20','任務閉環','志工接單／送達，居民與管理者同步看到進度與稽核。'],
+      ['t-value','4:20–5:00','創新與市場收束','同一份資料串起平時照護與災時調度，買方是社區、NPO 與地方政府。'],
+    ];
+    const rubricGroups={
+      demo:[
+        ['d-story','作品展說','5 分鐘內問題、三角色與價值是否是一條完整故事。'],
+        ['d-practical','實用性','居民真的會用、志工能執行、管理者能結案，不只展示畫面。'],
+        ['d-novel','新穎性','平時關懷資料轉為災時優先權重，和單純地圖或打卡工具明確區隔。'],
+        ['d-industry','產業性','誰採購、如何導入、維運成本與擴散路徑能具體回答。'],
+        ['d-complete','實體完整度','LINE、後台、資料庫、媒合、通知、回報與稽核可實際串完。'],
+      ],
+      booth:[
+        ['b-leaflet','摺頁','一句主張、三角色流程、QR code 與聯絡方式清楚。'],
+        ['b-video','影片','斷網或 LINE 不穩時仍有 60–90 秒完整備援展示。'],
+        ['b-poster','海報','三公尺外看得到作品名、核心價值、架構與成果。'],
+        ['b-props','道具','兩支角色手機、管理者筆電、充電、網路與備援資料備妥。'],
+      ],
+      performance:[
+        ['p-answer','應答','先結論、再證據、最後承認邊界；不誇大即時道路或場域驗證。'],
+        ['p-stage','臺風','面向評審、速度穩定、不背對、不因載入空白沉默。'],
+        ['p-team','團隊合作度','誰說、誰操作、誰接問答事先固定，交接不搶話。'],
+      ],
+      written:[
+        ['w-theme','設計理念及主題相符性（30）','所有論述扣回慈善賑災與脆弱居民，不把 AI 當主題本身。'],
+        ['w-novel','創新／獨創性（20）','說清楚整合創新與可解釋演算法，不宣稱國外系統未公開的技術。'],
+        ['w-practical','實用性（20）','以可操作三角色閉環、LINE 低門檻與人工核准證明。'],
+        ['w-market','市場性（20）','指出政府既有系統斷層、導入對象、試辦方式與成本。'],
+        ['w-complete','書面完整性（10）','簡報、海報、口頭數字、SDGs 與計畫書版本一致且有來源。'],
+      ],
+    };
+    const questions=[
+      ['q-different','和現有長照、志工媒合或防災平台有什麼不同？'],
+      ['q-fair','演算法如何避免把資源都給距離最近的人？'],
+      ['q-road','道路中斷時，直線距離不是會算錯嗎？'],
+      ['q-privacy','長者地址、健康與位置資料如何保護？'],
+      ['q-elder','不熟手機的長者真的會用嗎？'],
+      ['q-market','誰會付費？第一個導入單位與商業模式是什麼？'],
+      ['q-offline','災時斷網或 LINE 故障怎麼辦？'],
+      ['q-validation','有真實場域驗證或成效數據嗎？'],
+      ['q-ai','為什麼不用更強的 AI 模型直接決定派遣？'],
+    ];
+
+    function routeHtml(item){const [id,step,title,goal]=item;return `<div class="route-row" data-route-id="${id}"><div class="route-name"><span class="step">${step}</span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>結果</span><select class="status-select" data-field="status"><option value="untested">未測</option><option value="passed">通過</option><option value="blocked">卡住</option></select></label><label><span>實際看到／做到什麼</span><textarea data-field="observation" maxlength="4000" placeholder="寫具體畫面、訊息或狀態。"></textarea></label><label><span>卡點／錯誤／疑問</span><textarea data-field="blocker" maxlength="4000" placeholder="按鈕難找、等待太久、文字看不懂都寫。"></textarea></label></div>`;}
+    function rubricHtml(item){const [id,title,goal]=item;return `<div class="rubric-row" data-rubric-id="${id}"><div class="rubric-name"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>自評 0–5</span><input class="score-input" data-field="score" type="number" min="0" max="5" step="1"></label><label><span>目前證據</span><textarea data-field="evidence" maxlength="4000" placeholder="哪個畫面、操作或數據能證明？"></textarea></label><label><span>還缺什麼</span><textarea data-field="improvement" maxlength="4000" placeholder="下一次具體改善。"></textarea></label></div>`;}
+    function render(){
+      for(const group of ['resident','volunteer','admin'])$(group+'-routes').innerHTML=routeGroups[group].map(routeHtml).join('');
+      $('timing-list').innerHTML=timingItems.map(([id,slot,title,goal])=>`<div class="timing-row" data-timing-id="${id}"><div class="route-name"><strong>${slot} · ${escapeHtml(title)}</strong><small>${escapeHtml(goal)}</small></div><label><span>實際秒數</span><input data-field="actual_seconds" type="number" min="0" max="1800" step="1" placeholder="秒"></label><label><span>講稿摘要／卡詞處</span><textarea data-field="script_notes" maxlength="4000"></textarea></label></div>`).join('');
+      for(const group of ['demo','booth','performance','written'])$(group+'-rubric').innerHTML=rubricGroups[group].map(rubricHtml).join('');
+      $('question-list').innerHTML=questions.map(([id,title])=>`<div class="question-row" data-question-id="${id}"><div class="question-name"><strong>${escapeHtml(title)}</strong><small>一句結論 + 一個證據 + 一個誠實邊界</small></div><label><span>你的回答</span><textarea data-field="answer" maxlength="6000"></textarea></label></div>`).join('');
+      document.querySelectorAll('.status-select').forEach(select=>select.onchange=()=>{select.dataset.value=select.value;updateProgress();});
+      if(window.lucide)lucide.createIcons();
+    }
+    function collect(){
+      const route=[...document.querySelectorAll('[data-route-id]')].map(row=>({id:row.dataset.routeId,status:row.querySelector('[data-field="status"]').value,observation:row.querySelector('[data-field="observation"]').value,blocker:row.querySelector('[data-field="blocker"]').value}));
+      const timing=[...document.querySelectorAll('[data-timing-id]')].map(row=>({id:row.dataset.timingId,actual_seconds:row.querySelector('[data-field="actual_seconds"]').value===''?null:Number(row.querySelector('[data-field="actual_seconds"]').value),script_notes:row.querySelector('[data-field="script_notes"]').value}));
+      const rubric=[...document.querySelectorAll('[data-rubric-id]')].map(row=>({id:row.dataset.rubricId,score:row.querySelector('[data-field="score"]').value===''?null:Number(row.querySelector('[data-field="score"]').value),evidence:row.querySelector('[data-field="evidence"]').value,improvement:row.querySelector('[data-field="improvement"]').value}));
+      const qna=[...document.querySelectorAll('[data-question-id]')].map(row=>({id:row.dataset.questionId,answer:row.querySelector('[data-field="answer"]').value}));
+      return {version:'competition-rehearsal-v1',participant_name:$('participant-name').value,session_name:$('session-name').value,rehearsal_date:$('rehearsal-date').value||null,scenario:$('scenario').value,route,timing,rubric,questions:qna,overall_notes:$('overall-notes').value,next_action:$('next-action').value};
+    }
+    function fill(data){if(!data)return;$('participant-name').value=data.participant_name||'';$('session-name').value=data.session_name||'';$('rehearsal-date').value=data.rehearsal_date||'';$('scenario').value=data.scenario||$('scenario').value;$('overall-notes').value=data.overall_notes||'';$('next-action').value=data.next_action||'';
+      for(const item of data.route||[]){const row=document.querySelector(`[data-route-id="${CSS.escape(item.id)}"]`);if(!row)continue;for(const field of ['status','observation','blocker'])row.querySelector(`[data-field="${field}"]`).value=item[field]??'';const select=row.querySelector('.status-select');select.dataset.value=select.value;}
+      for(const item of data.timing||[]){const row=document.querySelector(`[data-timing-id="${CSS.escape(item.id)}"]`);if(!row)continue;row.querySelector('[data-field="actual_seconds"]').value=item.actual_seconds??'';row.querySelector('[data-field="script_notes"]').value=item.script_notes||'';}
+      for(const item of data.rubric||[]){const row=document.querySelector(`[data-rubric-id="${CSS.escape(item.id)}"]`);if(!row)continue;for(const field of ['score','evidence','improvement'])row.querySelector(`[data-field="${field}"]`).value=item[field]??'';}
+      for(const item of data.questions||[]){const row=document.querySelector(`[data-question-id="${CSS.escape(item.id)}"]`);if(row)row.querySelector('[data-field="answer"]').value=item.answer||'';}
+      updateProgress();
+    }
+    function updateProgress(){const statuses=[...document.querySelectorAll('.status-select')].map(s=>s.value),done=statuses.filter(s=>s!=='untested').length,blocked=statuses.filter(s=>s==='blocked').length,total=statuses.length,pct=total?Math.round(done/total*100):0;$('progress-bar').style.width=pct+'%';$('progress-text').textContent=`操作 ${done}/${total} 已測${blocked?' · '+blocked+' 項卡住':''}`;
+      const groups=[['demo',60],['booth',20],['performance',20]],weighted=groups.map(([prefix,weight])=>{const vals=[...document.querySelectorAll(`[data-rubric-id^="${prefix[0]}-"] [data-field="score"]`)].map(i=>i.value===''?null:Number(i.value));return vals.every(v=>v!==null)?vals.reduce((a,b)=>a+b,0)/vals.length/5*weight:null;});$('weighted-score').textContent=weighted.every(v=>v!==null)?Math.round(weighted.reduce((a,b)=>a+b,0)):'尚未評分';}
+    function persistLocal(){localStorage.setItem('competition-rehearsal-v1',JSON.stringify(collect()));updateProgress();}
+    function say(text,bad=false){const el=$('save-status');el.textContent=text;el.className='save-status '+(bad?'bad':'good');}
+    async function load(){let local=null;try{local=JSON.parse(localStorage.getItem('competition-rehearsal-v1')||'null');}catch(e){}try{const response=await fetch('/api/rehearsal');if(response.ok){const saved=await response.json();fill(saved.submission||local);say(saved.submission?`已載入上次送出的紀錄：${saved.saved_at}`:'尚未送出紀錄；輸入內容會暫存在此瀏覽器。');return;}}catch(e){}fill(local);say('伺服器紀錄暫時無法讀取；目前使用瀏覽器暫存。',true);}
+    async function submit(){const button=$('submit');button.disabled=true;say('正在寫入 workspace…');try{const response=await fetch('/api/rehearsal',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(collect())});const result=await response.json();if(!response.ok)throw Error(result.detail||'送出失敗');say(`已送出給 Codex · ${result.saved_at} · ${result.path}`);}catch(error){say(error.message,true);}finally{button.disabled=false;}}
+    function exportData(){const blob=new Blob([JSON.stringify(collect(),null,2)],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='competition-rehearsal.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
+    render();$('rehearsal-date').valueAsDate=new Date();$('rehearsal-form').addEventListener('input',()=>{clearTimeout(window._saveTimer);window._saveTimer=setTimeout(persistLocal,250);});$('submit').onclick=submit;$('export').onclick=exportData;$('print').onclick=()=>print();load();
+  </script>
+</body>
+</html>

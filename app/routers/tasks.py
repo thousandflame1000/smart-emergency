@@ -3,10 +3,11 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.task_workflow import Task, TaskEvent
+from app.security import require_admin
 from app.services.outbox import notification_delivery_for_task
 
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("/{task_id}/notifications")

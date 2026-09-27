@@ -63,8 +63,56 @@ def ensure_additive_schema(engine: Engine) -> None:
                         f"ALTER TABLE community_needs ADD COLUMN {name} {sql_type}"
                     )
 
+    _ensure_outbox_dedupe(engine, inspector)
+    _ensure_checkin_prompt_timestamp(engine, inspector)
+    _ensure_daily_checkin_uniqueness(engine, inspector)
+
     if engine.dialect.name == "postgresql":
         _ensure_postgresql_append_only_triggers(engine)
+
+
+def _ensure_outbox_dedupe(engine: Engine, inspector) -> None:
+    if "outbox_messages" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("outbox_messages")}
+    with engine.begin() as connection:
+        if "dedupe_key" not in columns:
+            connection.exec_driver_sql(
+                "ALTER TABLE outbox_messages ADD COLUMN dedupe_key TEXT"
+            )
+        connection.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_outbox_dedupe_key "
+            "ON outbox_messages (dedupe_key)"
+        )
+
+
+def _ensure_daily_checkin_uniqueness(engine: Engine, inspector) -> None:
+    if "daily_checkins" not in inspector.get_table_names():
+        return
+    with engine.begin() as connection:
+        duplicate = connection.exec_driver_sql(
+            "SELECT elderly_id, date, COUNT(*) AS total "
+            "FROM daily_checkins GROUP BY elderly_id, date HAVING COUNT(*) > 1 LIMIT 1"
+        ).first()
+        if duplicate:
+            raise RuntimeError(
+                "Cannot enforce daily check-in uniqueness: duplicate elderly/date rows exist"
+            )
+        connection.exec_driver_sql(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_daily_checkins_elderly_date "
+            "ON daily_checkins (elderly_id, date)"
+        )
+
+
+def _ensure_checkin_prompt_timestamp(engine: Engine, inspector) -> None:
+    if "daily_checkins" not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns("daily_checkins")}
+    if "prompt_sent_at" not in columns:
+        with engine.begin() as connection:
+            connection.exec_driver_sql(
+                "ALTER TABLE daily_checkins ADD COLUMN prompt_sent_at TIMESTAMP"
+            )
 
 
 def _ensure_zone_column(engine: Engine, inspector, table: str) -> None:

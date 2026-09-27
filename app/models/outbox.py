@@ -22,6 +22,7 @@ class OutboxMessage(Base):
         Index("ix_outbox_ready", "status", "available_at", "created_at"),
         Index("ix_outbox_aggregate", "aggregate_type", "aggregate_id", "created_at"),
         Index("ix_outbox_lock", "status", "locked_at"),
+        Index("ux_outbox_dedupe_key", "dedupe_key", unique=True),
     )
 
     id = Column(GUID(), primary_key=True, default=GUID.new)
@@ -31,6 +32,7 @@ class OutboxMessage(Base):
     destination = Column(Text, nullable=False)
     message_type = Column(Text, nullable=False)
     payload = Column(JsonDocument, nullable=False, default=dict, server_default=text("'{}'"))
+    dedupe_key = Column(Text, nullable=True)
     status = Column(Text, nullable=False, default="PENDING", server_default=text("'PENDING'"))
     attempt_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
     available_at = Column(TIMESTAMP(), nullable=False, server_default=func.now())

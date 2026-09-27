@@ -1,5 +1,6 @@
 'use strict';
 const NEED_STATUS=window.NEED_STATUS_LABEL;   // 單一來源見 /static/labels.js
+const OPERATION_STAGES={sos:'緊急求救',...NEED_STATUS};
 const CHECKIN_STATUS={ok:'平安',safe:'平安',pending:'待回應',no_response:'未回應',help_needed:'需要協助',confirmed:'已確認'};
 const ROLE_NAMES={elderly:'長者',volunteer:'志工',family:'家屬',admin:'管理員'};
 const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'位置',lng:'位置',address:'地址',is_available:'可用',
@@ -12,10 +13,20 @@ let operationOwners=[], operationRequest=null, operationStage='open', catalogTab
 function workspaceUrl(id){const url=new URL(location.href);id?url.searchParams.set('id',id):url.searchParams.delete('id');history.replaceState(null,'',url.pathname+url.search+url.hash);}
 function focusOperational(id){const node=nodeById(id);if(!node)return;$('mode').value='select';state.hidden.delete(node.kind);select('node',id);if(node.lat!==null)map.panTo([node.lat,node.lng]);if(cy)cy.center(cy.getElementById('node:'+id));}
 function operationalNodes(){return state.graph.nodes.filter(n=>n.properties.db==='need');}
-function setCatalog(tab){catalogTab=tab;$('objects').hidden=tab!=='objects';$('operation-tasks').hidden=tab!=='tasks';for(const key of ['objects','tasks'])$('catalog-'+key).classList.toggle('active',tab===key);renderObjects();}
+function operationalResources(){return state.graph.nodes.filter(n=>['resource','point'].includes(n.properties.db));}
+function taskInStage(node,stage){
+  if(stage==='sos')return node.properties.status==='open'&&node.properties.need_type==='sos';
+  if(stage==='open')return node.properties.status==='open'&&node.properties.need_type!=='sos';
+  return node.properties.status===stage;
+}
+function setCatalog(tab){
+  catalogTab=tab;$('objects').hidden=tab!=='objects';$('operation-tasks').hidden=tab!=='tasks';$('operation-resources').hidden=tab!=='resources';
+  for(const key of ['objects','tasks','resources'])$('catalog-'+key).classList.toggle('active',tab===key);
+  $('catalog-title').textContent={objects:'物件',tasks:'需求與任務',resources:'物資回報'}[tab];renderObjects();
+}
 function renderOperations(){
   const tasks=operationalNodes();
-  $('operation-stages').innerHTML=Object.entries(NEED_STATUS).map(([key,label])=>`<button data-stage="${key}" class="${operationStage===key&&catalogTab==='tasks'?'active':''}" aria-pressed="${operationStage===key&&catalogTab==='tasks'}">${label}<strong>${tasks.filter(n=>n.properties.status===key).length}</strong></button>`).join('');
+  $('operation-stages').innerHTML=Object.entries(OPERATION_STAGES).map(([key,label])=>`<button data-stage="${key}" class="${key==='sos'?'sos-stage ':''}${operationStage===key&&catalogTab==='tasks'?'active':''}" aria-pressed="${operationStage===key&&catalogTab==='tasks'}">${label}<strong>${tasks.filter(n=>taskInStage(n,key)).length}</strong></button>`).join('');
   $('operation-stages').querySelectorAll('button').forEach(button=>button.onclick=()=>{operationStage=button.dataset.stage;setCatalog('tasks');renderOperations();});
   const stamp=state.graph.nodes.find(n=>n.properties.observed_at)?.properties.observed_at;
   $('observed-at').textContent=stamp?'現況快照 · '+new Date(stamp).toLocaleString('zh-TW'):'尚未讀取平台現況';
@@ -23,13 +34,42 @@ function renderOperations(){
 }
 function renderOperationTasks(){
   const query=$('search').value.toLowerCase();
-  const tasks=operationalNodes().filter(n=>n.properties.status===operationStage&&(n.label+' '+n.id+' '+n.properties.description).toLowerCase().includes(query)).sort((a,b)=>b.properties.urgency-a.properties.urgency);
+  const tasks=operationalNodes().filter(n=>taskInStage(n,operationStage)&&(n.label+' '+n.id+' '+n.properties.description).toLowerCase().includes(query)).sort((a,b)=>b.properties.urgency-a.properties.urgency);
   $('operation-tasks').innerHTML=tasks.map(n=>`<button data-task="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''}"><span class="task-priority ${n.properties.need_type==='sos'?'urgent':''}">${n.properties.need_type==='sos'?'SOS':'P'+n.properties.urgency}</span><span class="task-text">${escapeHtml(n.label)}<small>${escapeHtml(n.properties.quantity_text||'數量未填')} · ${n.lat===null?'位置未知':escapeHtml(n.properties.address||n.properties.location_source)}</small></span></button>`).join('')||'<p class="muted">此狀態沒有需求</p>';
   $('operation-tasks').querySelectorAll('button').forEach(b=>b.onclick=()=>focusOperational(b.dataset.task));
   if(catalogTab==='tasks')$('object-count').textContent=tasks.length+' 筆';
 }
-async function refreshOperations(){
+function renderOperationResources(){
+  const query=$('search').value.toLowerCase();
+  const resources=operationalResources().filter(n=>(n.label+' '+n.id+' '+(n.properties.owner||'')).toLowerCase().includes(query));
+  $('operation-resources').innerHTML=resources.map(n=>`<button data-resource="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''}"><span class="swatch" style="background:${COLORS[n.kind]}"></span><span class="task-text">${escapeHtml(n.label)}<small>${escapeHtml(n.properties.quantity_text||('資源點 · '+(n.properties.capacity??'容量未填')))} · ${escapeHtml(n.properties.owner||n.properties.address||'提供者未填')}</small></span><strong class="resource-state ${n.available?'':'unavailable'}">${n.available?'可用':'保留／停用'}</strong></button>`).join('')||'<p class="muted">尚無物資回報或資源點</p>';
+  $('operation-resources').querySelectorAll('button').forEach(b=>b.onclick=()=>focusOperational(b.dataset.resource));
+  if(catalogTab==='resources')$('object-count').textContent=resources.length+' 筆';
+}
+// Same rule as workspace_bridge.bind_to_incidents: each live need joins its nearest incident,
+// resource points within 20 km join as in-range facilities, and a workspace without any
+// incident gets one live event node so needs never float unattached.
+function bindToIncidents(nodes){
+  const located=n=>n.lat!==null&&n.lat!==undefined&&n.lng!==null&&n.lng!==undefined;
+  const km=(a,b)=>{const r=Math.PI/180,dLat=(b.lat-a.lat)*r,dLng=(b.lng-a.lng)*r;const h=Math.sin(dLat/2)**2+Math.cos(a.lat*r)*Math.cos(b.lat*r)*Math.sin(dLng/2)**2;return 12742*Math.asin(Math.sqrt(h));};
+  let incidents=nodes.filter(n=>n.kind==='incident');
+  const needs=nodes.filter(n=>n.properties.db==='need'&&n.properties.status!=='cancelled');
+  const extra=[],edges=[];
+  if(needs.length&&!incidents.length){
+    const spots=needs.filter(located);
+    const event={id:'db:incident:live',label:'即時通報事件',kind:'incident',lat:spots.length?spots.reduce((s,n)=>s+n.lat,0)/spots.length:null,lng:spots.length?spots.reduce((s,n)=>s+n.lng,0)/spots.length:null,quantity:0,available:true,source:'平台需求單彙整',properties:{db:'event',description:'工作區沒有事件物件時，彙整即時需求'},logistics:[]};
+    incidents=[event];extra.push(event);
+  }
+  if(!incidents.length)return{nodes:extra,edges};
+  const nearest=node=>{const placed=incidents.filter(located);if(!located(node)||!placed.length)return[incidents[0],null];let best=placed[0],d=km(node,best);for(const i of placed.slice(1)){const x=km(node,i);if(x<d){best=i;d=x;}}return[best,d];};
+  const edge=(incident,node,label)=>({id:'db:edge:event:'+node.id,source:incident.id,target:node.id,label,kind:'related',directed:true,status:'active',provenance:'平台資料庫',properties:{db:true,binding:'incident'}});
+  for(const need of needs)edges.push(edge(nearest(need)[0],need,need.properties.need_type==='sos'?'緊急求助':'事件需求'));
+  for(const point of nodes.filter(n=>n.properties.db==='point')){const[incident,d]=nearest(point);if(d!==null&&d<=20)edges.push(edge(incident,point,'範圍內資源點'));}
+  return{nodes:extra,edges};
+}
+async function refreshOperations(options={}){
   if(operationRequest)return operationRequest;
+  const preserveLiveClean=state.live&&!state.dirty&&!inventoryDrafts.size;
   const documentVersion=state.documentVersion;
   for(const id of ['sync-db','layer-db'])$(id).disabled=true;
   operationRequest=(async()=>{
@@ -39,11 +79,14 @@ async function refreshOperations(){
     operationEvents.clear();
     const fresh=new Map(snapshot.graph.nodes.map(n=>[n.id,n]));
     for(const node of state.graph.nodes){if(fresh.has(node.id)&&node.properties._layout)fresh.get(node.id).properties._layout=node.properties._layout;}
-    const nodes=state.graph.nodes.filter(n=>!n.id.startsWith('db:')).concat([...fresh.values()]);
+    const merged=state.graph.nodes.filter(n=>!n.id.startsWith('db:')).concat([...fresh.values()]);
+    const bound=bindToIncidents(merged);
+    const nodes=merged.concat(bound.nodes);
     const ids=new Set(nodes.map(n=>n.id));
-    const edges=state.graph.edges.filter(e=>!e.id.startsWith('db:edge:')&&ids.has(e.source)&&ids.has(e.target)).concat(snapshot.graph.edges);
+    const edges=state.graph.edges.filter(e=>!e.id.startsWith('db:edge:')&&ids.has(e.source)&&ids.has(e.target)).concat(snapshot.graph.edges,bound.edges);
     mutate(()=>{state.graph={nodes,edges};if(state.selected&&!ids.has(state.selected.id))state.selected=null;});
-    message(`現況已更新：${snapshot.counts.elders} 位長者、${snapshot.counts.volunteers} 位志工、${snapshot.counts.demands} 筆可試算需求、${snapshot.counts.supplies} 筆物資`);
+    if(preserveLiveClean){state.undo=[];state.dirty=false;state.baseline=null;$('save-state').textContent='即時資料 · 自動更新';updateHistory();}
+    if(!options.silent)message(`現況已更新：${snapshot.counts.elders} 位長者、${snapshot.counts.volunteers} 位志工、${snapshot.counts.demands} 筆需求、${snapshot.counts.supplies} 筆物資`);
   })();
   try{return await operationRequest;}finally{operationRequest=null;for(const id of ['sync-db','layer-db'])$(id).disabled=false;}
 }
@@ -60,41 +103,61 @@ function renderOperationalSelection(item,isNode){
   if(isNode)fields.push(['地址',p.address||p.base_values?.address||'未提供'],['地圖定位',item.lat===null?'未定位':'已定位']);
   const related=isNode?state.graph.edges.filter(e=>e.id.startsWith('db:edge:')&&(e.source===item.id||e.target===item.id)):[];
   el.innerHTML=`<div class="object-heading"><strong>${escapeHtml(item.label)}</strong><span class="source-label">${escapeHtml(isNode?item.source:item.provenance)}</span></div><dl class="object-facts">${fields.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>${p.quantity_verified===false?'<p class="error">數量或單位待確認，未納入分配試算。</p>':''}
-    ${p.db==='need'&&p.status==='suggested'?'<div id="need-candidate-summary" class="muted">候選載入中…</div>':''}
+    ${p.db==='need'&&p.need_type!=='sos'&&['open','suggested'].includes(p.status)?'<div id="need-candidate-summary" class="candidate-summary muted">候選載入中…</div>':''}
     <div id="operational-actions" class="actions"></div>${related.length?'<h2>關聯物件</h2><div class="related-objects">'+related.map(e=>{const other=e.source===item.id?e.target:e.source;return `<button data-related="${escapeHtml(other)}"><span>${escapeHtml(e.label)}</span>${escapeHtml(nodeById(other)?.label||other)}</button>`;}).join('')+'</div>':''}
     ${p.db==='need'?'<h2 class="event-heading">任務紀錄</h2><div id="operation-events" class="muted">讀取中</div>':''}<p class="muted">${p.observed_at?escapeHtml(new Date(p.observed_at).toLocaleString('zh-TW')):''}</p><details><summary>來源識別碼</summary><pre>${escapeHtml(item.id)}</pre></details>`;
   el.querySelectorAll('[data-related]').forEach(b=>b.onclick=()=>focusOperational(b.dataset.related));
   const actions=$('operational-actions');
-  function button(label,icon,fn,primary=false){const b=document.createElement('button');b.type='button';b.className=primary?'primary':'';b.innerHTML=`<i data-lucide="${icon}"></i>${label}`;b.onclick=fn;actions.append(b);}
+  function button(label,icon,fn,primary=false){const b=document.createElement('button');b.type='button';b.className=primary?'primary':'';b.innerHTML=`<i data-lucide="${icon}"></i>${label}`;b.onclick=fn;actions.append(b);return b;}
   if(p.db==='resource'||p.db==='point')button('編輯正式資料','pencil',()=>editInventory(item));
   if(p.db==='need'){
     if(p.status==='suggested'){
       loadOperationCandidates(item);
-      if(isAdmin()){button('核准派遣','check',()=>actOnNeed(item,'confirm_dispatch'),true);button('退回','undo-2',()=>actOnNeed(item,'decline_suggestion'));}
+      if(isAdmin()){button('核准並發 LINE 任務卡','send',()=>actOnNeed(item,'confirm_dispatch'),true);button('退回','undo-2',()=>actOnNeed(item,'decline_suggestion'));}
       else actions.insertAdjacentHTML('beforeend','<p class="muted">核准派遣僅限管理員，請聯絡管理員處理。</p>');
     }
     if(p.status==='open'&&p.need_type==='sos'){
       if(isAdmin())button('確認已處理','check-check',()=>actOnNeed(item,'resolve_sos'),true);
       else actions.insertAdjacentHTML('beforeend','<p class="muted">標記已處理僅限管理員。</p>');
     }
-    if(p.status==='open'&&p.need_type!=='sos')button('分配試算','package-check',()=>{try{openAllocation();}catch(e){message(e.message,true);}});
+    if(p.status==='open'&&p.need_type!=='sos'){
+      let proposeButton=null;
+      if(isAdmin()){proposeButton=button('正在搜尋候選','user-round-search',()=>{},true);proposeButton.disabled=true;}
+      button('完整分配試算','package-check',()=>{try{openAllocation();}catch(e){message(e.message,true);}});
+      loadOperationCandidates(item,proposeButton);
+    }
+    if(['suggested','matched'].includes(p.status)&&isAdmin())button('傳訊息給志工','message-square-text',()=>messageAssignee(item));
     loadOperationEvents(item);
   }
 }
 const operationCandidates=new Map();
-async function loadOperationCandidates(node){
+async function loadOperationCandidates(node,proposeButton=null){
   const key=node.id+':'+node.properties.version;
   try{
     if(!operationCandidates.has(key))operationCandidates.set(key,resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/candidates'));
     const data=await operationCandidates.get(key);
     if(state.selected?.id!==node.id||!$('need-candidate-summary'))return;
     const top=(data.candidates||[])[0];
-    if(!top){$('need-candidate-summary').innerHTML='<span class="error">⚠️ 無候選資源，核准派遣會失敗</span>';return;}
+    if(!top){$('need-candidate-summary').innerHTML='<span class="error">目前沒有可派候選。請確認志工物資、分區、數量與位置。</span>';if(proposeButton){proposeButton.textContent='沒有可派候選';proposeButton.disabled=true;}return;}
     const notify=top.notify_channel==='auto'?'🏢 自動完成（不透過 LINE）'
       :top.notify_channel==='line'?'📱 會發 LINE 任務卡'
       :'⚠️ 未綁定 LINE，核准後需自行聯繫';
-    $('need-candidate-summary').innerHTML=`➜ 系統建議 <strong>${escapeHtml(top.vol)}</strong>（${escapeHtml(top.name)}・評分 ${top.score}${top.dist_km!=null?'・'+top.dist_km+' km':''}）<br>${notify}`;
+    $('need-candidate-summary').innerHTML=`系統建議 <strong>${escapeHtml(top.vol)}</strong>（${escapeHtml(top.name)}・評分 ${top.score}${top.dist_km!=null?'・'+top.dist_km+' km':''}）<br>${notify}<small>照護關係只影響居民脆弱度，不限制志工成為候選。</small>`;
+    if(proposeButton){
+      if(top.source==='resource'){proposeButton.innerHTML='<i data-lucide="list-checks"></i>建立待核准建議';proposeButton.disabled=false;proposeButton.onclick=()=>proposeBest(node,top);icons();}
+      else{proposeButton.textContent='候選為固定資源點';proposeButton.disabled=true;}
+    }
   }catch(e){operationCandidates.delete(key);if(state.selected?.id===node.id&&$('need-candidate-summary'))$('need-candidate-summary').textContent=e.message;}
+}
+async function proposeBest(node,candidate){
+  const body=`將先保留 <strong>${escapeHtml(candidate.vol)}</strong> 的「${escapeHtml(candidate.name)}」並送進待核准。<br>這一步不會發 LINE；下一步由管理員核准後才會送出任務卡。`;
+  if(!await askConfirm('建立派遣建議？',body,'建立建議'))return;
+  const buttons=[...$('operational-actions').querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
+  try{
+    await resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/propose_dispatch?resource_id='+encodeURIComponent(candidate.id),'POST');
+    operationEvents.clear();operationCandidates.clear();await refreshOperations();operationStage='suggested';setCatalog('tasks');renderOperations();focusOperational(node.id);
+    message('建議已建立；請核准後發送 LINE 任務卡');
+  }catch(e){message(e.message,true);}finally{buttons.forEach(b=>b.disabled=false);}
 }
 async function resourceRequest(path,method='GET'){
   const r=await fetch('/api/resources'+path,{method});const data=await r.json();
@@ -106,13 +169,24 @@ async function loadOperationEvents(node){
     if(!operationEvents.has(key))operationEvents.set(key,resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/events'));
     const events=await operationEvents.get(key);
     if(state.selected?.id!==node.id||nodeById(node.id)?.properties.observed_at!==node.properties.observed_at||!$('operation-events'))return;
-    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',cancel_need:'取消需求'};
-    $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note?`<p>${escapeHtml(e.details.note)}</p>`:''}<small>${escapeHtml(e.actor_label||'系統')} · ${escapeHtml(e.created_at)}</small></div>`).join(''):'尚無派遣紀錄';
+    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',cancel_need:'取消需求',admin_message:'管理員指示'};
+    $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(e.actor_label||'系統')} · ${escapeHtml(e.created_at)}</small></div>`).join(''):'尚無派遣紀錄';
   }catch(e){operationEvents.delete(key);if(state.selected?.id===node.id&&$('operation-events'))$('operation-events').textContent=e.message;}
+}
+async function messageAssignee(node){
+  const body='<label for="assignee-message">內容會以 LINE 傳給這筆任務的志工，並記在任務紀錄。</label><textarea id="assignee-message" rows="4" maxlength="500" placeholder="例：改走台9線，先送到光復國小收容所"></textarea>';
+  if(!await askConfirm('傳訊息給志工',body,'傳送 LINE'))return;
+  const text=($('assignee-message')?.value||'').trim();
+  if(!text){message('沒有輸入內容，未傳送',true);return;}
+  try{
+    const r=await fetch('/api/resources/needs/'+encodeURIComponent(node.id.slice(8))+'/message_assignee',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+    const data=await r.json();if(!r.ok||data.error)throw Error(data.error||data.detail||'傳送失敗');
+    operationEvents.clear();message(data.message);if(state.selected?.id===node.id)loadOperationEvents(node);
+  }catch(e){message(e.message,true);}
 }
 async function actOnNeed(node,action){
   const titles={confirm_dispatch:'核准派遣？',decline_suggestion:'退回此建議？',resolve_sos:'確認已處理？'};
-  const okLabels={confirm_dispatch:'核准派遣',decline_suggestion:'退回',resolve_sos:'確認已處理'};
+  const okLabels={confirm_dispatch:'核准並發 LINE',decline_suggestion:'退回',resolve_sos:'確認已處理'};
   let body={confirm_dispatch:'核准後會真正通知志工與需求者。',decline_suggestion:'物資會恢復可用，需求退回待媒合。',resolve_sos:'當事人會收到已處理的 LINE 通知。'}[action];
   if(action==='confirm_dispatch'){
     const cached=operationCandidates.get(node.id+':'+node.properties.version);
@@ -189,10 +263,26 @@ async function applyInventory(){
   }catch(e){$('inventory-review-result').textContent=e.message;}
 }
 function initOperations(){
-  $('more-tools').onclick=()=>{const expanded=document.querySelector('.toolbar').classList.toggle('expanded');$('more-tools').setAttribute('aria-expanded',String(expanded));map.invalidateSize();if(cy)cy.resize();};
-  $('catalog-objects').onclick=()=>{setCatalog('objects');renderOperations();};$('catalog-tasks').onclick=()=>{setCatalog('tasks');renderOperations();};
+  $('add-object').onclick=event=>{
+    event.stopPropagation();
+    const menu=$('object-menu'),open=menu.hidden;
+    menu.hidden=!open;$('add-object').setAttribute('aria-expanded',String(open));
+    if(open)menu.querySelector('button').focus();
+  };
+  $('object-menu').querySelectorAll('[data-add-kind]').forEach(button=>button.onclick=event=>{
+    event.stopPropagation();beginAddObject(button.dataset.addKind);
+  });
+  document.addEventListener('click',event=>{if(!event.target.closest('.object-add'))closeObjectMenu();});
+  $('more-tools').onclick=()=>{
+    const expanded=document.querySelector('.toolbar').classList.toggle('expanded');
+    $('more-tools').setAttribute('aria-expanded',String(expanded));
+    $('more-tools').setAttribute('aria-label',expanded?'收合進階工具':'開啟進階工具');
+    $('more-tools').title=expanded?'收合進階工具':'開啟進階工具';
+    map.invalidateSize();if(cy)cy.resize();
+  };
+  $('catalog-objects').onclick=()=>{setCatalog('objects');renderOperations();};$('catalog-tasks').onclick=()=>{setCatalog('tasks');renderOperations();};$('catalog-resources').onclick=()=>{setCatalog('resources');renderOperations();};
   run('review-inventory',reviewInventory);run('apply-inventory',applyInventory);
   $('close-inventory').onclick=()=>$('inventory-dialog').close();$('close-inventory-review').onclick=()=>$('inventory-review-dialog').close();
   $('discard-inventory').onclick=()=>{inventoryDrafts.clear();updateInventoryCount();$('inventory-review-dialog').close();};
-  window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==parent)return;if(event.data?.workspaceVisible){map.invalidateSize();if(cy)cy.resize();}if(event.data?.operationStage in NEED_STATUS){operationStage=event.data.operationStage;setCatalog('tasks');renderOperations();}});
+  window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==parent)return;if(event.data?.workspaceVisible){map.invalidateSize();if(cy)cy.resize();if(state.live&&!state.dirty&&!inventoryDrafts.size)refreshOperations({silent:true}).catch(e=>message(e.message,true));}if(event.data?.operationStage in OPERATION_STAGES){operationStage=event.data.operationStage;setCatalog('tasks');renderOperations();}});
 }

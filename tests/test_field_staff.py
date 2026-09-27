@@ -173,3 +173,19 @@ def test_field_staff_cannot_confirm_dispatch_or_delete(db, api):
 
     login_as(api, admin)
     assert api.post(f"/api/resources/needs/{need.id}/match", params={"resource_id": str(res.id)}).status_code == 200
+
+
+def test_field_staff_cannot_read_users_escalate_roles_or_use_admin_tools(db, api):
+    _admin, staff, _vol, _elder, _res, _need = _seed(db)
+    login_as(api, staff)
+
+    assert api.get("/api/dashboard/users").status_code == 403
+    assert api.put(
+        f"/api/dashboard/users/{staff.id}",
+        params=[("name", staff.name), ("roles", "admin")],
+    ).status_code == 403
+    assert api.post("/api/zones", params={"name": "越權分區"}).status_code == 403
+    assert api.post("/api/rag/query", json={"question": "長者的健康資料"}).status_code == 403
+
+    db.refresh(staff)
+    assert staff.roles == ["field_staff"]

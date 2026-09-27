@@ -91,6 +91,9 @@ tbody tr[data-row]{cursor:pointer}
 .people-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(258px,1fr));gap:10px;align-items:start}
 .pcard{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 13px;transition:border-color .12s,box-shadow .12s;cursor:pointer}
 .pcard:hover{border-color:var(--accent);box-shadow:0 2px 10px #17201c14}
+.pcard[data-status="help_needed"]{border:2px solid var(--danger);background:#fff1f3}
+.pcard-section{grid-column:1/-1;padding:4px 2px 0;color:var(--muted);font-size:13px;font-weight:700}.pcard-section.sos{color:var(--danger);font-size:15px}
+tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 0 0 var(--danger)}
 .pcard-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
 .pcard-name{font-size:14px;font-weight:700}
 .pcard-facts{margin-top:9px;display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--muted)}
@@ -209,7 +212,7 @@ tbody tr[data-row]{cursor:pointer}
 'use strict';
 const $=id=>document.getElementById(id);
 const pageTitles={overview:'總覽',elderly:'長者狀態','analytics-page':'趨勢分析','ai-page':'AI 助手'};
-const statuses={ok:['平安','b-ok'],safe:['平安','b-ok'],confirmed_safe:['已確認安全','b-ok'],no_response:['未回應','b-danger'],help_needed:['需要協助','b-danger'],pending:['等待中','b-warning'],not_sent:['未發送','b-muted']};
+const statuses={ok:['平安','b-ok'],safe:['平安','b-ok'],confirmed_safe:['已確認安全','b-ok'],no_response:['未回應','b-danger'],help_needed:['緊急求助','b-danger'],unwell:['身體不舒服','b-warning'],pending:['等待中','b-warning'],not_sent:['未發送','b-muted']};
 let elders=[];
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 function badge(status){const [label,cls]=statuses[status]||[status||'未知','b-muted'];return `<span class="badge ${cls}">${esc(label)}</span>`;}
@@ -231,15 +234,18 @@ function askConfirm(title,text,okLabel='確認'){
 }
 function skeletonRows(count,cols){return Array.from({length:count},()=>`<tr>${Array.from({length:cols},()=>'<td><span class="skel"></span></td>').join('')}</tr>`).join('');}
 // 狀態分組：畫面上的篩選是「平安／需要關注／等待／未發送」四組，底層可能對應多個原始狀態值。
-const GROUPS={ok:['ok','safe','confirmed_safe'],risk:['no_response','help_needed'],pending:['pending'],not_sent:['not_sent']};
-const GROUP_LABEL={ok:'平安',risk:'需要關注',pending:'等待回覆',not_sent:'未發送'};
+// 緊急求助自成一組並永遠排最前面，不和未回應、不舒服或平安的人混在同一堆。
+const GROUPS={sos:['help_needed'],risk:['no_response','unwell'],pending:['pending'],not_sent:['not_sent'],ok:['ok','safe','confirmed_safe']};
+const GROUP_LABEL={sos:'緊急求助',risk:'需要關注',pending:'等待回覆',not_sent:'未發送',ok:'平安'};
+const STATUS_RANK={help_needed:0,no_response:1,unwell:2,pending:3,not_sent:4};
+function byUrgency(rows){return rows.slice().sort((a,b)=>(STATUS_RANK[a.today_status||'not_sent']??5)-(STATUS_RANK[b.today_status||'not_sent']??5));}
 function inGroup(row,group){return !group||(GROUPS[group]||[]).includes(row.today_status||'not_sent');}
 let elderFilter='',relationsCache=null;
 function elderById(id){return elders.find(e=>String(e.id)===String(id));}
 function showPage(id){if(!pageTitles[id])id='overview';document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+id));document.querySelectorAll('[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===id));$('title').textContent=pageTitles[id];if(id==='analytics-page')loadTrends();if(history.replaceState)history.replaceState(null,'','#'+id);}
 // 只剩總覽的「今日打卡」用這張表：姓名／狀態／回覆時間，長者名單那頁走卡片。
 function renderElders(target,data){
-  $(target).innerHTML=data.length?data.map(row=>`<tr data-row="${esc(row.id)}" tabindex="0"><td><strong>${esc(row.name)}</strong></td><td>${badge(row.today_status)}</td><td class="muted">${clock(row.responded_at)}</td><td><div class="row-actions">${row.phone?`<a class="mini" href="tel:${esc(row.phone)}" title="撥號給 ${esc(row.name)}">撥號</a>`:''}<button class="mini" data-detail="${esc(row.id)}">詳情</button></div></td></tr>`).join(''):`<tr><td colspan="4" class="empty">這個條件下沒有長者<br><span class="muted" style="font-size:13px">換個狀態或清掉搜尋字看看</span></td></tr>`;
+  $(target).innerHTML=data.length?byUrgency(data).map(row=>`<tr data-row="${esc(row.id)}" tabindex="0"${row.today_status==='help_needed'?' class="sos-row"':''}><td><strong>${esc(row.name)}</strong></td><td>${badge(row.today_status)}</td><td class="muted">${clock(row.responded_at)}</td><td><div class="row-actions">${row.phone?`<a class="mini" href="tel:${esc(row.phone)}" title="撥號給 ${esc(row.name)}">撥號</a>`:''}<button class="mini" data-detail="${esc(row.id)}">詳情</button></div></td></tr>`).join(''):`<tr><td colspan="4" class="empty">這個條件下沒有長者<br><span class="muted" style="font-size:13px">換個狀態或清掉搜尋字看看</span></td></tr>`;
   // 整列可點（含鍵盤 Enter），不用瞄準那顆小按鈕；列內的連結／按鈕自己處理，不重複觸發。
   $(target).querySelectorAll('tr[data-row]').forEach(tr=>{
     const open=()=>openDrawer(tr.dataset.row);
@@ -264,17 +270,20 @@ function applyElderFilters(){
 function renderElderCards(rows){
   const host=$('elderly-list-panel');
   if(!rows.length){host.innerHTML=`<p class="empty" style="grid-column:1/-1">${elders.length?'這個條件下沒有長者，換個狀態或清掉搜尋字':'尚未登記長者'}</p>`;return;}
-  host.innerHTML=rows.map(r=>{
+  const card=r=>{
     const facts=[
       r.phone?`<div><span class="k">☎</span><a href="tel:${esc(r.phone)}" onclick="event.stopPropagation()">${esc(r.phone)}</a></div>`:'',
       r.address?`<div><span class="k">◎</span><span>${esc(r.address)}</span></div>`:'',
     ].join('');
-    return `<article class="pcard" data-card="${esc(r.id)}" tabindex="0">
+    return `<article class="pcard" data-card="${esc(r.id)}" data-status="${esc(r.today_status||'not_sent')}" tabindex="0">
       <div class="pcard-top"><span class="pcard-name">${esc(r.name)}</span>${badge(r.today_status)}</div>
       ${facts?`<div class="pcard-facts">${facts}</div>`:''}
       ${r.responded_at?`<div class="pcard-when">回覆 ${clock(r.responded_at)}</div>`:''}
     </article>`;
-  }).join('');
+  };
+  const sos=rows.filter(r=>r.today_status==='help_needed'),rest=byUrgency(rows.filter(r=>r.today_status!=='help_needed'));
+  host.innerHTML=(sos.length?`<div class="pcard-section sos">🆘 緊急求助 ${sos.length} 位　請先撥號確認安全，必要時通報 119</div>${sos.map(card).join('')}`
+    +(rest.length?`<div class="pcard-section">其他長者 ${rest.length} 位</div>`:''):'')+rest.map(card).join('');
   host.querySelectorAll('[data-card]').forEach(card=>{
     const open=()=>openDrawer(card.dataset.card);
     card.onclick=event=>{if(!event.target.closest('a'))open();};

@@ -13,3 +13,4 @@ server.log
 server_err.log
 test_q.json
 test_query.json
+REHEARSAL_RESPONSES.json

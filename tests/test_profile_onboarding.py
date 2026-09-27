@@ -36,7 +36,7 @@ def test_a_resident_can_fill_in_their_own_details(db):
 
     res = client.post("/f/api/profile", json={
         "t": token, "name": "王秀霞", "phone": "0912345678",
-        "address": "花蓮縣光復鄉大進村大進街48號"})
+        "address": "花蓮縣光復鄉大進村大進街48號", "privacy_acknowledged": True})
     assert res.status_code == 200, res.text
     assert res.json()["ok"] is True
 
@@ -50,7 +50,8 @@ def test_a_resident_can_fill_in_their_own_details(db):
 def test_saving_details_without_a_location_says_so(db):
     mk(db, "沒座標", ["elderly"], uid="U-無座標")
     res = client.post("/f/api/profile", json={
-        "t": make_token("U-無座標"), "name": "陳阿姨", "address": "花蓮縣瑞穗鄉中山路二段1號"})
+        "t": make_token("U-無座標"), "name": "陳阿姨", "address": "花蓮縣瑞穗鄉中山路二段1號",
+        "privacy_acknowledged": True})
     body = res.json()
     # 沒有座標就配不出志工，回覆要講清楚下一步，不要只說「已儲存」。
     assert body["need_location"] is True

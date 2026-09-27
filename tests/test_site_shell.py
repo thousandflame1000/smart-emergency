@@ -48,6 +48,32 @@ def test_workspace_works_inside_the_shell(web):
     assert "classList.add('embed')" in html and 'href="/admin"' not in html
 
 
+def test_mobile_shell_keeps_navigation_and_mode_labels_visible(web):
+    html = web.get("/").text
+    assert 'id="nav-toggle"' in html
+    assert 'id="mobile-title"' in html
+    assert 'id="mobile-mode-text">日常模式' in html
+    assert 'aria-controls="sidebar"' in html
+    assert ".nav .label" not in html, "行動版不能再把導覽文字整批隱藏"
+
+
+def test_workspace_separates_core_actions_from_advanced_tools(web):
+    html = web.get("/workspace").text
+    assert 'class="advanced-tools"' in html
+    assert 'id="sync-db" class="primary"' in html
+    assert 'id="close-inspector"' in html and 'id="inspector-backdrop"' in html
+    assert 'id="add-object"' in html and 'id="object-menu"' in html
+    for kind in ("incident", "person", "supply", "facility", "custom"):
+        assert f'data-add-kind="{kind}"' in html
+
+
+def test_console_has_a_direct_mobile_navigation_drawer(web):
+    html = web.get("/view/console").text
+    assert 'id="admin-menu-button"' in html
+    assert 'aria-controls="admin-sidebar"' in html
+    assert 'id="admin-nav-scrim"' in html
+
+
 def test_admin_path_is_blank_and_reserved_for_password_management(web):
     page = web.get("/admin")
     assert page.status_code == 200

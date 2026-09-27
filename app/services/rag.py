@@ -6,23 +6,38 @@ Supabase 環境：之後可換成 pgvector
 """
 import json
 import numpy as np
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 from app.database import SessionLocal, _is_sqlite
 from app.config import settings
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
-
-EMBED_MODEL        = "models/gemini-embedding-001"   # 3072-dim
-GENERATE_MODEL     = "models/gemini-2.5-flash"
+EMBED_MODEL        = "gemini-embedding-001"   # 3072-dim
+GENERATE_MODEL     = "gemini-2.5-flash"
 SIMILARITY_THRESHOLD = 0.70
 TOP_K              = 3
+_client_instance = None
+
+
+def _client():
+    global _client_instance
+    if not settings.EXTERNAL_AI_ENABLED:
+        raise RuntimeError("External AI processing is disabled")
+    if _client_instance is None:
+        _client_instance = genai.Client(api_key=settings.GEMINI_API_KEY)
+    return _client_instance
 
 
 # ──────────────────────────────────────────────
 # 主要查詢
 # ──────────────────────────────────────────────
 def query(question: str) -> dict:
+    if not settings.EXTERNAL_AI_ENABLED:
+        return {
+            "answer": "外部 AI 功能尚未由營運單位啟用。請直接查閱知識庫或聯繫專業人員。",
+            "sources": [],
+            "has_answer": False,
+        }
     embedding = _embed(question)
     results   = _search(embedding)
 
@@ -46,8 +61,10 @@ def query(question: str) -> dict:
 問題：{question}"""
 
     try:
-        model    = genai.GenerativeModel(GENERATE_MODEL)
-        response = model.generate_content(prompt)
+        response = _client().models.generate_content(
+            model=GENERATE_MODEL,
+            contents=prompt,
+        )
         answer   = response.text
     except Exception as e:
         # 任何錯誤都 fallback 回傳最相關 chunk
@@ -164,12 +181,14 @@ def _search(query_embedding: list[float]) -> list[dict]:
 # 工具
 # ──────────────────────────────────────────────
 def _embed(text_input: str) -> list[float]:
-    result = genai.embed_content(
-        model     = EMBED_MODEL,
-        content   = text_input,
-        task_type = "retrieval_document",
+    result = _client().models.embed_content(
+        model=EMBED_MODEL,
+        contents=text_input,
+        config=types.EmbedContentConfig(task_type="RETRIEVAL_DOCUMENT"),
     )
-    return result["embedding"]
+    if not result.embeddings:
+        raise RuntimeError("Gemini returned no embedding")
+    return list(result.embeddings[0].values or [])
 
 
 def _chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str]:

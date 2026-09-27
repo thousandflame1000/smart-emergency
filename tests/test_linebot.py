@@ -293,7 +293,7 @@ def test_my_needs_command_shows_status(db, line_outbox):
     lb.handle_text(_FakeEvent("需要食物", "Uelder4"))
     lb.handle_text(_FakeEvent("我的需求", "Uelder4"))
     card = str(line_outbox.sent[-1][2].contents.to_dict())
-    assert "食物" in card and "待媒合" in card and "action=cancel_needs" in card and "/f/me?t=" in card
+    assert "食物" in card and "待媒合" in card and "action=cancel_needs" in card and "/f/me#t=" in card
 
 
 class _FakeLocationMsg:

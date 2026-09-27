@@ -13,6 +13,7 @@ os.environ.update(DATABASE_URL="sqlite:///" + (ROOT / ".workspace-preview.db").a
 
 from app.main import app
 from app.database import Base, SessionLocal, engine
+from app.schema_migrations import ensure_additive_schema
 from app.models.user import User
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
@@ -22,6 +23,7 @@ from app.models.checkin import DailyCheckin
 from app.models.workspace import TopologyWorkspace
 from app.services.workspace_bridge import merge_database
 from app.services.workspace import Edge, GraphDocument, Node
+from app.services.workspace_scenarios import ensure_scenario_workspaces
 from app.services.dispatch import propose_manual
 from app.routers.workspace import WorkspaceWrite, create_workspace
 
@@ -30,9 +32,10 @@ def initialize(reset=False):
     if reset:
         assert engine.url.database.replace("\\", "/") == (ROOT / ".workspace-preview.db").as_posix()
         Base.metadata.drop_all(engine)
-    Base.metadata.create_all(engine)
+    ensure_additive_schema(engine)
     with SessionLocal() as db:
         if db.query(User).first():
+            ensure_scenario_workspaces(db)
             return
         elder = User(name="林秀英", roles=["elderly"], lat=24.01, lng=120.61, address="社區東側 12 號")
         volunteer = User(name="陳志明", roles=["volunteer"], lat=24.00, lng=120.60, address="社區物資站")
@@ -73,6 +76,7 @@ def initialize(reset=False):
             provenance="本機驗證",
         ))
         create_workspace(WorkspaceWrite(name="事件處置 · 本機驗證資料", graph=graph), db)
+        ensure_scenario_workspaces(db)
 
 
 if __name__ == "__main__":

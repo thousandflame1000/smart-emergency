@@ -4,6 +4,7 @@ from app.models.care_relation import CareRelation
 from app.models.checkin import DailyCheckin
 from app.models.alert import Alert
 from app.models.resource import CommunityResource
+from app.models.resource_point import ResourcePoint
 from app.models.need import CommunityNeed
 from app.models.knowledge import KnowledgeChunk
 from app.models.config import SystemConfig
@@ -12,3 +13,6 @@ from app.models.volunteer_application import VolunteerApplication
 from app.models.task_workflow import Approval, Proposal, Task, TaskAssignment, TaskEvent
 from app.models.outbox import OutboxMessage
 from app.models.inventory import InventoryEvent
+from app.models.webhook_event import WebhookEvent
+from app.models.privacy import PrivacyConsent
+from app.models.workspace import TopologyWorkspace

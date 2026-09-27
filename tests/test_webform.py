@@ -12,6 +12,7 @@ from app.config import settings
 from app.errors import http_exception_handler, validation_error_handler
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
+from app.models.privacy import PrivacyConsent
 from app.models.user import User
 from app.models.volunteer_application import VolunteerApplication
 from app.routers import webform
@@ -52,7 +53,17 @@ def test_token_expires():
 
 def test_form_url_points_at_public_base(monkeypatch):
     monkeypatch.setattr(settings, "PUBLIC_BASE_URL", "https://example.test/")
-    assert form_token.form_url("need", "U-x").startswith("https://example.test/f/need?t=")
+    assert form_token.form_url("need", "U-x").startswith("https://example.test/f/need#t=")
+
+
+def test_fragment_token_exchanges_for_http_only_session(db, client):
+    mk(db, "居民", ["elderly"], "U-session")
+    token = form_token.make_token("U-session")
+    response = client.post("/f/api/session", json={"token": token})
+    assert response.status_code == 200
+    assert "httponly" in response.headers["set-cookie"].lower()
+    context = client.get("/f/api/context")
+    assert context.status_code == 200 and context.json()["name"] == "居民"
 
 
 # ── 頁面與情境 ──
@@ -86,7 +97,7 @@ def test_need_form_creates_needs_updates_profile_and_notifies(db, client, line_o
     r = client.post("/f/api/need", json={
         "t": form_token.make_token("U-need"), "name": "王小明", "phone": "0912-345-678",
         "address": "台中市南區崇倫街88號", "types": ["water", "first_aid", "water"],
-        "people": 3, "urgent": True, "note": "樓梯很陡",
+        "people": 3, "urgent": True, "note": "樓梯很陡", "privacy_acknowledged": True,
     })
     assert r.status_code == 200, r.text
     db.expire_all()
@@ -99,6 +110,17 @@ def test_need_form_creates_needs_updates_profile_and_notifies(db, client, line_o
     assert "3人" in needs["water"].description and "樓梯很陡" in needs["water"].description
     assert needs["water"].address == "台中市南區崇倫街88號"
     assert any("已登記您的需求" in t for t in line_outbox.texts("U-need"))
+    consent = db.query(PrivacyConsent).filter(PrivacyConsent.user_id == user.id).one()
+    assert consent.notice_version == settings.PRIVACY_NOTICE_VERSION
+
+
+def test_personal_data_form_requires_notice_acknowledgement(db, client):
+    mk(db, "居民", ["elderly"], "U-no-consent")
+    response = client.post("/f/api/need", json={
+        "t": form_token.make_token("U-no-consent"), "types": ["water"]
+    })
+    assert response.status_code == 422
+    assert db.query(PrivacyConsent).count() == 0
 
 
 def test_need_form_validation(db, client):
@@ -115,7 +137,8 @@ def test_need_form_validation(db, client):
 def test_need_form_cannot_impersonate_another_user(db, client):
     mk(db, "甲", ["elderly"], "U-a")
     mk(db, "乙", ["elderly"], "U-b")
-    client.post("/f/api/need", json={"t": form_token.make_token("U-a"), "types": ["water"]})
+    client.post("/f/api/need", json={"t": form_token.make_token("U-a"), "types": ["water"],
+                                      "privacy_acknowledged": True})
     owners = {n.requester.line_uid for n in db.query(CommunityNeed).all()}
     assert owners == {"U-a"}
 
@@ -131,7 +154,8 @@ def test_resource_form_staff_only_and_saves_fields(db, client, monkeypatch):
     mk(db, "志工", ["volunteer"], "U-r-ok")
     r = client.post("/f/api/resource", json={
         "t": form_token.make_token("U-r-ok"), "rtype": "food", "quantity": "50份",
-        "resource_name": "熱食便當", "address": "台中市西區水湳路99號"})
+        "resource_name": "熱食便當", "address": "台中市西區水湳路99號",
+        "privacy_acknowledged": True})
     assert r.status_code == 200, r.text
     res = db.query(CommunityResource).one()
     assert (res.resource_type, res.quantity, res.name, res.address) == ("food", "50份", "熱食便當", "台中市西區水湳路99號")
@@ -150,9 +174,11 @@ def test_resource_form_rejects_bad_type_and_missing_quantity(db, client):
 def test_apply_form_creates_pending_application_once(db, client, line_outbox):
     mk(db, "LINE暱稱", ["elderly"], "U-ap")
     t = form_token.make_token("U-ap")
-    r = client.post("/f/api/apply", json={"t": t, "name": "陳小美", "phone": "0912345678", "service_area": "南區"})
+    r = client.post("/f/api/apply", json={"t": t, "name": "陳小美", "phone": "0912345678",
+                                             "service_area": "南區", "privacy_acknowledged": True})
     assert r.status_code == 200, r.text
-    assert client.post("/f/api/apply", json={"t": t, "name": "陳小美"}).status_code == 200
+    assert client.post("/f/api/apply", json={"t": t, "name": "陳小美",
+                                               "privacy_acknowledged": True}).status_code == 200
     rows = db.query(VolunteerApplication).all()
     assert len(rows) == 1 and (rows[0].name, rows[0].service_area, rows[0].status) == ("陳小美", "南區", "pending")
     assert client.post("/f/api/apply", json={"t": t, "name": "  "}).status_code == 422
@@ -160,7 +186,8 @@ def test_apply_form_creates_pending_application_once(db, client, line_outbox):
 
 def test_apply_form_refused_for_existing_volunteer(db, client):
     mk(db, "志工", ["volunteer"], "U-ap2")
-    r = client.post("/f/api/apply", json={"t": form_token.make_token("U-ap2"), "name": "志工"})
+    r = client.post("/f/api/apply", json={"t": form_token.make_token("U-ap2"), "name": "志工",
+                                           "privacy_acknowledged": True})
     assert r.status_code == 409
 
 
@@ -179,14 +206,14 @@ def test_bot_entry_commands_send_a_signed_link(db, line_outbox):
     mk(db, "長者", ["elderly"], "U-bot", lat=23.9, lng=121.6)
     say("U-bot", "申請物資")
     card = str(line_outbox.sent[-1][2].contents.to_dict())
-    assert "/f/need?t=" in card
-    token = card.split("/f/need?t=")[1].split("'")[0]
+    assert "/f/need#t=" in card
+    token = card.split("/f/need#t=")[1].split("'")[0]
     assert form_token.verify_token(token) == "U-bot"
     mk(db, "志工", ["volunteer"], "U-bot2", lat=23.9, lng=121.6)
     say("U-bot2", "登記物資")
-    assert "/f/res?t=" in str(line_outbox.sent[-1][2].contents.to_dict())
+    assert "/f/res#t=" in str(line_outbox.sent[-1][2].contents.to_dict())
     say("U-bot", "我要當志工")
-    assert "/f/apply?t=" in str(line_outbox.sent[-1][2].contents.to_dict())
+    assert "/f/apply#t=" in str(line_outbox.sent[-1][2].contents.to_dict())
 
 
 # ── 志工回報現況 ─────────────────────────────────────────────────────────────
@@ -204,15 +231,16 @@ def _matched_task(db, vol_uid="U-vol", requester_uid="U-req"):
 
 def _report(client, uid, need, outcome, note=None):
     return client.post("/f/api/report", json={"t": form_token.make_token(uid), "need_id": str(need.id),
-                                              "outcome": outcome, "note": note})
+                                              "outcome": outcome, "note": note,
+                                              "privacy_acknowledged": True})
 
 
 def test_task_card_has_report_button_with_signed_link_and_task_id(db, line_outbox):
     from app.services.line_notify import send_task_message
     send_task_message("U-vol", "要水", "台中市南區", "水", need_id="abc12345-need")
     card = str(line_outbox.sent[-1][2].contents.to_dict())
-    assert "/f/report?t=" in card and "&n=abc12345-need" in card
-    token = card.split("/f/report?t=")[1].split("&n=")[0]
+    assert "/f/report#t=" in card and "&n=abc12345-need" in card
+    token = card.split("/f/report#t=")[1].split("&n=")[0]
     assert form_token.verify_token(token) == "U-vol"
 
 

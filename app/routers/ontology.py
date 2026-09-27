@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.security import require_admin
 from app.services import ontology, reasoning
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 @router.get("/schema")

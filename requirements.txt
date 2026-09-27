@@ -1,19 +1,20 @@
 # Web Framework
-fastapi==0.115.5
-uvicorn[standard]==0.32.1
+fastapi==0.141.1
+uvicorn[standard]==0.54.0
 
 # Settings
-pydantic-settings==2.6.1
+pydantic-settings==2.15.0
 
 # Database
-sqlalchemy==2.0.36
+sqlalchemy==2.0.54
 psycopg2-binary==2.9.10
 
 # LINE Bot SDK v3
-line-bot-sdk==3.13.0
+line-bot-sdk==3.25.0
+aiohttp==3.14.3
 
 # Gemini
-google-generativeai==0.8.3
+google-genai==2.25.0
 
 # RAG 向量運算（app/services/rag.py 直接 import numpy 做 cosine
 # similarity；過去一直靠 pgvector 套件順帶把 numpy 裝進來，從沒有
@@ -23,11 +24,11 @@ google-generativeai==0.8.3
 numpy==2.4.6
 
 # Scheduler
-apscheduler==3.10.4
+apscheduler==3.11.3
 
 # Utilities
-python-dotenv==1.0.1
-python-multipart==0.0.18
+python-dotenv==1.2.3
+python-multipart==0.0.32
 networkx==3.4.2
 
 # Rate limiting（系統沒有登入驗證，用來擋掉短時間內狂打同一 IP 的濫用）

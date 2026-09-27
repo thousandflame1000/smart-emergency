@@ -10,6 +10,7 @@ from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.config import SystemConfig
 from app.models.dispatch_event import DispatchEvent
+from app.models.care_relation import CareRelation
 from app.services import dispatch
 
 
@@ -171,6 +172,13 @@ def test_preview_candidates_flags_bound_line_volunteer(db):
     preview = dispatch.preview_candidates(need_id, db)
     cand = preview["candidates"][0]
     assert cand["notify_channel"] == "line", "志工已綁 LINE 應該直接標示會發任務卡"
+
+
+def test_volunteer_is_candidate_without_care_relation(db):
+    need_id, _ = _make_scenario(db)
+    assert db.query(CareRelation).count() == 0
+    candidates = dispatch.preview_candidates(need_id, db)["candidates"]
+    assert candidates and candidates[0]["vol"] == "志工小明"
 
 
 def test_auto_dispatch_skip_reason_distinguishes_missing_coordinates(db, monkeypatch):

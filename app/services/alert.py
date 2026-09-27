@@ -8,6 +8,7 @@ from app.models.checkin import DailyCheckin
 from app.models.alert import Alert
 from app.models.care_relation import CareRelation
 from app.services.line_notify import send_alert_message
+from app.services.outbox import OutboxService, finish_inline_delivery
 
 logger = logging.getLogger(__name__)
 
@@ -58,12 +59,13 @@ def check_no_response() -> None:
             .filter(
                 DailyCheckin.date == today,
                 DailyCheckin.status == "pending",
+                DailyCheckin.prompt_sent_at != None,
             )
             .all()
         )
 
         for checkin in pending:
-            elapsed_min = int((now - checkin.created_at.replace(tzinfo=None)).total_seconds() / 60)
+            elapsed_min = int((now - checkin.prompt_sent_at.replace(tzinfo=None)).total_seconds() / 60)
 
             if elapsed_min >= 60:
                 _escalate(db, checkin, "no_response_1h", now)
@@ -109,39 +111,51 @@ def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime
     )
     relations = _relations_for_alert(all_relations, alert_type)
 
-    notified_ids = []
-    for rel in relations:
-        contact = rel.contact
-        if contact and contact.line_uid:
-            # 單一聯絡人發送失敗不該讓整個升級流程中斷——不然下面
-            # 建立 Alert 記錄那段完全執行不到，這筆警報永遠不會被
-            # 標記成「已發過」，排程每 15 分鐘重跑就會卡在同一步
-            # 一直重試、其他排在後面的聯絡人也永遠收不到通知。
-            try:
-                send_alert_message(
-                    line_uid=contact.line_uid,
-                    elderly_name=checkin.elderly.name,
-                    alert_type=alert_type,
-                    checkin_id=str(checkin.id),
-                )
-                notified_ids.append(contact.id)
-            except Exception as e:
-                logger.error(f"[alert] 發送警報訊息失敗（{contact.name}）：{e}")
-
     alert = Alert(
         elderly_id=checkin.elderly_id,
         checkin_id=checkin.id,
         alert_type=alert_type,
-        notified_users=notified_ids,
+        notified_users=[],
         status="sent",
     )
     db.add(alert)
+    db.flush()
+
+    deliveries = []
+    for rel in relations:
+        contact = rel.contact
+        if contact:
+            delivery = OutboxService(db).enqueue_alert(
+                alert,
+                contact,
+                elderly_name=checkin.elderly.name,
+            )
+            deliveries.append((contact, str(delivery.id), delivery.status))
 
     # 超過 3 小時標記為 no_response
     if alert_type == "no_response_3h":
         checkin.status = "no_response"
 
     db.commit()
+
+    notified_ids = []
+    for contact, delivery_id, delivery_status in deliveries:
+        if delivery_status != "PROCESSING":
+            continue
+        try:
+            send_alert_message(
+                line_uid=contact.line_uid,
+                elderly_name=checkin.elderly.name,
+                alert_type=alert_type,
+                checkin_id=str(checkin.id),
+            )
+        except Exception as exc:
+            finish_inline_delivery(db, delivery_id, exc)
+            logger.error("[alert] 發送警報訊息失敗（%s）：%s", contact.name, exc)
+        else:
+            notified_ids.append(contact.id)
+            alert.notified_users = list(alert.notified_users or []) + [contact.id]
+            finish_inline_delivery(db, delivery_id)
     return len(notified_ids)
 
 

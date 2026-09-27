@@ -32,7 +32,7 @@ ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", 
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
 RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "我的紀錄",
                      "我的資料", "個人資料", "修改資料", "刪除我的帳號", "刪除帳號"}
-ROLE_CENTER_COMMANDS = {"居民中心", "志工中心", "決策中心"}
+ROLE_CENTER_COMMANDS = {"我的中心", "居民中心", "志工中心", "決策中心"}
 MAINTENANCE_COMMANDS = {"更新選單"}
 COMMAND_WORDS = (VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
                  | ROLE_CENTER_COMMANDS | MAINTENANCE_COMMANDS)
@@ -121,8 +121,7 @@ def my_tasks(event, db: Session, user: User) -> None:
     _flex(event, f"您有 {len(tasks)} 個進行中的任務", carousel(bubbles))
 
 
-def resident_center(event, db: Session, user: User) -> None:
-    """Keep the resident's main menu small while making secondary paths discoverable."""
+def _resident_center_cards(user: User) -> list[dict]:
     cards = [bubble(
         "居民服務", "#2471a3",
         ["先處理眼前需要；不確定需求類型時，選「申請需求」即可一次填寫。"],
@@ -146,17 +145,19 @@ def resident_center(event, db: Session, user: User) -> None:
              {"label": "志工申請", "text": "我要當志工"},
              {"label": "操作說明", "text": "幫助"}],
         ))
-    _flex(event, "居民服務", carousel(cards))
+    return cards
 
 
-def volunteer_center(event, db: Session, user: User) -> None:
-    if not is_volunteer(user):
-        _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
-        return
-    _flex(event, "志工中心", carousel([
+def resident_center(event, db: Session, user: User) -> None:
+    """Keep the resident's main menu small while making secondary paths discoverable."""
+    _flex(event, "居民服務", carousel(_resident_center_cards(user)))
+
+
+def _volunteer_center_cards() -> list[dict]:
+    return [
         bubble(
-            "任務執行", "#2471a3",
-            ["接單後，任務卡會保留接單、送達與回報的完整流程。"],
+            "志工任務", "#2471a3",
+            ["不必先和居民建立照護關係；候選依分區、物資、距離與負載排序。"],
             [{"label": "接單", "text": "接單"},
              {"label": "我的任務", "text": "我的任務"},
              {"label": "登記物資", "text": "登記物資"}],
@@ -169,7 +170,30 @@ def volunteer_center(event, db: Session, user: User) -> None:
              {"label": "分享位置", "text": "分享位置"},
              {"label": "操作說明", "text": "幫助"}],
         ),
-    ]))
+    ]
+
+
+def volunteer_center(event, db: Session, user: User) -> None:
+    if not is_volunteer(user):
+        _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
+        return
+    _flex(event, "志工中心", carousel(_volunteer_center_cards()))
+
+
+def my_center(event, db: Session, user: User) -> None:
+    """Expose every role the account owns without replacing its primary menu."""
+    cards = _resident_center_cards(user)
+    if is_volunteer(user):
+        cards.extend(_volunteer_center_cards())
+    if is_admin(user):
+        stats = _admin_snapshot(db)
+        cards.append(bubble(
+            "決策入口", "#c34736",
+            [f"緊急求救 {stats['sos']}｜待派 {stats['open']}｜待核准 {stats['suggested']}"],
+            [{"label": "決策中心", "text": "決策中心"},
+             {"label": "開啟後台", "text": "後台"}],
+        ))
+    _flex(event, "我的中心", carousel(cards))
 
 
 # ── 管理員 ───────────────────────────────────────────────────────────────────
@@ -354,6 +378,13 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
         else:
             note = "任務卡已傳給志工" if result.get("volunteer_notified") else "志工未綁定 LINE，請自行聯繫"
             _say(event, f"✅ 已派遣。{note}；求助的人也已收到通知。")
+    elif action == "admin_confirm":
+        result = dispatch.confirm_dispatch(data.get("need_id", ""), db)
+        _say(event, "⚠️ " + result["error"] if result.get("error") else "✅ " + result["message"])
+    elif action == "admin_decline":
+        result = dispatch.decline_suggestion(data.get("need_id", ""), db)
+        _say(event, "⚠️ " + result["error"] if result.get("error") else
+             "已退回建議，物資已釋放，需求回到待派遣。傳「待派」可改派其他志工。")
     elif action == "admin_revoke":
         need = db.query(CommunityNeed).filter(CommunityNeed.id == data.get("need_id", "")).first()
         volunteer_uid = None
@@ -523,8 +554,8 @@ def join_member(event, db: Session, user: User, code: str) -> None:
     sync_user_menu(target)
     roles = target.roles or []
     hint = ("點選單「決策中心」先看待處理狀況，或傳「後台」取得登入連結。" if "admin" in roles else
-            "點選單「志工中心」處理接單、任務與物資。" if "volunteer" in roles else
-            "點選單「居民中心」中的「長輩狀況」查看照護對象。" if "family" in roles else
+            "點選單「我的中心」處理接單、任務與物資。" if "volunteer" in roles else
+            "點選單「我的中心」中的「長輩狀況」查看照護對象。" if "family" in roles else
             "選單有「緊急求助、申請需求、查看進度」；每天早上按「我很好」回報平安。")
     _say(event, f"✅ 已綁定為「{target.name}」。{hint}\n選單如果沒換，請重開聊天室。")
 
@@ -602,7 +633,7 @@ def bind_family(event, db: Session, user: User, code: str) -> None:
     from app.services.rich_menu import sync_user_menu
     sync_user_menu(user)
     _say(event, f"✅ 已綁定為 {elder.name} 的家屬。他如果沒回報平安或按了求助，您會第一時間收到通知。\n"
-                "點選單的「居民中心」可找到「長輩狀況」，隨時查看他今天的狀況。")
+                "點選單的「我的中心」可找到「長輩狀況」，隨時查看他今天的狀況。")
     if elder.line_uid:
         try:
             from app.services.line_notify import send_text
@@ -726,10 +757,9 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
         return True
     if text not in COMMAND_WORDS:
         return False
-    if text == "居民中心":
-        resident_center(event, db, user)
-    elif text == "志工中心":
-        volunteer_center(event, db, user)
+    if text in ("我的中心", "居民中心", "志工中心"):
+        # 舊版選單的「居民中心／志工中心」按鈕也開完整中心，身分改變不會讓任何入口消失。
+        my_center(event, db, user)
     elif text == "決策中心":
         if _require_admin(event, user):
             decision_center(event, db, user)

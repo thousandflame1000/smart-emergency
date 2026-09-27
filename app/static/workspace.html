@@ -24,16 +24,19 @@
 <body>
   <header>
     <a class="back icon-button" href="/" title="回到主畫面" aria-label="回到主畫面"><i data-lucide="arrow-left"></i></a>
-    <h1>事件處置工作區</h1>
-    <select id="workspace-list" aria-label="已儲存的工作區"><option value="">未儲存工作區</option></select>
-    <input id="workspace-name" aria-label="工作區名稱" value="未命名工作區" maxlength="120">
-    <input id="workspace-folder" aria-label="資料夾" placeholder="資料夾（選填）" list="workspace-folder-options" maxlength="120">
-    <datalist id="workspace-folder-options"></datalist>
+    <div class="workspace-heading"><h1>事件處置工作區</h1><span>現況與調度</span></div>
+    <div class="workspace-picker">
+      <select id="workspace-list" aria-label="已儲存的工作區"><option value="">未儲存工作區</option></select>
+      <input id="workspace-name" aria-label="工作區名稱" value="未命名工作區" maxlength="120">
+      <input id="workspace-folder" aria-label="工作區資料夾" placeholder="工作區資料夾（選填）" list="workspace-folder-options" maxlength="120">
+      <datalist id="workspace-folder-options"></datalist>
+    </div>
     <div class="header-actions">
       <button id="new" title="新增空白工作區" aria-label="新增空白工作區"><i data-lucide="file-plus-2"></i></button>
       <button id="save" class="primary"><i data-lucide="save"></i>儲存</button>
       <button id="duplicate" title="另存副本" aria-label="另存副本"><i data-lucide="copy"></i></button>
       <button id="export" title="匯出完整工作區" aria-label="匯出完整工作區"><i data-lucide="download"></i></button>
+      <button id="delete-workspace" class="danger" title="刪除目前工作區" aria-label="刪除目前工作區"><i data-lucide="trash-2"></i></button>
     </div>
   </header>
   <div class="toolbar">
@@ -41,35 +44,53 @@
       <button id="view-map" class="active" aria-pressed="true"><i data-lucide="map"></i>地圖</button>
       <button id="view-graph" aria-pressed="false"><i data-lucide="network"></i>關係圖</button>
     </div>
-    <button id="more-tools" title="更多工具" aria-label="更多工具" aria-expanded="false"><i data-lucide="ellipsis"></i></button>
-    <select id="mode" aria-label="編輯工具">
-      <option value="select">選取／拖曳</option><option value="incident">新增事件</option>
-      <option value="person">新增人員</option><option value="supply">新增物資</option>
-      <option value="facility">新增設施</option><option value="custom">新增自訂物件</option><option value="connect">連接物件</option>
-    </select>
     <button id="undo" title="復原" aria-label="復原"><i data-lucide="undo-2"></i></button>
     <button id="redo" title="重做" aria-label="重做"><i data-lucide="redo-2"></i></button>
-    <button id="fit" title="顯示全部物件" aria-label="顯示全部物件"><i data-lucide="scan"></i></button>
-    <button id="layout" title="重新排列關係圖" aria-label="重新排列關係圖"><i data-lucide="workflow"></i></button>
     <span class="spacer"></span>
-    <button id="sync-db" title="讀取人員、需求、物資、照護關係與任務現況"><i data-lucide="refresh-cw"></i>更新現況</button>
+    <button id="sync-db" class="primary" title="讀取人員、需求、物資、照護關係與任務現況"><i data-lucide="refresh-cw"></i>更新現況</button>
     <button id="review-inventory" title="預覽待寫回資料庫的物資變更"><i data-lucide="git-pull-request"></i>待寫回 <span id="inventory-count">0</span></button>
-    <button id="import"><i data-lucide="upload"></i>匯入資料</button>
-    <button id="analyze" class="primary"><i data-lucide="git-branch"></i>分析關聯</button>
-    <button id="compare"><i data-lucide="git-compare-arrows"></i>情境比較</button>
     <button id="allocation"><i data-lucide="package-check"></i>物資分配</button>
+    <button id="more-tools" title="開啟進階工具" aria-label="開啟進階工具" aria-expanded="false"><i data-lucide="ellipsis"></i></button>
+    <div class="advanced-tools" id="advanced-tools">
+      <select id="mode" aria-label="編輯工具">
+        <option value="select">選取／拖曳</option><option value="incident">新增事件</option>
+        <option value="person">新增人員</option><option value="supply">新增物資</option>
+        <option value="facility">新增設施</option><option value="custom">新增自訂物件</option><option value="connect">連接物件</option>
+      </select>
+      <button id="fit" title="顯示全部物件" aria-label="顯示全部物件"><i data-lucide="scan"></i></button>
+      <button id="layout" title="重新排列關係圖" aria-label="重新排列關係圖"><i data-lucide="workflow"></i></button>
+      <button id="import"><i data-lucide="upload"></i>匯入資料</button>
+      <button id="analyze"><i data-lucide="git-branch"></i>分析關聯</button>
+      <button id="compare"><i data-lucide="git-compare-arrows"></i>情境比較</button>
+    </div>
   </div>
-  <div id="metrics" class="metrics"></div>
   <div class="operations-bar"><div id="operation-stages" class="segmented" aria-label="需求與任務狀態"></div><span id="observed-at" class="muted">尚未讀取平台現況</span></div>
+  <div id="metrics" class="metrics"></div>
   <main>
     <aside class="catalog">
       <button id="layer-db" class="primary wide" title="長者、需求單、志工物資、社區資源點"><i data-lucide="database"></i>讀取平台現況</button>
       <details><summary>資料圖層</summary><div id="layers"></div></details>
-      <div class="segmented catalog-tabs"><button id="catalog-objects" class="active">物件</button><button id="catalog-tasks">需求與任務</button></div>
-      <div class="catalog-heading"><h2>物件</h2><span id="object-count"></span></div>
+      <div class="segmented catalog-tabs"><button id="catalog-objects" class="active">物件</button><button id="catalog-tasks">需求</button><button id="catalog-resources">物資</button></div>
+      <div class="catalog-heading">
+        <h2 id="catalog-title">物件</h2>
+        <div class="catalog-heading-actions">
+          <span id="object-count"></span>
+          <div class="object-add">
+            <button id="add-object" type="button" aria-haspopup="menu" aria-expanded="false"><i data-lucide="plus"></i>新增物件</button>
+            <div id="object-menu" class="object-menu" role="menu" hidden>
+              <button type="button" role="menuitem" data-add-kind="incident"><span class="swatch" style="background:#c34736"></span>事件</button>
+              <button type="button" role="menuitem" data-add-kind="person"><span class="swatch" style="background:#237caf"></span>人員／需求點</button>
+              <button type="button" role="menuitem" data-add-kind="supply"><span class="swatch" style="background:#c57320"></span>物資</button>
+              <button type="button" role="menuitem" data-add-kind="facility"><span class="swatch" style="background:#8b5fa8"></span>設施</button>
+              <button type="button" role="menuitem" data-add-kind="custom"><span class="swatch" style="background:#087f72"></span>自訂物件</button>
+            </div>
+          </div>
+        </div>
+      </div>
       <input id="search" type="search" placeholder="搜尋名稱、識別碼" aria-label="搜尋物件">
       <div id="objects" class="object-list"></div>
       <div id="operation-tasks" class="object-list" hidden></div>
+      <div id="operation-resources" class="object-list" hidden></div>
     </aside>
     <section class="canvas-region" aria-label="拓樸畫布">
       <div id="map"></div><div id="graph" hidden></div>
@@ -89,8 +110,10 @@
       <div id="empty" class="empty-state"><strong>尚未載入事件資料</strong><button id="empty-db" class="primary">讀取平台現況</button><button id="empty-import">匯入檔案</button></div>
       <div id="connect-state" class="connect-state" hidden></div>
     </section>
-    <aside class="inspector">
-      <h2>物件與連線</h2><div id="selection" class="muted">尚未選取</div>
+    <button id="inspector-backdrop" class="inspector-backdrop" type="button" aria-label="關閉物件詳情" hidden></button>
+    <aside class="inspector" aria-label="物件詳情">
+      <div class="inspector-heading"><h2>物件與連線</h2><button id="close-inspector" title="關閉詳情" aria-label="關閉物件詳情"><i data-lucide="x"></i></button></div>
+      <div id="selection" class="muted">尚未選取</div>
       <section class="analysis-section">
         <h2>關聯完整性</h2>
         <div id="analysis-result" class="analysis-result"></div>

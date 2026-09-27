@@ -408,7 +408,7 @@ def test_no_response_job_uses_utc_not_machine_local_time(db, line_outbox):
     check_no_response()  # 剛建立的打卡不能立刻被判定未回應
     db2 = SessionLocal(); assert db2.query(Alert).count() == 0; db2.close()
     db3 = SessionLocal()
-    ck = db3.query(DailyCheckin).one(); ck.created_at = now_utc() - timedelta(minutes=61); db3.commit(); db3.close()
+    ck = db3.query(DailyCheckin).one(); ck.prompt_sent_at = now_utc() - timedelta(minutes=61); db3.commit(); db3.close()
     check_no_response()
     db4 = SessionLocal(); assert {a.alert_type for a in db4.query(Alert).all()} == {"no_response_1h"}; db4.close()
 
@@ -570,11 +570,11 @@ def test_approval_updates_the_users_name_to_the_applicants(db):
 
 
 # ═════════════════ 10. 系統層 ═════════════════
-def test_webhook_swallows_handler_errors_instead_of_500(monkeypatch):
+def test_webhook_returns_retryable_error_when_handler_fails(monkeypatch):
     from app.main import app as real_app
     monkeypatch.setattr(lb.handler, "handle", lambda body, sig: (_ for _ in ()).throw(RuntimeError("boom")))
     res = TestClient(real_app).post("/webhook/line", content=b"{}", headers={"X-Line-Signature": "x"})
-    assert res.status_code == 200
+    assert res.status_code == 503
 
 
 def test_security_status_flags_public_production(monkeypatch):
@@ -694,7 +694,7 @@ class _FakeBlob:
 def test_rich_menu_layout_covers_canvas_and_uses_known_commands():
     from app.routers.linebot import APPLY_PREFIXES, FIXED_COMMANDS, parse_intent
     from app.services import rich_menu as rm
-    assert set(rm.MENUS) == {rm.RESIDENT_NAME, rm.STAFF_NAME, rm.ADMIN_NAME}
+    assert set(rm.MENUS) == {rm.RESIDENT_NAME, rm.ADMIN_NAME}
     for name, spec in rm.MENUS.items():
         cells = rm.layout(spec["rows"])
         assert len(cells) == 6, "每個角色入口只保留六個第一步"
@@ -704,9 +704,10 @@ def test_rich_menu_layout_covers_canvas_and_uses_known_commands():
             assert (text in FIXED_COMMANDS or parse_intent(text)["needs"] or parse_intent(text)["sos"]
                     or any(text.startswith(p) for p in APPLY_PREFIXES)), (name, text)
     assert rm.menu_name_for(["family"]) is None, "家屬使用居民主選單中的情境照護入口"
+    assert rm.menu_name_for(["volunteer"]) is None, "成為志工後仍保留固定成員選單"
 
 
-def test_install_menus_creates_three_and_links_primary_roles(db, monkeypatch):
+def test_install_menus_creates_member_and_admin_menus(db, monkeypatch):
     from app.models.user import User
     from app.services import rich_menu as rm
     api, blob = _FakeMenuApi(), _FakeBlob()
@@ -717,14 +718,13 @@ def test_install_menus_creates_three_and_links_primary_roles(db, monkeypatch):
                 User(name="長者", roles=["elderly"], line_uid="U-eld", is_active=True)])
     db.commit()
     result = rm.install_menus(db)
-    assert len([c for c in api.calls if c[0] == "create"]) == 3
-    assert len(blob.images) == 3 and all(size > 1000 for _, size, _ in blob.images)
+    assert len([c for c in api.calls if c[0] == "create"]) == 2
+    assert len(blob.images) == 2 and all(size > 1000 for _, size, _ in blob.images)
     assert ("default", result["menus"][rm.RESIDENT_NAME]) in api.calls
-    assert ("bulk_link", ("U-vol",), result["menus"][rm.STAFF_NAME]) in api.calls
     assert ("bulk_link", ("U-adm",), result["menus"][rm.ADMIN_NAME]) in api.calls, "管理員同時是志工時看管理員選單"
     linked_users = {uid for c in api.calls if c[0] == "bulk_link" for uid in c[1]}
-    assert "U-fam" not in linked_users and "U-eld" not in linked_users
-    assert result["role_linked"] == 2
+    assert "U-vol" not in linked_users and "U-fam" not in linked_users and "U-eld" not in linked_users
+    assert result["role_linked"] == 1
     assert result["cutover_complete"] is True
 
 
@@ -752,7 +752,7 @@ def test_install_menus_keeps_old_menus_when_role_linking_fails(db, monkeypatch):
 
     api = FailingApi(existing=[M("old-1", "鄰里守望-志工")])
     monkeypatch.setattr(rm, "_apis", lambda: (api, _FakeBlob()))
-    db.add(User(name="志工", roles=["volunteer"], line_uid="U-vol", is_active=True))
+    db.add(User(name="管理員", roles=["admin"], line_uid="U-adm", is_active=True))
     db.commit()
 
     result = rm.install_menus(db)
@@ -1142,11 +1142,11 @@ def test_every_rich_menu_label_works_when_typed(db, line_outbox, monkeypatch):
     「收到您的訊息了…傳『幫助』可查看可用指令」的 fallback——系統聽不懂
     自己按鈕上的字，還叫使用者去查說明（Nielsen #4 一致性、#6 辨識優於回想）。
     """
-    from app.services.rich_menu import ADMIN_ROWS, RESIDENT_ROWS, STAFF_ROWS
+    from app.services.rich_menu import ADMIN_ROWS, RESIDENT_ROWS
     from app.services import line_ops
 
     # Flex 卡片按鈕送出的是 text，這裡要驗的是「標籤本身」能不能當指令用。
-    labels = {cell[0] for rows in (RESIDENT_ROWS, STAFF_ROWS, ADMIN_ROWS) for row in rows for cell in row}
+    labels = {cell[0] for rows in (RESIDENT_ROWS, ADMIN_ROWS) for row in rows for cell in row}
     # 分享位置是 LINE 端的定位動作，不是文字指令。
     labels -= {"分享位置"}
 

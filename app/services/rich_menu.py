@@ -1,4 +1,4 @@
-"""LINE Rich Menu：居民、志工、決策者各一張。
+"""LINE Rich Menu：一般成員共用一張，決策者使用管理選單。
 
 版面資料是單一來源，`make_rich_menus.py` 拿同一份資料畫圖，這裡拿去建選單，
 按鈕文字一定對得上機器人聽得懂的指令。圖檔事先畫好放在 static/richmenu，
@@ -18,7 +18,9 @@ log = logging.getLogger(__name__)
 
 W, H = 2500, 1686
 MENU_NAME_PREFIX = "鄰里守望"
-RESIDENT_NAME = "鄰里守望-一般"
+# 成為志工後仍保留同一張成員選單，避免入口位置整張重排。
+RESIDENT_NAME = "鄰里守望-成員"
+# 舊版匯入相容；安裝流程會把這張舊選單淘汰。
 STAFF_NAME = "鄰里守望-志工"
 ADMIN_NAME = "鄰里守望-管理員"
 IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "richmenu")
@@ -33,16 +35,8 @@ RESIDENT_ROWS = [
      ("申請需求", "一次填好所需項目", ORANGE, "📝", "申請物資"),
      ("查看進度", "追蹤目前處理狀況", BLUE, "📋", "我的需求")],
     [("回報平安", "今天狀況良好", GREEN, "✅", "我很好"),
-     ("分享位置", "讓協助者找到您", TEAL, "📍", "分享位置"),
-     ("居民中心", "家屬、紀錄與說明", GREY, "📁", "居民中心")],
-]
-STAFF_ROWS = [
-    [("接單", "查看附近待協助事項", ORANGE, "🙋", "接單"),
-     ("我的任務", "回報進行中的任務", BLUE, "🚚", "我的任務"),
-     ("登記物資", "登記可提供的資源", TEAL, "📦", "登記物資")],
-    [("志工中心", "物資、位置與操作說明", GREY, "📁", "志工中心"),
-     ("分享位置", "更新服務位置", TEAL, "📍", "分享位置"),
-     ("需要幫忙", "志工自身緊急求助", RED, "🆘", "需要幫忙")],
+     ("分享位置", "更新居民或服務位置", TEAL, "📍", "分享位置"),
+     ("我的中心", "居民、家屬與志工功能", GREY, "📁", "我的中心")],
 ]
 ADMIN_ROWS = [
     [("決策中心", "先看全局與待處理量", BLUE, "📊", "決策中心"),
@@ -53,8 +47,7 @@ ADMIN_ROWS = [
      ("操作說明", "查詢完整指令與規則", GREY, "?", "幫助")],
 ]
 MENUS = {
-    RESIDENT_NAME: {"rows": RESIDENT_ROWS, "image": "resident.png", "chat_bar": "居民服務"},
-    STAFF_NAME: {"rows": STAFF_ROWS, "image": "staff.png", "chat_bar": "志工中心"},
+    RESIDENT_NAME: {"rows": RESIDENT_ROWS, "image": "resident.png", "chat_bar": "居民與志工服務"},
     ADMIN_NAME: {"rows": ADMIN_ROWS, "image": "admin.png", "chat_bar": "決策中心"},
 }
 
@@ -103,17 +96,15 @@ def _menu_id(api: MessagingApi, name: str) -> str | None:
 
 
 def menu_name_for(roles) -> str | None:
-    """Which primary menu a person should see: decision maker over volunteer over resident."""
+    """Only decision makers switch menus; every other role keeps the stable member menu."""
     roles = roles or []
     if "admin" in roles:
         return ADMIN_NAME
-    if "volunteer" in roles:
-        return STAFF_NAME
     return None
 
 
 def install_menus(db) -> dict:
-    """建立三張新選單並完成切換後才移除舊選單。
+    """建立成員與管理選單並完成切換後才移除舊選單。
 
     角色綁定失敗時保留舊選單，讓維運人員可安全重試，不會先清空正式入口。
     """
@@ -134,7 +125,7 @@ def install_menus(db) -> dict:
         ids[name] = menu_id
     api.set_default_rich_menu(ids[RESIDENT_NAME])
 
-    users_by_menu = {STAFF_NAME: [], ADMIN_NAME: []}
+    users_by_menu = {ADMIN_NAME: []}
     for user in db.query(User).filter(User.line_uid.isnot(None), User.is_active == True).all():  # noqa: E712
         name = menu_name_for(user.roles)
         if name:

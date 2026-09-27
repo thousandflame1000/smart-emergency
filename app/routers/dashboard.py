@@ -16,8 +16,9 @@ from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.config import SystemConfig
 from app.rate_limit import limiter
+from app.security import require_admin
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 def _get_user_or_404(db, user_id: str, what: str = "使用者") -> User:
@@ -594,3 +595,35 @@ def decide_volunteer_application(
 ):
     from app.services.volunteer_application import decide
     return decide(db, application_id, decision=decision, reviewer_id=reviewer_id, note=note)
+
+
+# ── 單帳號演練：一支 LINE 扮演家屬／志工，另一方由不綁 LINE 的替身擔任 ──
+def _kit(call):
+    try:
+        return call()
+    except ValueError as exc:
+        raise ApiError(409, str(exc))
+
+
+@router.get("/rehearsal/testers")
+def rehearsal_testers(db: Session = Depends(get_db)):
+    from app.services import rehearsal_kit
+    return rehearsal_kit.testers(db)
+
+
+@router.post("/rehearsal/family-alert")
+def rehearsal_family_alert(tester_id: str, status: str = "unwell", db: Session = Depends(get_db)):
+    from app.services import rehearsal_kit
+    return _kit(lambda: rehearsal_kit.family_alert(db, tester_id, status))
+
+
+@router.post("/rehearsal/volunteer-task")
+def rehearsal_volunteer_task(tester_id: str, db: Session = Depends(get_db)):
+    from app.services import rehearsal_kit
+    return _kit(lambda: rehearsal_kit.volunteer_task(db, tester_id))
+
+
+@router.post("/rehearsal/cleanup")
+def rehearsal_cleanup(db: Session = Depends(get_db)):
+    from app.services import rehearsal_kit
+    return rehearsal_kit.cleanup(db)

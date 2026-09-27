@@ -1,24 +1,27 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 import logging
 import os
+import html
+from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
 from app.schema_migrations import ensure_additive_schema
 from app.scheduler import start_scheduler, shutdown_scheduler
 from app.rate_limit import limiter
+from app.security import require_admin
 from app.errors import http_exception_handler, validation_error_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.demo_auth import DemoAuthMiddleware
-from app.routers import join_page, webform, linebot, dashboard, resources, rag, ontology, workspace, tasks, zones
+from app.routers import join_page, webform, linebot, dashboard, resources, rag, ontology, rehearsal, workspace, tasks, zones
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
@@ -78,12 +81,9 @@ app.add_middleware(DemoAuthMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    # 系統沒有 cookie/session 機制，allow_credentials=True 跟萬用 origin
-    # 同時開是規範上互斥的組合（瀏覽器規格禁止 credentialed 請求搭配
-    # Access-Control-Allow-Origin: *），而且完全沒用到就沒必要留著。
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[origin.strip() for origin in settings.CORS_ALLOWED_ORIGINS.split(",") if origin.strip()],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allow_headers=["Content-Type", "X-Line-Signature"],
 )
 
 # 系統目前沒有登入驗證，先用限流擋掉「短時間內狂打同一個 IP」的濫用
@@ -106,6 +106,7 @@ app.include_router(ontology.router,  prefix="/api/ontology",  tags=["Ontology"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(workspace.router, prefix="/api/workspaces", tags=["事件處置工作區"])
 app.include_router(zones.router,     prefix="/api/zones",      tags=["分區"])
+app.include_router(rehearsal.router, tags=["Rehearsal"])
 
 
 _NO_CACHE = {"Cache-Control": "no-cache"}
@@ -138,14 +139,52 @@ def admin_page():
 def health():
     return {"status": "ok", "service": "鄰里守望平台"}
 
+
+@app.get("/ready")
+@limiter.exempt
+def readiness():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        logging.getLogger("health").exception("database readiness check failed")
+        return JSONResponse({"status": "not_ready", "database": "unavailable"}, status_code=503)
+
+    from app.scheduler import scheduler_running
+    scheduler_status = "running" if scheduler_running() else "stopped"
+    if settings.APP_ENV == "production" and scheduler_status != "running":
+        return JSONResponse(
+            {"status": "not_ready", "database": "ok", "scheduler": scheduler_status},
+            status_code=503,
+        )
+    return {"status": "ready", "database": "ok", "scheduler": scheduler_status}
+
+
+@app.get("/privacy", include_in_schema=False)
+def privacy_notice():
+    path = os.path.join(os.path.dirname(__file__), "static", "privacy.html")
+    with open(path, encoding="utf-8") as source:
+        page = source.read()
+    replacements = {
+        "{{CONTROLLER}}": settings.PRIVACY_CONTROLLER_NAME,
+        "{{CONTACT}}": settings.PRIVACY_CONTACT,
+        "{{VERSION}}": settings.PRIVACY_NOTICE_VERSION,
+        "{{WEBHOOK_DAYS}}": str(settings.WEBHOOK_RETENTION_DAYS),
+        "{{OUTBOX_DAYS}}": str(settings.OUTBOX_RETENTION_DAYS),
+        "{{AI_STATUS}}": "已啟用" if settings.EXTERNAL_AI_ENABLED else "未啟用",
+    }
+    for marker, value in replacements.items():
+        page = page.replace(marker, html.escape(value))
+    return HTMLResponse(page, headers=_NO_CACHE)
+
 @app.get("/")
 def dashboard():
     return FileResponse(os.path.join(os.path.dirname(__file__), "static", "site.html"), headers=_NO_CACHE)
 
 # 靜態資源
 @app.post("/api/system/rich-menu/install", tags=["System"])
-def install_rich_menu():
-    """在受控維運期間，重建三張角色 Rich Menu。"""
+def install_rich_menu(_principal: dict | None = Depends(require_admin)):
+    """在受控維運期間，重建成員與管理員 Rich Menu。"""
     if not settings.RICH_MENU_REBUILD_ENABLED:
         raise HTTPException(
             status_code=403,
@@ -225,6 +264,15 @@ async def no_cache_static(request, call_next):
     response = await call_next(request)
     if request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
+    if request.url.path.startswith(("/api/", "/f/")):
+        response.headers["Cache-Control"] = "no-store"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(self)"
+    response.headers["Content-Security-Policy"] = "frame-ancestors 'self'; base-uri 'self'; object-src 'none'"
+    if settings.APP_ENV == "production":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
 

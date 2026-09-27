@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from datetime import datetime
 import json
@@ -435,6 +436,26 @@ def match_need(need_id: str, resource_id: str, db: Session = Depends(get_db),
     """手動媒合需求與物資，並立即 LINE 通知志工"""
     from app.services.dispatch import manual_dispatch
     return raise_if_error(manual_dispatch(need_id, resource_id, db))
+
+
+@router.post("/needs/{need_id}/propose_dispatch")
+def propose_dispatch(need_id: str, resource_id: str, db: Session = Depends(get_db),
+                     _principal: dict | None = Depends(require_admin)):
+    """Reserve one candidate as a reviewable suggestion; no notification is sent yet."""
+    from app.services.dispatch import propose_manual
+    return raise_if_error(propose_manual(need_id, resource_id, db, actor_label="workspace:best_candidate"))
+
+
+class AssigneeMessage(BaseModel):
+    text: str = Field(min_length=1, max_length=500)
+
+
+@router.post("/needs/{need_id}/message_assignee")
+def message_need_assignee(need_id: str, body: AssigneeMessage, db: Session = Depends(get_db),
+                          _principal: dict | None = Depends(require_admin)):
+    """管理員對這筆任務的志工傳 LINE 指示，並寫進任務紀錄。"""
+    from app.services.dispatch import message_assignee
+    return raise_if_error(message_assignee(need_id, body.text, db))
 
 
 @router.post("/dispatch")

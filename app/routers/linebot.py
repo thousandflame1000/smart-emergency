@@ -1,3 +1,7 @@
+import base64
+import hashlib
+import hmac
+import json
 import logging
 import re
 
@@ -22,6 +26,8 @@ from app.services.task_line_security import TaskLineSecurityError
 from app.models.user import User
 from app.labels import NEED_STATUS_ZH, need_status_line, need_type_line
 from app.labels import NEED_TYPE_ZH as NEED_TYPE_ZH_SOURCE
+from app.rate_limit import limiter
+from app.services import webhook_inbox
 from app.timeutil import now_utc, today_tw
 
 logger = logging.getLogger(__name__)
@@ -47,26 +53,79 @@ RES_TYPE_ZH = {"water": "飲用水", "food": "食物", "first_aid": "急救用�
 # Webhook 入口
 # ──────────────────────────────────────────────
 @router.post("/line")
+@limiter.exempt
 async def line_webhook(request: Request):
     signature = request.headers.get("X-Line-Signature", "")
     body      = await request.body()
 
+    # Local fixtures intentionally use a dummy secret. Keep that convenience,
+    # but do not acknowledge real processing errors as successful delivery.
+    if _DEV_MODE:
+        try:
+            await run_in_threadpool(handler.handle, body.decode(), signature)
+        except InvalidSignatureError:
+            return "OK"
+        except Exception as exc:
+            logger.exception("[linebot] webhook processing failed")
+            raise HTTPException(status_code=503, detail="Webhook processing failed") from exc
+        return "OK"
+
     try:
-        # The handlers are synchronous (database, LINE calls, address lookup). Run directly in this
-        # async route they block the event loop, freezing every other request while one slow
-        # message is processed.
-        await run_in_threadpool(handler.handle, body.decode(), signature)
+        body_text = body.decode("utf-8")
+        handler.parser.parse(body_text, signature, as_payload=True)
     except InvalidSignatureError:
-        if _DEV_MODE:
-            pass   # dev 模式略過驗證
+        raise HTTPException(status_code=400, detail="Invalid signature")
+    except (UnicodeDecodeError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload") from exc
+
+    try:
+        envelope = json.loads(body_text)
+        destination = str(envelope.get("destination") or "")
+        events = envelope.get("events") or []
+        if not isinstance(events, list):
+            raise ValueError("events must be a list")
+    except (ValueError, TypeError, json.JSONDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid webhook payload") from exc
+
+    failed = []
+    for raw_event in events:
+        if not isinstance(raw_event, dict):
+            continue
+        identifier, owner = webhook_inbox.claim_event(destination, raw_event)
+        if not owner:
+            continue
+        try:
+            await run_in_threadpool(_dispatch_raw_event, destination, raw_event)
+        except Exception as exc:
+            webhook_inbox.mark_failed(identifier, owner, exc)
+            logger.exception("[linebot] event failed id=%s", identifier)
+            failed.append(identifier)
         else:
-            raise HTTPException(status_code=400, detail="Invalid signature")
-    except Exception:
-        # 單一事件處理失敗不能讓整個 webhook 回 500：LINE 會一直重送同一批
-        # 事件，一個壞訊息就會反覆卡住之後所有人的訊息。記錄下來、回 200。
-        logger.exception("[linebot] 事件處理失敗")
+            webhook_inbox.mark_processed(identifier, owner)
+
+    if failed:
+        raise HTTPException(status_code=503, detail="Webhook processing failed")
 
     return "OK"
+
+
+def _dispatch_raw_event(destination: str, raw_event: dict) -> None:
+    body = json.dumps(
+        {"destination": destination, "events": [raw_event]},
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    digest = hmac.new(
+        settings.LINE_CHANNEL_SECRET.encode("utf-8"),
+        body.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    signature = base64.b64encode(digest).decode("ascii")
+    handler.handle(body, signature)
+
+
+def retry_failed_webhooks() -> int:
+    return webhook_inbox.process_ready_batch(_dispatch_raw_event)
 
 
 # ── 模擬打卡（dev 測試用，正式環境移除）────────
@@ -155,7 +214,7 @@ def _welcome_text(name: str, with_location_hint: bool = True) -> str:
         "・有危險：選「緊急求助」或傳「需要幫忙」\n"
         "・物資或生活需求：選「申請需求」一次填寫\n"
         "・每天早上會問您平安，按「我很好」就可以\n"
-        "・「居民中心」有家屬綁定、紀錄與完整說明"
+        "・「我的中心」有居民、家屬與志工的完整功能"
     )
     return f"{body}\n\n{LOCATION_HINT}" if with_location_hint else body
 
@@ -683,6 +742,42 @@ def _handle_needs(event, db, user, text, intent) -> bool:
     return False
 
 
+def _match_and_page_admins(db, user, need_ids: list[str]) -> None:
+    """Suggest a volunteer for each new need and hand the admin a one-tap approval card.
+
+    The need is already saved, so a failure here only costs the suggestion; the 30-minute
+    sweep and the workspace can still pick it up."""
+    from app.services.dispatch import propose_on_arrival
+    try:
+        results = propose_on_arrival(need_ids, db)
+    except Exception:
+        logger.exception("[need] 自動建議志工失敗")
+        db.rollback()
+        return
+    for r in results:
+        page_admins_about_need(db, user.name, r["need"], r)
+
+
+def page_admins_about_need(db, requester_name: str, need, r: dict) -> None:
+    """One card per new need: approve the suggested volunteer, or see who else could go."""
+    from app.services.alert import notify_admins
+    head = f"📦 {requester_name} 申請「{NEED_ZH.get(need.need_type, need.need_type)}」（{need.address or '地址未填'}）"
+    try:
+        if "volunteer" in r:
+            dist = f"，約 {r['dist_km']} km" if r["dist_km"] is not None else ""
+            reach = "核准後會發 LINE 任務卡。" if r["line_bound"] else "⚠️ 這位志工未綁定 LINE，核准後需自行聯繫。"
+            notify_admins(db, f"{head}\n系統建議：{r['volunteer']} 的「{r['resource_name']}」{dist}\n{reach}", buttons=[
+                {"label": "✅ 核准派遣", "data": f"action=admin_confirm&need_id={need.id}", "color": "#1b7a44"},
+                {"label": "退回建議", "data": f"action=admin_decline&need_id={need.id}"},
+            ])
+        else:
+            notify_admins(db, f"{head}\n尚未找到志工：{r['reason']}。", buttons=[
+                {"label": "看候選志工", "data": f"action=admin_cands&need_id={need.id}"},
+            ])
+    except Exception:
+        logger.exception("[need] 通知管理員新需求失敗")
+
+
 def submit_needs(db, user, ntypes, description, *, urgent=False, address=None) -> tuple[str, bool]:
     """Create needs for this person. Returns (reply text, whether to ask for a location)."""
     from app.models.need import CommunityNeed
@@ -695,19 +790,23 @@ def submit_needs(db, user, ntypes, description, *, urgent=False, address=None) -
     if address and not user.address:
         user.address = address
     zone_id = resolve_zone_for_point(db, coords[0] if coords else None, coords[1] if coords else None)
-    created, duplicates = [], []
+    created, duplicates, new_needs = [], [], []
     for ntype in ntypes:
         if ntype in existing_types:
             duplicates.append(ntype)
             continue
         base = URGENCY_BY_TYPE.get(ntype, 3)
-        db.add(CommunityNeed(
+        need = CommunityNeed(
             requester_id=user.id, need_type=ntype, description=description, address=address or user.address,
             lat=coords[0] if coords else None, lng=coords[1] if coords else None,
             urgency=max(base, 4) if urgent else base, zone_id=zone_id,
-        ))
+        )
+        db.add(need)
+        new_needs.append(need)
         created.append(ntype)
     db.commit()
+    if new_needs:
+        _match_and_page_admins(db, user, [str(n.id) for n in new_needs])
 
     lines = []
     if created:
@@ -874,7 +973,7 @@ def _handle_question(event, text) -> bool:
 # ──────────────────────────────────────────────
 HELP_BASE = (
     "📖 可用指令：\n"
-    "・「居民中心」— 家屬、紀錄與完整居民服務\n"
+    "・「我的中心」— 依您的居民、家屬與志工身分顯示完整功能\n"
     "・「我很好」— 回覆今日打卡\n"
     "・「狀態」— 查看系統模式\n"
     "・「需要水／需要食物／需要藥」— 提出物資需求\n"
@@ -953,7 +1052,7 @@ def _process_text(event, db, user, text) -> bool:
         parts = [HELP_BASE, "・「我的紀錄」— 需求紀錄、取消需求、家人綁定\n・「邀請家人」— 取得綁定碼，讓家人收到您的狀況通知"]
         roles = user.roles or []
         if "volunteer" in roles or "admin" in roles:
-            parts.append("📦 志工指令：\n・「志工中心」— 任務、物資與位置的完整入口\n・「接單」— 挑選附近的需求\n・「我的任務」— 進行中的任務與回報\n"
+            parts.append("📦 志工指令：\n・「我的中心」— 居民與志工功能都保留\n・「接單」— 挑選附近的需求\n・「我的任務」— 進行中的任務與回報\n"
                          "・「登記物資」「我的物資」「取消物資」\n・「新增長者 [姓名] [地址]」— 幫長者代辦註冊\n"
                          "・直接輸入問題 — AI 急救 / 照護知識查詢 🤖")
         else:

@@ -38,8 +38,28 @@ def main():
                               "status": frame.locator("#status").inner_text()}, ensure_ascii=True))
             raise
         choices = page.request.get(BASE_URL + "/api/workspaces").json()
-        frame.locator("#workspace-list").select_option(choices[0]["id"])
+        local_workspace = next(choice for choice in choices if choice["name"] == "事件處置 · 本機驗證資料")
+        assert {choice["folder"] for choice in choices} >= {"國際案例", "花蓮案例"}
+        for workspace_id, folder, node_id, screenshot in (
+            ("scenario-nepal-rasuwa-2026", "國際案例", "nepal-rasuwa-2026:node:flood", "scenario-nepal.png"),
+            ("scenario-guangfu-matai-an-2025", "花蓮案例", "guangfu-matai-an-2025:node:flood", "scenario-guangfu.png"),
+        ):
+            frame.locator("#workspace-list").select_option(workspace_id)
+            workspace.wait_for_function("id=>state.id===id", arg=workspace_id)
+            assert frame.locator("#workspace-folder").input_value() == folder
+            assert workspace.evaluate("id=>nodeById(id).properties.data_status", node_id) == "情境模擬"
+            page.wait_for_timeout(700)
+            page.screenshot(path=str(artifacts / screenshot), full_page=True)
+        frame.locator("#workspace-list").select_option(local_workspace["id"])
         workspace.wait_for_function("state.graph.edges.some(e=>e.id==='incident-focus')")
+        before_add = workspace.evaluate("state.graph.nodes.length")
+        frame.locator("#add-object").click()
+        assert frame.locator("#object-menu").is_visible()
+        frame.locator('[data-add-kind="supply"]').click()
+        assert workspace.evaluate("oneShotAdd && document.body.classList.contains('placing-object')")
+        workspace.evaluate("map.fire('click',{latlng:L.latLng(24.002,120.602)})")
+        assert workspace.evaluate("state.graph.nodes.length") == before_add + 1
+        assert workspace.evaluate("!oneShotAdd && document.getElementById('mode').value==='select'")
         frame.locator("#sync-db").click()
         workspace.wait_for_function("!operationRequest")
         assert not uploads, uploads
@@ -112,6 +132,8 @@ def main():
             workspace.wait_for_function("!operationRequest && operationStage==='suggested'")
             frame.locator(f'[data-task="{water_need}"]').click()
             frame.get_by_role("button", name="核准派遣", exact=True).click()
+            frame.locator("#confirm-dialog[open]").wait_for()
+            frame.locator("#confirm-dialog-ok").click()
             workspace.wait_for_function("!operationRequest && nodeById(" + json.dumps(water_need) + ").properties.status==='matched'")
 
         frame.locator("#view-map").click()
@@ -123,10 +145,22 @@ def main():
         page.wait_for_timeout(300)
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         assert workspace.evaluate("document.documentElement.scrollWidth <= innerWidth"), "Workspace mobile overflow"
+        assert page.locator("#mobile-title").inner_text() == "事件處置工作區"
+        assert page.locator("#mobile-mode-text").inner_text() in ("日常模式", "緊急模式")
         page.screenshot(path=str(artifacts / "mobile-map.png"), full_page=True)
+        page.locator("#nav-toggle").click()
+        page.wait_for_timeout(250)
+        assert page.get_by_role("button", name="長者管理", exact=True).is_visible()
+        page.screenshot(path=str(artifacts / "mobile-navigation.png"), full_page=True)
+        page.locator("#nav-close").click()
+        if frame.locator("#close-inspector").is_visible():
+            frame.locator("#close-inspector").click()
         frame.locator("#view-graph").click()
         assert workspace.evaluate("cy.nodes().length") > 0
         page.screenshot(path=str(artifacts / "mobile-graph.png"), full_page=True)
+        workspace.evaluate("select('node', state.graph.nodes[0].id)")
+        assert workspace.evaluate("document.body.classList.contains('inspector-open')")
+        assert frame.locator("#close-inspector").is_visible()
         frame.locator("#selection").scroll_into_view_if_needed()
         page.screenshot(path=str(artifacts / "mobile-detail.png"), full_page=True)
         assert not errors, errors

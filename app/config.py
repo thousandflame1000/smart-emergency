@@ -23,6 +23,23 @@ class Settings(BaseSettings):
     OUTBOX_BASE_DELAY_SECONDS: int = 15
     OUTBOX_MAX_DELAY_SECONDS: int = 3600
     OUTBOX_LEASE_SECONDS: int = 120
+    WEBHOOK_MAX_ATTEMPTS: int = 8
+    WEBHOOK_BASE_DELAY_SECONDS: int = 10
+    WEBHOOK_MAX_DELAY_SECONDS: int = 900
+    WEBHOOK_LEASE_SECONDS: int = 120
+    WEBHOOK_RETENTION_DAYS: int = 30
+    OUTBOX_RETENTION_DAYS: int = 90
+
+    # External AI is opt-in because prompts and knowledge-base text leave this service.
+    EXTERNAL_AI_ENABLED: bool = False
+
+    # Override these with the deploying organization's legal details.
+    PRIVACY_NOTICE_VERSION: str = "2026-09-27"
+    PRIVACY_CONTROLLER_NAME: str = "鄰里守望平台營運單位"
+    PRIVACY_CONTACT: str = "請透過 LINE 官方帳號聯絡管理員"
+
+    # Comma-separated browser origins allowed to call the API cross-origin.
+    CORS_ALLOWED_ORIGINS: str = ""
 
     # 決賽展演期間的臨時共用密碼閘（見 app/demo_auth.py）。留空 = 不啟用，
     # 本地開發/測試預設不受影響。

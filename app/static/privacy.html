@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>個人資料告知事項｜鄰里守望</title>
+<style>
+  * { box-sizing:border-box; letter-spacing:0; }
+  body { margin:0; background:#f4f6f8; color:#1c2833; font-family:system-ui,"Noto Sans TC","Microsoft JhengHei",sans-serif; line-height:1.7; }
+  main { max-width:760px; margin:0 auto; padding:32px 20px 56px; }
+  h1 { font-size:28px; margin:0 0 8px; }
+  h2 { font-size:19px; margin:28px 0 8px; }
+  p, li { font-size:16px; }
+  .meta { color:#5d6d7e; margin:0 0 24px; }
+  .notice { border-left:4px solid #c0392b; padding:10px 14px; background:#fff; }
+  a { color:#a93226; }
+</style>
+</head>
+<body>
+<main>
+  <h1>個人資料告知事項</h1>
+  <p class="meta">版本：{{VERSION}}</p>
+  <p class="notice">本系統用於社區照護與緊急協作，不能取代 119、醫療診斷或專業救援。有立即危險時請直接撥打 119。</p>
+
+  <h2>資料蒐集者與聯絡方式</h2>
+  <p>資料控制者：{{CONTROLLER}}<br>聯絡方式：{{CONTACT}}</p>
+
+  <h2>蒐集的資料</h2>
+  <p>可能包含 LINE 使用者識別碼、姓名、電話、地址與座標、身分角色、照護關係、每日平安回報、求助與物資資料、派遣及任務回報，以及維持通知可靠性所需的事件識別碼與錯誤紀錄。</p>
+
+  <h2>使用目的與方式</h2>
+  <p>資料用於確認身分、日常關懷、家屬或志工聯繫、緊急警報、物資媒合、派遣追蹤、系統安全、障礙排除及依法保存紀錄。地址可能透過地理編碼服務轉成座標，以計算距離及安排支援。</p>
+
+  <h2>外部服務</h2>
+  <p>LINE 訊息由 LINE 平台傳送；服務與資料庫由部署環境供應商承載；地址查詢可能送至地理編碼服務。Google Gemini 外部 AI 目前狀態：{{AI_STATUS}}。啟用時，管理員輸入的問題與知識庫相關段落會傳送給 Google；營運者不得輸入可直接識別個人的照護或健康資料。</p>
+
+  <h2>保存期間</h2>
+  <p>帳號、照護、求助與派遣紀錄依服務存續、緊急應變與法定需求保存，由營運單位訂定並執行刪除或去識別化。LINE webhook 技術封包於處理完成後保存最多 {{WEBHOOK_DAYS}} 日；通知投遞紀錄於完成或終止後保存最多 {{OUTBOX_DAYS}} 日，系統每日自動清理。</p>
+
+  <h2>您的權利</h2>
+  <p>您可透過上述聯絡方式請求查詢、閱覽、複製、補充、更正、停止蒐集或使用，以及刪除個人資料。依法或為處理中的緊急事件必須保留時，營運單位會說明理由與期間。您可以不提供資料，但部分照護通知、定位與媒合功能將無法使用。</p>
+</main>
+</body>
+</html>

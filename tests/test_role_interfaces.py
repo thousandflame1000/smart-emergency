@@ -46,7 +46,7 @@ def test_my_tasks_lists_assigned_work_with_actions(db, line_outbox):
     dispatch.manual_dispatch(str(need.id), str(res.id), db)
     say("U-vol", "我的任務")
     card = card_text(line_outbox, None)
-    assert "action=task_accept" in card and "action=task_delivered" in card and "/f/report?t=" in card
+    assert "action=task_accept" in card and "action=task_delivered" in card and "/f/report#t=" in card
 
 
 def test_my_tasks_hides_accept_once_accepted_and_ignores_others_tasks(db, line_outbox):
@@ -79,8 +79,14 @@ def test_role_centers_keep_primary_menus_small_and_secondary_actions_available(d
     say("U-vol", "志工中心")
     volunteer_card = card_text(line_outbox)
     assert "接單" in volunteer_card and "我的任務" in volunteer_card and "取消物資" in volunteer_card
+    say("U-vol", "我的中心")
+    combined_card = card_text(line_outbox)
+    assert "居民服務" in combined_card and "志工任務" in combined_card
+    assert "不必先和居民建立照護關係" in combined_card
+    # 舊選單上的「志工中心」按給非志工，仍開他自己的中心，而不是一句拒絕。
     say("U-req", "志工中心")
-    assert any("僅限志工" in t for t in replies(line_outbox))
+    stale_card = str(line_outbox.sent[-1][2].contents.to_dict())
+    assert "居民服務" in stale_card and "志工任務" not in stale_card
 
     say("U-adm", "決策中心")
     decision_card = card_text(line_outbox)
@@ -268,7 +274,7 @@ def test_my_needs_card_and_cancel_button(db, line_outbox):
     vol, req, adm, res, need = world(db)
     say("U-req", "我的需求")
     card = card_text(line_outbox, None)
-    assert "待媒合" in card and "action=cancel_needs" in card and "/f/me?t=" in card
+    assert "待媒合" in card and "action=cancel_needs" in card and "/f/me#t=" in card
     press("U-req", "action=cancel_needs")
     assert any("已幫您取消 1 筆" in t for t in replies(line_outbox))
 

@@ -51,6 +51,7 @@ Layer 2（資源點，固定設施、非稀缺）維持獨立逐筆比對，因�
 以及 Crisis Cleanup（美國災後志工任務媒合平台）的媒合模式。
 """
 import json
+import hashlib
 import math
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
@@ -80,6 +81,7 @@ from app.services.inventory import (
     structured_quantity,
 )
 from app.services.line_notify import send_task_message
+from app.services.outbox import OutboxService, finish_inline_delivery, send_text_reliably
 
 
 # ──────────────────────────────────────────────────────────
@@ -168,19 +170,6 @@ def _log_dispatch_event(
 from app.labels import NEED_TYPE_ZH  # noqa: E402
 
 
-def _push_text(line_uid: str | None, text: str) -> bool:
-    """Best-effort LINE text push. Never raises: a notification failure must not roll
-    back or block a dispatch decision that has already been committed."""
-    if not line_uid:
-        return False
-    try:
-        from app.services import line_notify
-        line_notify.send_text(line_uid, text)
-        return True
-    except Exception:
-        return False
-
-
 def notify_requester(need: CommunityNeed, text: str) -> bool:
     """Tell the person who asked for help what is happening with their request.
 
@@ -188,7 +177,14 @@ def notify_requester(need: CommunityNeed, text: str) -> bool:
     the resident who reported the need never learned anyone was coming, that the
     volunteer had cancelled, or that the delivery was done."""
     requester = need.requester
-    return _push_text(requester.line_uid if requester else None, text)
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:24]
+    return send_text_reliably(
+        aggregate_type="CommunityNeed",
+        aggregate_id=str(need.id),
+        destination=requester.line_uid if requester else None,
+        content=text,
+        dedupe_key=f"requester:{need.id}:{digest}",
+    )
 
 
 def assignee_user_id(need: CommunityNeed) -> str | None:
@@ -196,6 +192,40 @@ def assignee_user_id(need: CommunityNeed) -> str | None:
     matched resource), or None for facility matches / unassigned needs."""
     res = need.matched_resource
     return str(res.owner_id) if res and res.owner_id else None
+
+
+def message_assignee(need_id: str, text: str, db: Session, *, actor_label: str = "manager") -> dict:
+    """Send the assigned volunteer a LINE instruction about this task, and keep it in the task record."""
+    text = (text or "").strip()
+    if not text:
+        return {"error": "請輸入要傳給志工的內容。"}
+    if len(text) > 500:
+        return {"error": "訊息請在 500 字以內。"}
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if not need:
+        return {"error": "找不到這筆需求。"}
+    resource = need.matched_resource
+    volunteer = resource.owner if resource else None
+    if need.status not in ("suggested", "matched") or volunteer is None:
+        return {"error": "這筆需求目前沒有指派志工，無法傳送指示。"}
+    if not volunteer.line_uid:
+        return {"error": f"{volunteer.name} 尚未綁定 LINE，請改用電話聯繫。"}
+    item = NEED_TYPE_ZH.get(need.need_type, need.need_type)
+    content = f"📣 管理員指示｜{item}（{need.address or '地址未填'}）\n{text}\n\n傳「我的任務」可回報現況。"
+    event = _log_dispatch_event(
+        db, "admin_message", need=need, resource=resource, actor_label=actor_label,
+        previous_status=need.status, new_status=need.status, outcome="queued",
+        details={"text": text, "volunteer": volunteer.name},
+    )
+    db.commit()
+    delivered = send_text_reliably(
+        aggregate_type="CommunityNeed", aggregate_id=str(need.id), destination=volunteer.line_uid,
+        content=content, dedupe_key=f"admin_message:{event.id}",
+    )
+    event.outcome = "sent" if delivered else "retrying"
+    db.commit()
+    return {"message": f"已傳給 {volunteer.name}" + ("" if delivered else "（LINE 暫時失敗，系統會自動重試）"),
+            "volunteer": volunteer.name, "delivered": delivered}
 
 
 def _wait_pts(need: CommunityNeed) -> float:
@@ -828,29 +858,9 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
     ):
         db.rollback()
         return {"error": db.info.pop("inventory_error", None) or "需求或物資已由另一個操作處理，請重新載入。"}
-    db.commit()
-
-    notified = False
-    owner = resource.owner
-    if owner and owner.line_uid:
-        try:
-            send_task_message(
-                line_uid=owner.line_uid,
-                need_description=need.description or need.need_type,
-                address=need.address or "地址未填",
-                resource_name=resource.name,
-                need_id=str(need.id),
-                distance_km=None if need.lat is None or need.lng is None or resource.lat is None or resource.lng is None else _distance_km(need.lat, need.lng, resource.lat, resource.lng, db),
-                dest_lat=need.lat,
-                dest_lng=need.lng,
-            )
-            notified = True
-        except Exception:
-            pass
-
     dist = _distance_km(need.lat, need.lng, resource.lat, resource.lng, db)
-    _announce_match_to_requester(need, resource)
-    _log_dispatch_event(
+    owner = resource.owner
+    event = _log_dispatch_event(
         db,
         "manual_dispatch",
         need=need,
@@ -862,10 +872,52 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
         outcome="matched",
         details={
             "resource_name": resource.name,
-            "volunteer_notified": notified,
+            "volunteer_notified": False,
+            "notification_status": "pending",
             "dist_km": round(dist, 3) if not math.isinf(dist) else None,
         },
     )
+    db.flush()
+    delivery = OutboxService(db).enqueue_legacy_task(
+        need,
+        resource,
+        owner,
+        dispatch_id=str(event.id),
+        distance_km=None if math.isinf(dist) else dist,
+    )
+    delivery_id = str(delivery.id)
+    db.commit()
+
+    notified = False
+    delivery_error = None
+    if delivery.status == "PROCESSING":
+        try:
+            send_task_message(
+                line_uid=owner.line_uid,
+                need_description=need.description or need.need_type,
+                address=need.address or "地址未填",
+                resource_name=resource.name,
+                need_id=str(need.id),
+                distance_km=None if math.isinf(dist) else dist,
+                dest_lat=need.lat,
+                dest_lng=need.lng,
+            )
+            notified = True
+        except Exception as exc:
+            delivery_error = exc
+            finish_inline_delivery(db, delivery_id, exc)
+        else:
+            finish_inline_delivery(db, delivery_id)
+
+    _announce_match_to_requester(need, resource)
+    event.details_json = json.dumps({
+        "resource_name": resource.name,
+        "volunteer_notified": notified,
+        "notification_status": (
+            "sent" if notified else "retry_scheduled" if delivery_error else "unavailable"
+        ),
+        "dist_km": round(dist, 3) if not math.isinf(dist) else None,
+    }, ensure_ascii=False)
     db.commit()
     return {
         "message":            "媒合成功",
@@ -919,14 +971,26 @@ def confirm_dispatch(need_id: str, db: Session, expected_version: str | None = N
         db.rollback()
         return {"error": "此建議已由另一個操作處理，請更新現況"}
     db.refresh(need)
+    dist = _distance_km(need.lat, need.lng, resource.lat, resource.lng, db)
+    owner = resource.owner
     event = _log_dispatch_event(db, "confirm_dispatch", need=need, resource=resource, actor_label="manager",
                                 previous_status=previous_status, new_status="matched", outcome="matched",
-                                details={"resource_name": resource.name, "volunteer_notified": False})
-    # Commit the unique state transition before side effects; duplicate approvals cannot send again.
+                                details={"resource_name": resource.name, "volunteer_notified": False,
+                                         "notification_status": "pending"})
+    db.flush()
+    delivery = OutboxService(db).enqueue_legacy_task(
+        need,
+        resource,
+        owner,
+        dispatch_id=str(event.id),
+        distance_km=None if math.isinf(dist) else dist,
+    )
+    delivery_id = str(delivery.id)
+    # State transition, audit record, and retryable notification are one transaction.
     db.commit()
     notified = False
-    owner = resource.owner
-    if owner and owner.line_uid:
+    delivery_error = None
+    if delivery.status == "PROCESSING":
         try:
             send_task_message(
                 line_uid=owner.line_uid,
@@ -934,20 +998,30 @@ def confirm_dispatch(need_id: str, db: Session, expected_version: str | None = N
                 address=need.address or "地址未填",
                 resource_name=resource.name,
                 need_id=str(need.id),
-                distance_km=None if need.lat is None or need.lng is None or resource.lat is None or resource.lng is None else _distance_km(need.lat, need.lng, resource.lat, resource.lng, db),
+                distance_km=None if math.isinf(dist) else dist,
                 dest_lat=need.lat,
                 dest_lng=need.lng,
             )
             notified = True
-        except Exception:
-            pass
+        except Exception as exc:
+            delivery_error = exc
+            finish_inline_delivery(db, delivery_id, exc)
+        else:
+            finish_inline_delivery(db, delivery_id)
 
     _announce_match_to_requester(need, resource)
-    event.details_json = json.dumps({"resource_name": resource.name, "volunteer_notified": notified}, ensure_ascii=False)
+    event.details_json = json.dumps({
+        "resource_name": resource.name,
+        "volunteer_notified": notified,
+        "notification_status": (
+            "sent" if notified else "retry_scheduled" if delivery_error else "unavailable"
+        ),
+    }, ensure_ascii=False)
     db.commit()
 
     return {
         "message":            "已確認派遣，志工已收到 LINE 通知" if notified
+                              else "已確認派遣（LINE 暫時失敗，系統將自動重試）" if delivery_error
                               else "已確認派遣（志工未綁定 LINE，請自行聯繫）",
         "need_id":            need_id,
         "volunteer_notified": notified,
@@ -1067,12 +1141,10 @@ def cancel_need(need_id: str, db: Session) -> dict:
             volunteer_uid = _res.owner.line_uid
     need.status = "cancelled"
     need.matched_resource_id = None
-    if volunteer_uid:
-        _push_text(
-            volunteer_uid,
-            f"ℹ️ 剛才派給您的「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」任務已取消"
-            f"（需求已撤回），不需要再前往，謝謝您！",
-        )
+    volunteer_notice = (
+        f"ℹ️ 剛才派給您的「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」任務已取消"
+        f"（需求已撤回），不需要再前往，謝謝您！"
+    )
     _log_dispatch_event(
         db,
         "cancel_need",
@@ -1088,6 +1160,14 @@ def cancel_need(need_id: str, db: Session) -> dict:
         },
     )
     db.commit()
+    if volunteer_uid:
+        send_text_reliably(
+            aggregate_type="CommunityNeed",
+            aggregate_id=str(need.id),
+            destination=volunteer_uid,
+            content=volunteer_notice,
+            dedupe_key=f"need-cancelled:{need.id}:{previous_resource_id}",
+        )
 
     return {
         "message": "need cancelled",
@@ -1271,6 +1351,34 @@ def propose_manual(need_id: str, resource_id: str, db: Session, *, actor_id: str
     )
     db.commit()
     return {"message": "suggested", "need_id": need_id, "resource_id": resource_id}
+
+
+def propose_on_arrival(need_ids: list[str], db: Session) -> list[dict]:
+    """A fresh need gets a reviewable suggestion straight away instead of waiting for the
+    30-minute emergency sweep. Any volunteer with a matching supply in the same zone qualifies —
+    a care relation only raises the requester's vulnerability, it never limits who can help.
+    Nothing is sent to the volunteer here; an admin still approves before the task card goes out.
+    Returns one {need, volunteer, resource_name} or {need, reason} per need."""
+    out = []
+    for need_id in need_ids:
+        need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+        if not need or need.status != "open" or need.need_type == "sos":
+            continue
+        vulnerability = _vulnerability_pts(need.requester_id, db)
+        cands = [c for c in _collect_from_resources(need, db, {}, vulnerability) if c.resource_id]
+        if not cands:
+            out.append({"need": need, "reason": ("缺少座標，請先補地址" if need.lat is None or need.lng is None
+                                                 else "同分區沒有相符的志工物資")})
+            continue
+        best = max(cands, key=lambda c: c.score)
+        result = propose_manual(str(need.id), best.resource_id, db, actor_label="system:on_arrival")
+        if "error" in result:
+            out.append({"need": need, "reason": result["error"]})
+        else:
+            out.append({"need": need, "volunteer": best.vol_name, "resource_name": best.res_name,
+                        "dist_km": None if math.isinf(best.dist_km) else round(best.dist_km, 1),
+                        "line_bound": bool(best.vol_line_uid)})
+    return out
 
 
 def list_my_tasks(user, db: Session) -> list[dict]:

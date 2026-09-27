@@ -55,7 +55,9 @@ body {
 .sidebar-logo {
   padding: 20px 20px 16px;
   border-bottom: 1px solid var(--border);
+  position: relative;
 }
+.admin-nav-close { display:none; position:absolute; top:12px; right:12px; width:36px; height:36px; border:0; background:transparent; color:var(--on-dark-dim); font-size:24px; line-height:1; cursor:pointer; }
 /* 側邊欄維持深色（跟 index.html 的導覽一致），所以字色不能用內容區那組深色變數。 */
 .sidebar, .sidebar a { --on-dark: #eef4f0; --on-dark-dim: #9aa69f; --on-dark-accent: #77d6b5; }
 .sidebar-logo { border-bottom-color: #303a35; }
@@ -505,15 +507,51 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 .stat-tile-value.danger { color: var(--danger); }
 .stat-tile-value.ok { color: var(--success); }
 .stat-tile-sub { font-size: 12px; color: var(--text-dim); margin-top: 3px; }
+.admin-menu-button, .admin-nav-scrim { display:none; }
+.table-wrap { max-width:100%; overflow-x:auto; }
+#mode-btn::before { content:''; width:8px; height:8px; border-radius:50%; background:var(--success); flex:0 0 auto; }
+#mode-btn[data-mode="emergency"]::before { background:var(--danger); }
+@media (max-width:720px) {
+  body { min-height:100dvh; height:100dvh; }
+  html:not(.embed) .sidebar { position:fixed; z-index:1100; inset:0 auto 0 0; width:min(304px,86vw); transform:translateX(-102%); transition:transform .2s ease; box-shadow:16px 0 36px rgba(0,0,0,.24); }
+  html:not(.embed) .sidebar.open { transform:translateX(0); }
+  html:not(.embed) .admin-menu-button { display:inline-flex; }
+  html:not(.embed) .admin-nav-close { display:inline-flex; align-items:center; justify-content:center; }
+  .admin-nav-scrim { position:fixed; z-index:1090; inset:0; width:100%; border:0; border-radius:0; background:rgba(14,24,20,.52); }
+  .topbar { height:auto; min-height:56px; padding:7px 10px; gap:8px; }
+  .admin-menu-button { align-items:center; justify-content:center; min-height:38px; padding:6px 10px; border:1px solid var(--border); border-radius:var(--radius); background:var(--card); color:var(--text); font-weight:700; }
+  .topbar-title { min-width:0; font-family:var(--sans); font-size:14px; }
+  .topbar-actions { margin-left:auto; gap:5px; }
+  .topbar-actions .btn { min-height:38px; padding:6px 9px; white-space:normal; line-height:1.25; }
+  #mode-btn { max-width:108px; }
+  #checkin-btn { max-width:92px; }
+  .content { padding:12px; }
+  #security-banner { margin:8px 12px 0 !important; }
+  .card-header { align-items:flex-start; flex-wrap:wrap; gap:10px; }
+  .card-header > .btn { margin-left:auto; }
+  .list-toolbar { padding:10px 12px; }
+  .list-toolbar input[type="search"] { min-width:100%; flex-basis:100%; }
+  .people-grid { grid-template-columns:minmax(0,1fr); padding:12px; }
+  .board { grid-template-columns:minmax(0,1fr); padding:12px; }
+  .form-row.col-2, .form-row.col-3 { grid-template-columns:1fr; }
+  .modal-box, .modal-box.wide { width:calc(100vw - 20px); max-width:none; max-height:calc(100dvh - 20px); }
+  .modal-body { padding:16px; }
+  .modal-footer { padding:12px 16px; }
+  .toast-stack { top:8px; right:8px; width:calc(100vw - 16px); }
+  .stat-strip { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .factor-grid { grid-template-columns:1fr; }
+}
 </style>
 </head>
 <body>
 
 <!-- ── Sidebar ── -->
-<aside class="sidebar">
+<button id="admin-nav-scrim" class="admin-nav-scrim" type="button" aria-label="關閉管理選單" hidden></button>
+<aside class="sidebar" id="admin-sidebar" aria-label="管理導覽">
   <div class="sidebar-logo">
     <h1>🏘️ 鄰里守望</h1>
     <span>管理後台</span>
+    <button id="admin-nav-close" class="admin-nav-close" type="button" aria-label="關閉管理選單">&times;</button>
   </div>
 
   <div class="nav-section">成員管理</div>
@@ -546,14 +584,13 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 <!-- ── Main ── -->
 <div class="main">
   <div class="topbar">
+    <button class="admin-menu-button" id="admin-menu-button" type="button" aria-controls="admin-sidebar" aria-expanded="false">選單</button>
     <span class="topbar-title" id="topbar-title">長者管理</span>
     <div class="topbar-actions">
       <button class="btn btn-ghost btn-sm" onclick="toggleMode()" id="mode-btn" title="切換日常／緊急模式（切換到緊急會廣播給所有 LINE 使用者）">
         載入中…
       </button>
-      <button class="btn btn-ghost btn-sm" onclick="triggerCheckin()" id="checkin-btn">
-        📤 立即發送打卡
-      </button>
+      <button class="btn btn-ghost btn-sm" onclick="triggerCheckin()" id="checkin-btn">立即發送打卡</button>
     </div>
   </div>
   <div id="security-banner" class="notice danger is-hidden" style="margin:10px 20px 0"></div>
@@ -587,6 +624,27 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <!-- 志工 / 家屬                                     -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-volunteers">
+      <div class="card" id="rehearsal-kit-card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">單帳號演練</div>
+            <div class="card-subtitle">只有一支 LINE 也能走完家屬通知與志工派遣：另一方由不綁 LINE 的【演練】替身擔任，所有訊息都送到您選的帳號。</div>
+          </div>
+        </div>
+        <div style="padding:14px 18px;display:grid;gap:12px">
+          <label style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">測試帳號
+            <select id="kit-tester" style="min-width:240px" onchange="showKitSupply()"></select>
+            <span class="muted" id="kit-tester-supply"></span>
+          </label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost btn-sm" onclick="runKit('family-alert','unwell')">👴 替身長者回報不舒服 → 我收家屬通知</button>
+            <button class="btn btn-danger btn-sm" onclick="runKit('family-alert','help_needed')">🆘 替身長者按需要幫忙 → 我收求救通知</button>
+            <button class="btn btn-primary btn-sm" onclick="runKit('volunteer-task')">📦 替身居民申請我登記的物資 → 我收派遣</button>
+            <button class="btn btn-ghost-danger btn-sm" onclick="runKit('cleanup')">🧹 清除演練替身</button>
+          </div>
+          <div class="muted" id="kit-result" role="status">派遣測試前，請先用這支 LINE 按「登記物資」登記一項物資。</div>
+        </div>
+      </div>
       <div class="card is-hidden" id="volunteer-applications-card">
         <div class="card-header">
           <div>
@@ -1501,7 +1559,8 @@ async function loadMode() {
     const s = await fetch('/api/dashboard/summary').then(r => r.json());
     const btn = document.getElementById('mode-btn');
     btn.dataset.mode = s.mode;
-    btn.textContent = s.mode === 'emergency' ? '🚨 緊急模式（點此解除）' : '🟢 日常模式（點此啟動緊急）';
+    btn.textContent = s.mode === 'emergency' ? '緊急模式' : '日常模式';
+    btn.setAttribute('aria-label', s.mode === 'emergency' ? '目前為緊急模式，按下可解除' : '目前為日常模式，按下可啟動緊急模式');
     btn.classList.toggle('btn-danger', s.mode === 'emergency');
   } catch (e) { /* ignore */ }
 }
@@ -1545,37 +1604,77 @@ async function loadSecurityBanner() {
 const _geocodeTimers = {};
 function scheduleGeocode(prefix) {
   clearTimeout(_geocodeTimers[prefix]);
-  _geocodeTimers[prefix] = setTimeout(() => geocodeNow(prefix), 900);
+  const latEl = document.getElementById(`${prefix}-lat`);
+  const lngEl = document.getElementById(`${prefix}-lng`);
+  const addrEl = document.getElementById(`${prefix}-address`);
+  if (latEl) latEl.value = '';
+  if (lngEl) lngEl.value = '';
+  if (addrEl) delete addrEl.dataset.geocodedAddress;
+  const statusEl = document.getElementById(`${prefix}-geocode-status`);
+  if (statusEl) statusEl.textContent = '完成輸入後會定位地址';
 }
 async function geocodeNow(prefix) {
   clearTimeout(_geocodeTimers[prefix]);
+  delete _geocodeTimers[prefix];
   const addrEl = document.getElementById(`${prefix}-address`);
   const statusEl = document.getElementById(`${prefix}-geocode-status`);
+  const latEl = document.getElementById(`${prefix}-lat`);
+  const lngEl = document.getElementById(`${prefix}-lng`);
   const address = (addrEl && addrEl.value || '').trim();
-  if (address.length < 2) { if (statusEl) statusEl.textContent = ''; return; }
+  if (!address) { if (statusEl) statusEl.textContent = ''; return true; }
+  if (address.length < 2) {
+    if (latEl) latEl.value = '';
+    if (lngEl) lngEl.value = '';
+    if (statusEl) statusEl.textContent = '⚠️ 地址太短，請填寫完整地址。';
+    return false;
+  }
+  if (addrEl.dataset.geocodedAddress === address && latEl?.value && lngEl?.value) return true;
   if (statusEl) statusEl.textContent = '📍 定位中…';
   try {
     const res = await fetch(`/api/workspaces/places?q=${encodeURIComponent(address)}`);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     const places = data.places || [];
+    if ((addrEl.value || '').trim() !== address) {
+      if (statusEl) statusEl.textContent = '⚠️ 地址已變更，請稍候重新定位。';
+      return false;
+    }
     if (!res.ok || !places.length) {
+      if (latEl) latEl.value = '';
+      if (lngEl) lngEl.value = '';
       if (statusEl) statusEl.textContent = '⚠️ 找不到這個地址。請寫完整一點（加上縣市與鄉鎮），或改用附近明顯的地標。';
-      return;
+      return false;
     }
     const top = places[0];
-    const latEl = document.getElementById(`${prefix}-lat`);
-    const lngEl = document.getElementById(`${prefix}-lng`);
     if (latEl) latEl.value = top.lat.toFixed(6);
     if (lngEl) lngEl.value = top.lng.toFixed(6);
+    addrEl.dataset.geocodedAddress = address;
     if (statusEl) statusEl.textContent = `✅ 已定位：${esc(top.name)}`;
+    return true;
   } catch (e) {
-    if (statusEl) statusEl.textContent = '⚠️ 定位服務暫時無法使用，稍後再試一次；地址仍會照常存下來。';
+    if (latEl) latEl.value = '';
+    if (lngEl) lngEl.value = '';
+    if (statusEl) statusEl.textContent = '⚠️ 定位服務暫時無法使用，請稍後再試。';
+    return false;
   }
 }
 
 // ════════════════════════════════════════════════
 // Navigation
 // ════════════════════════════════════════════════
+const adminSidebar = document.getElementById('admin-sidebar');
+const adminMenuButton = document.getElementById('admin-menu-button');
+const adminNavScrim = document.getElementById('admin-nav-scrim');
+const adminNavClose = document.getElementById('admin-nav-close');
+function setAdminNav(open) {
+  adminSidebar.classList.toggle('open', open);
+  adminNavScrim.hidden = !open;
+  adminMenuButton.setAttribute('aria-expanded', String(open));
+}
+adminMenuButton.addEventListener('click', () => setAdminNav(!adminSidebar.classList.contains('open')));
+adminNavScrim.addEventListener('click', () => { setAdminNav(false); adminMenuButton.focus(); });
+adminNavClose.addEventListener('click', () => { setAdminNav(false); adminMenuButton.focus(); });
+document.addEventListener('keydown', event => { if (event.key === 'Escape') setAdminNav(false); });
+
 function showPage(id) {
   // 需求、個人物資、社區資源點是同一件事（把物資派給需求），整合在同一個「調度」畫面。
   if (id === 'page-resources' || id === 'page-points') id = 'page-needs';
@@ -1586,12 +1685,13 @@ function showPage(id) {
   const navEl = document.querySelector(`.nav-item[data-page="${navId}"]`);
   if (navEl) navEl.classList.add('active');
   document.getElementById('topbar-title').textContent = PAGE_TITLE[id] || '';
+  setAdminNav(false);
 
   // Lazy-load when first visiting
   if (id === 'page-relations') loadRelations();
   if (id === 'page-needs')     { loadNeeds(); loadPoints(); }
   if (id === 'page-kb')        loadKB();
-  if (id === 'page-volunteers') loadVolunteerApplications();
+  if (id === 'page-volunteers') { loadVolunteerApplications(); loadKitTesters(); }
 }
 
 // ════════════════════════════════════════════════
@@ -1709,6 +1809,42 @@ function askConfirm(title, bodyHtml, okLabel = '確認', okClass = 'btn-success'
 // ════════════════════════════════════════════════
 // Load all users + resources
 // ════════════════════════════════════════════════
+let kitTesters = [];
+async function loadKitTesters() {
+  const select = document.getElementById('kit-tester');
+  if (!select) return;
+  try {
+    kitTesters = await fetch('/api/dashboard/rehearsal/testers').then(r => r.json());
+    const keep = select.value;
+    select.innerHTML = kitTesters.length
+      ? kitTesters.map(t => `<option value="${esc(t.id)}">${esc(t.name)}（${t.roles.map(r => esc(ROLE_LABEL[r] || r)).join('/')}）</option>`).join('')
+      : '<option value="">尚無綁定 LINE 的帳號</option>';
+    if (keep && kitTesters.some(t => t.id === keep)) select.value = keep;
+    showKitSupply();
+  } catch (e) { select.innerHTML = '<option value="">載入失敗</option>'; }
+}
+function showKitSupply() {
+  const t = kitTesters.find(x => x.id === document.getElementById('kit-tester').value);
+  document.getElementById('kit-tester-supply').textContent = t ? (t.supply ? '可派物資：' + t.supply : '尚未登記物資') : '';
+}
+async function runKit(action, status) {
+  const tester = document.getElementById('kit-tester').value;
+  const out = document.getElementById('kit-result');
+  if (action !== 'cleanup' && !tester) { out.textContent = '請先選擇測試帳號。'; return; }
+  const p = new URLSearchParams();
+  if (action !== 'cleanup') p.set('tester_id', tester);
+  if (status) p.set('status', status);
+  out.textContent = '處理中…';
+  try {
+    const res = await fetch(`/api/dashboard/rehearsal/${action}?${p}`, { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || data.detail || res.status);
+    out.textContent = '✅ ' + data.message;
+    loadKitTesters();
+    if (action === 'cleanup' || action === 'family-alert') loadAll();
+  } catch (e) { out.textContent = '⚠️ ' + e.message; }
+}
+
 async function loadAll() {
   try {
     const [users, resources] = await Promise.all([
@@ -1893,6 +2029,7 @@ function openUserModal(role, user = null) {
   document.getElementById('user-address').value = user?.address || '';
   document.getElementById('user-lat').value     = user?.lat || '';
   document.getElementById('user-lng').value     = user?.lng || '';
+  document.getElementById('user-address').dataset.geocodedAddress = user?.address || '';
   renderBindState(user);
   openModal('modal-user');
 }
@@ -1962,10 +2099,11 @@ async function saveUser() {
   const name    = document.getElementById('user-name').value.trim();
   const phone   = document.getElementById('user-phone').value.trim();
   const address = document.getElementById('user-address').value.trim();
-  const lat     = document.getElementById('user-lat').value;
-  const lng     = document.getElementById('user-lng').value;
 
   if (!name) { alert('請輸入姓名'); return; }
+  if (address && !await geocodeNow('user')) { alert('地址尚未成功定位，請修正地址後再儲存。'); return; }
+  const lat = document.getElementById('user-lat').value;
+  const lng = document.getElementById('user-lng').value;
 
   const p = new URLSearchParams({ name });
   if (phone)   p.set('phone', phone);
@@ -2024,6 +2162,7 @@ function openResourceModal(res = null) {
   document.getElementById('res-note').value     = res?.note || '';
   document.getElementById('res-lat').value      = res?.lat || '';
   document.getElementById('res-lng').value      = res?.lng || '';
+  document.getElementById('res-address').dataset.geocodedAddress = res?.address || '';
   openModal('modal-resource');
 }
 
@@ -2037,10 +2176,11 @@ async function saveResource() {
   const addr    = document.getElementById('res-address').value.trim();
   const note    = document.getElementById('res-note').value.trim();
   const ownerId = document.getElementById('res-owner-id').value;
-  const lat     = document.getElementById('res-lat').value;
-  const lng     = document.getElementById('res-lng').value;
 
   if (!name) { alert('請輸入名稱'); return; }
+  if (addr && !await geocodeNow('res')) { alert('地址尚未成功定位，請修正地址後再儲存。'); return; }
+  const lat = document.getElementById('res-lat').value;
+  const lng = document.getElementById('res-lng').value;
 
   const p = new URLSearchParams({ name, resource_type: resType });
   if (qty)  p.set('quantity', qty);
@@ -2049,12 +2189,18 @@ async function saveResource() {
   if (lat)  p.set('lat', lat);
   if (lng)  p.set('lng', lng);
 
+  let response;
   if (id) {
-    await fetch(`/api/resources/${id}?${p}`, { method: 'PUT' });
+    response = await fetch(`/api/resources/${id}?${p}`, { method: 'PUT' });
   } else {
     if (!ownerId) { alert('請選擇登記人'); return; }
     p.set('owner_id', ownerId);
-    await fetch(`/api/resources/?${p}`, { method: 'POST' });
+    response = await fetch(`/api/resources/?${p}`, { method: 'POST' });
+  }
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    alert('儲存失敗：' + (data.detail || data.error || response.status));
+    return;
   }
   closeModal('modal-resource');
   loadAll();
@@ -2659,6 +2805,7 @@ function openPointModal(pt = null) {
   document.getElementById('pt-address').value  = pt?.address || '';
   document.getElementById('pt-lat').value      = pt?.lat || '';
   document.getElementById('pt-lng').value      = pt?.lng || '';
+  document.getElementById('pt-address').dataset.geocodedAddress = pt?.address || '';
   document.getElementById('pt-capacity').value = pt?.capacity || '';
   document.getElementById('pt-load').value     = pt?.current_load ?? 0;
   document.getElementById('pt-phone').value    = pt?.phone || '';
@@ -2678,6 +2825,7 @@ async function savePoint() {
     name, point_type: document.getElementById('pt-type').value,
   });
   const addr  = document.getElementById('pt-address').value.trim();
+  if (addr && !await geocodeNow('pt')) { alert('地址尚未成功定位，請修正地址後再儲存。'); return; }
   const lat   = document.getElementById('pt-lat').value;
   const lng   = document.getElementById('pt-lng').value;
   const cap   = document.getElementById('pt-capacity').value;
@@ -2695,7 +2843,12 @@ async function savePoint() {
   if (note)  p.set('note', note);
 
   const url = id ? `/api/resources/points/${id}?${p}` : `/api/resources/points?${p}`;
-  await fetch(url, { method: id ? 'PUT' : 'POST' });
+  const response = await fetch(url, { method: id ? 'PUT' : 'POST' });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    alert('儲存失敗：' + (data.detail || data.error || response.status));
+    return;
+  }
   closeModal('modal-point');
   loadPoints();
 }
@@ -2839,6 +2992,7 @@ function openNeedModal() {
   document.getElementById('need-address').value = '';
   document.getElementById('need-lat').value     = '';
   document.getElementById('need-lng').value     = '';
+  delete document.getElementById('need-address').dataset.geocodedAddress;
   openModal('modal-need');
 }
 
@@ -2847,11 +3001,12 @@ async function saveNeed() {
   const urgency   = document.getElementById('need-urgency').value;
   const desc      = document.getElementById('need-desc').value.trim();
   const address   = document.getElementById('need-address').value.trim();
-  const lat       = document.getElementById('need-lat').value;
-  const lng       = document.getElementById('need-lng').value;
   const requester = document.getElementById('need-requester').value;
 
   if (!address) { alert('請填寫需求地址'); return; }
+  if (!await geocodeNow('need')) { alert('地址尚未成功定位，請修正地址後再新增需求。'); return; }
+  const lat = document.getElementById('need-lat').value;
+  const lng = document.getElementById('need-lng').value;
 
   const p = new URLSearchParams({ need_type: type, urgency });
   if (desc)      p.set('description', desc);
@@ -2861,8 +3016,8 @@ async function saveNeed() {
   if (requester) p.set('requester_id', requester);
 
   const res  = await fetch(`/api/resources/needs?${p}`, { method: 'POST' });
-  const data = await res.json();
-  if (data.error) { alert('新增失敗：' + data.error); return; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data.error) { alert('新增失敗：' + (data.detail || data.error || res.status)); return; }
   closeModal('modal-need');
   loadNeeds();
 }

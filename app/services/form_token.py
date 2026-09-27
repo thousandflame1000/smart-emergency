@@ -52,5 +52,7 @@ def verify_token(token: str, *, now: float | None = None) -> str | None:
 
 
 def form_url(kind: str, line_uid: str, need_id: str | None = None) -> str:
-    url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/f/{kind}?t={make_token(line_uid)}"
+    # URL fragments never reach reverse-proxy/access logs or Referer headers. The
+    # form exchanges this token for an HttpOnly cookie before calling the API.
+    url = f"{settings.PUBLIC_BASE_URL.rstrip('/')}/f/{kind}#t={make_token(line_uid)}"
     return f"{url}&n={need_id}" if need_id else url

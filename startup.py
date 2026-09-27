@@ -15,6 +15,12 @@ def run():
     print("[startup] 建立資料表...")
     ensure_additive_schema(engine)
 
+    # 固定 ID、只補缺少的案例；不覆蓋使用者已編輯的工作區。
+    from app.services.workspace_scenarios import ensure_scenario_workspaces
+    with SessionLocal() as scenario_db:
+        scenario_result = ensure_scenario_workspaces(scenario_db)
+    print(f"[startup] 演練案例：新增 {len(scenario_result['created'])}，已存在 {len(scenario_result['existing'])}")
+
     db = SessionLocal()
     from app.models.user import User
 

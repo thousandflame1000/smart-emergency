@@ -1,9 +1,10 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
 from app.services import rag as rag_svc
+from app.security import require_admin
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin)])
 
 
 class QueryRequest(BaseModel):

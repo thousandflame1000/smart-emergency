@@ -60,7 +60,7 @@ def test_line_missing_name_sends_web_form_link_and_creates_nothing(db, line_outb
 
     lb.handle_text(_FakeEvent("志工申請", "Uapply2"))
     card = str(line_outbox.sent[-1][2].contents.to_dict())
-    assert "/f/apply?t=" in card, "沒帶資料時給網頁表單連結（有真正的文字框），不再要求使用者背格式"
+    assert "/f/apply#t=" in card, "沒帶資料時給網頁表單連結（有真正的文字框），不再要求使用者背格式"
 
     db2 = SessionLocal()
     assert db2.query(VolunteerApplication).count() == 0

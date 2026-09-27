@@ -169,6 +169,59 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
                        if u.is_active and (u.has_role("volunteer") or u.has_role("admin"))]}
 
 
+EVENT_NODE_ID = "db:incident:live"
+POINT_RANGE_KM = 20.0
+
+
+def bind_to_incidents(nodes: list[Node]) -> tuple[list[Node], list[Edge]]:
+    """Tie every live need to the incident it belongs to, and nearby resource points to that incident.
+
+    Live records only link to each other (requester, owner, assignment), so a workspace opened on an
+    event showed its needs and SOS floating beside the incident with nothing connecting them. A need
+    joins its nearest incident; one without coordinates joins the first. A workspace that has no
+    incident at all gets one live event node so the needs still hang together.
+    workspace-operations.js applies the same rule when the browser merges live data."""
+    from app.services.geo import haversine_km
+
+    def located(n):
+        return n.lat is not None and n.lng is not None
+
+    incidents = [n for n in nodes if n.kind == "incident"]
+    needs = [n for n in nodes if n.properties.get("db") == "need" and n.properties.get("status") != "cancelled"]
+    extra: list[Node] = []
+    if needs and not incidents:
+        spots = [n for n in needs if located(n)]
+        event = Node(id=EVENT_NODE_ID, label="即時通報事件", kind="incident",
+                     lat=sum(n.lat for n in spots) / len(spots) if spots else None,
+                     lng=sum(n.lng for n in spots) / len(spots) if spots else None,
+                     source="平台需求單彙整", properties={"db": "event", "description": "工作區沒有事件物件時，彙整即時需求"})
+        incidents, extra = [event], [event]
+
+    def nearest(node):
+        placed = [i for i in incidents if located(i)]
+        if not located(node) or not placed:
+            return incidents[0], None
+        best = min(placed, key=lambda i: haversine_km(node.lat, node.lng, i.lat, i.lng))
+        return best, haversine_km(node.lat, node.lng, best.lat, best.lng)
+
+    edges: list[Edge] = []
+    if not incidents:
+        return extra, edges
+    for need in needs:
+        incident, _ = nearest(need)
+        sos = need.properties.get("need_type") == "sos"
+        edges.append(Edge(id=f"db:edge:event:{need.id}", source=incident.id, target=need.id,
+                          label="緊急求助" if sos else "事件需求", kind="related", directed=True,
+                          provenance="平台資料庫", properties={"db": True, "binding": "incident"}))
+    for point in (n for n in nodes if n.properties.get("db") == "point"):
+        incident, km = nearest(point)
+        if km is not None and km <= POINT_RANGE_KM:
+            edges.append(Edge(id=f"db:edge:event:{point.id}", source=incident.id, target=point.id,
+                              label="範圍內資源點", kind="related", directed=True,
+                              provenance="平台資料庫", properties={"db": True, "binding": "incident"}))
+    return extra, edges
+
+
 def database_nodes(db: Session, zone_id: str | None = None) -> tuple[list[Node], dict]:
     snapshot = operational_snapshot(db, zone_id)
     return [Node.model_validate(n) for n in snapshot["graph"]["nodes"]], snapshot["counts"]
@@ -178,14 +231,16 @@ def merge_database(graph: GraphDocument, db: Session, zone_id: str | None = None
     snapshot = operational_snapshot(db, zone_id)
     fresh = GraphDocument.model_validate(snapshot["graph"])
     fresh_by_id = {n.id: n for n in fresh.nodes}
-    old_ids = {n.id for n in graph.nodes if is_db_id(n.id)}
+    old_ids = {n.id for n in graph.nodes if is_db_id(n.id) and n.id != EVENT_NODE_ID}
     for node in graph.nodes:
         if node.id in fresh_by_id and "_layout" in node.properties:
             fresh_by_id[node.id].properties["_layout"] = node.properties["_layout"]
     kept = [n for n in graph.nodes if not is_db_id(n.id)]
     ids = {n.id for n in kept} | fresh_by_id.keys()
     edges = [e for e in graph.edges if not e.id.startswith("db:edge:") and e.source in ids and e.target in ids]
-    merged = GraphDocument(nodes=kept + list(fresh_by_id.values()), edges=edges + fresh.edges)
+    event_nodes, event_edges = bind_to_incidents(kept + list(fresh_by_id.values()))
+    merged = GraphDocument(nodes=kept + list(fresh_by_id.values()) + event_nodes,
+                           edges=edges + fresh.edges + event_edges)
     counts = snapshot["counts"]
     counts.update(added=len(fresh_by_id.keys() - old_ids), updated=len(old_ids & fresh_by_id.keys()),
                   removed=len(old_ids - fresh_by_id.keys()))

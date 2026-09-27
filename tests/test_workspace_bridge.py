@@ -226,8 +226,11 @@ def test_projection_has_unique_identities_care_ownership_and_separate_need_locat
     second = api.post("/api/workspaces/database-merge", json={"graph": first["graph"]}).json()
     graph = GraphDocument.model_validate(second["graph"])
     assert second["counts"]["added"] == second["counts"]["removed"] == 0
-    assert len(graph.nodes) == len({n.id for n in graph.nodes}) == 5
-    assert len(graph.edges) == len({e.id for e in graph.edges}) == 3
+    # 5 筆平台物件＋工作區沒有事件時補上的即時事件；3 條平台關係＋事件綁需求、綁 20 km 內資源點。
+    assert len(graph.nodes) == len({n.id for n in graph.nodes}) == 6
+    assert len(graph.edges) == len({e.id for e in graph.edges}) == 5
+    assert {e.target for e in graph.edges if e.source == "db:incident:live"} == {
+        f"db:need:{need.id}", f"db:point:{point.id}"}
     nodes = {n.id: n for n in graph.nodes}
     assert nodes[f"db:person:{elder.id}"].lat == 24.01
     assert nodes[f"db:need:{need.id}"].lat == 24.03
