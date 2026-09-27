@@ -607,7 +607,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">長者名單</div>
-            <div class="card-subtitle">所有已登記的社區長者</div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="openUserModal('elderly')">
             ＋ 新增長者
@@ -631,7 +630,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">單帳號演練</div>
-            <div class="card-subtitle">只有一支 LINE 也能走完家屬通知與志工派遣：另一方由不綁 LINE 的【演練】替身擔任，所有訊息都送到您選的帳號。</div>
           </div>
         </div>
         <div style="padding:14px 18px;display:grid;gap:12px">
@@ -640,19 +638,18 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <span class="muted" id="kit-tester-supply"></span>
           </label>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost btn-sm" onclick="runKit('family-alert','unwell')">👴 替身長者回報不舒服 → 我收家屬通知</button>
-            <button class="btn btn-danger btn-sm" onclick="runKit('family-alert','help_needed')">🆘 替身長者按需要幫忙 → 我收求救通知</button>
-            <button class="btn btn-primary btn-sm" onclick="runKit('volunteer-task')">📦 替身居民申請我登記的物資 → 我收派遣</button>
-            <button class="btn btn-ghost-danger btn-sm" onclick="runKit('cleanup')">🧹 清除演練替身</button>
+            <button class="btn btn-ghost btn-sm" onclick="runKit('family-alert','unwell')">👴 長者不舒服</button>
+            <button class="btn btn-danger btn-sm" onclick="runKit('family-alert','help_needed')">🆘 長者求救</button>
+            <button class="btn btn-primary btn-sm" onclick="runKit('volunteer-task')">📦 居民申請物資</button>
+            <button class="btn btn-ghost-danger btn-sm" onclick="runKit('cleanup')">🧹 清除</button>
           </div>
-          <div class="muted" id="kit-result" role="status">派遣測試前，請先用這支 LINE 按「登記物資」登記一項物資。</div>
+          <div class="muted" id="kit-result" role="status"></div>
         </div>
       </div>
       <div class="card is-hidden" id="volunteer-applications-card">
         <div class="card-header">
           <div>
             <div class="card-title">待審核志工申請</div>
-            <div class="card-subtitle">從 LINE 傳「志工申請 姓名 電話 服務區域」送出的申請，核准後才會取得志工權限並自動通知申請人</div>
           </div>
           <span class="badge badge-amber" id="volunteer-applications-count"></span>
         </div>
@@ -669,7 +666,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">志工 / 家屬名單</div>
-            <div class="card-subtitle">協助照護的聯絡人</div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增成員</button>
         </div>
@@ -691,7 +687,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">照護關係設定</div>
-            <div class="card-subtitle">長者未回應時，依順序通知對應聯絡人</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <div class="viewseg" id="rel-view">
@@ -724,7 +719,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">RAG 知識庫狀態</div>
-            <div class="card-subtitle">向量化完成後，志工可透過 LINE 查詢 AI 助手</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-ghost btn-sm" onclick="loadKB()">🔄 刷新</button>
@@ -880,7 +874,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">社區物資清單</div>
-            <div class="card-subtitle">點擊「可用 / 不可用」快速切換狀態</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-danger btn-sm" onclick="runDispatch(this)" id="dispatch-btn">
@@ -912,7 +905,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">社區固定資源點</div>
-            <div class="card-subtitle">避難收容所、消防分隊、衛生所、活動中心、物資分發點</div>
           </div>
           <div style="display:flex;gap:8px">
             <button class="btn btn-ghost btn-sm" onclick="seedPoints()">📥 從政府資料匯入</button>
@@ -952,99 +944,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
           <div id="seed-notice" style="display:none;margin-top:0"></div>
         </div>
-        <div class="console-help">
-          <div class="card panel" data-panel="sources" data-collapsed="true"><div class="card-header"><div><div class="card-title">需求從哪裡來</div><div class="card-subtitle">LINE 傳訊、緊急按鈕、管理員手動新增</div></div></div><div style="padding:14px"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
-        <div style="background:rgba(34,211,238,.06);border:1px solid rgba(34,211,238,.3);border-radius:3px;padding:12px 14px">
-          <div style="font-size: 13px;font-weight:700;color:var(--primary);margin-bottom:4px">📱 LINE 傳訊</div>
-          <div style="font-size: 13px;color:var(--text-dim);line-height:1.6">
-            居民傳：<strong style="color:var(--text)">「需要水」「需要食物」「需要藥」</strong><br>
-            系統自動建立需求單，緊急度預設 3
-          </div>
-        </div>
-        <div style="background:rgba(45,212,167,.06);border:1px solid rgba(45,212,167,.3);border-radius:3px;padding:12px 14px">
-          <div style="font-size: 13px;font-weight:700;color:var(--success);margin-bottom:4px">🆘 緊急按鈕</div>
-          <div style="font-size: 13px;color:var(--text-dim);line-height:1.6">
-            居民按「需要幫忙」或傳「救命」<br>
-            同時觸發警報 + 建立需求，緊急度 5
-          </div>
-        </div>
-        <div style="background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:3px;padding:12px 14px">
-          <div style="font-size: 13px;font-weight:700;color:var(--muted);margin-bottom:4px">⚙️ 管理員手動</div>
-          <div style="font-size: 13px;color:var(--text-dim);line-height:1.6">
-            點右上「＋ 新增需求」<br>
-            選類型、填地址、設緊急度
-          </div>
-        </div>
-      </div></div></div>
-          <div class="card panel" data-panel="algorithm" data-collapsed="true">
-        <div class="card-header">
-          <div>
-            <div class="card-title">📐 系統怎麼決定優先派給誰？</div>
-            <div class="card-subtitle">下面 5 個因素加總算出分數，分數最高者優先建議派遣——但都需要管理員確認後才會通知志工</div>
-          </div>
-        </div>
-        <div class="card-body">
-          <div class="factor-grid">
-            <div class="factor-chip">
-              <div class="factor-icon">🚨</div>
-              <div class="factor-name">緊急程度</div>
-              <div class="factor-desc">求助越緊急，分數越高，是影響最大的因素</div>
-            </div>
-            <div class="factor-chip">
-              <div class="factor-icon">❤️</div>
-              <div class="factor-name">平時關懷分數</div>
-              <div class="factor-desc">打卡異常、警報未解決、身邊照顧者越少，分數越高</div>
-            </div>
-            <div class="factor-chip">
-              <div class="factor-icon">🎯</div>
-              <div class="factor-name">物資相符度</div>
-              <div class="factor-desc">物資種類要對得上需求才有效，類似物資打折計分</div>
-            </div>
-            <div class="factor-chip">
-              <div class="factor-icon">📍</div>
-              <div class="factor-name">距離</div>
-              <div class="factor-desc">越近越優先；但情況極緊急時，系統仍願意派到較遠處</div>
-            </div>
-            <div class="factor-chip">
-              <div class="factor-icon">⚖️</div>
-              <div class="factor-name">志工目前任務量</div>
-              <div class="factor-desc">已被指派越多任務，分數越低，避免工作集中在同一人</div>
-            </div>
-          </div>
-
-          <details style="margin-top:14px">
-            <summary style="cursor:pointer;font-size: 13px;font-weight:700;color:var(--muted)">技術細節（評分公式 / 距離上限 / 物資來源）</summary>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px">
-              <div>
-                <div style="font-size: 13px;font-weight:700;margin-bottom:8px;color:var(--muted)">評分公式</div>
-                <div style="background:rgba(34,211,238,.05);border:1px solid var(--border-bright);border-radius:3px;padding:12px;font-size: 13px;font-family:var(--mono);line-height:1.8;color:var(--text)">
-                  score = 緊急程度 × 12<br>
-                  &nbsp;&nbsp;+ 平時關懷分數（0–28）<br>
-                  &nbsp;&nbsp;+ 物資相符度 × 15<br>
-                  &nbsp;&nbsp;− (距離 ÷ 距離上限) × 25<br>
-                  &nbsp;&nbsp;− 志工目前任務量 × 5
-                </div>
-              </div>
-              <div>
-                <div style="font-size: 13px;font-weight:700;margin-bottom:8px;color:var(--muted)">距離上限（依緊急度）</div>
-                <table class="tbl" style="font-size: 13px">
-                  <tr><td>5 極緊急</td><td><strong>2 km</strong></td></tr>
-                  <tr><td>4 緊急</td><td><strong>5 km</strong></td></tr>
-                  <tr><td>3 一般</td><td><strong>8 km</strong></td></tr>
-                  <tr><td>2 輕度</td><td><strong>15 km</strong></td></tr>
-                  <tr><td>1 觀察</td><td><strong>25 km</strong></td></tr>
-                </table>
-              </div>
-            </div>
-            <div style="margin-top:12px;font-size: 13px;color:var(--muted);line-height:1.7">
-              <strong>物資來源（兩種）：</strong><br>
-              🙋 志工自行登記的個人物資（社區物資清單）<br>
-              📍 政府/社區固定資源點（避難所、消防分隊、衛生所…，從政府開放資料匯入）
-            </div>
-          </details>
-        </div>
-      </div>
-        </div>
+        
       </div>
     </div>
 
@@ -1088,7 +988,6 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header">
           <div>
             <div class="card-title">物件關係模型</div>
-            <div class="card-subtitle">物件、關係與作業狀態</div>
           </div>
           <button class="btn btn-ghost btn-sm" onclick="loadOntology()">重新整理</button>
         </div>
@@ -1269,7 +1168,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <option value="field_staff">基層員工</option>
             <option value="admin">管理員</option>
           </select>
-          <span class="form-hint">基層員工可在網頁新增／編輯物資與資源點，不能確認派遣或管理使用者；編輯既有使用者時也可以在這裡修正角色</span>
+          <span class="form-hint">基層員工：只能編輯物資與資源點</span>
         </div>
       </div>
       <div class="form-row col-2">
@@ -1289,7 +1188,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div id="user-bind-code" class="is-hidden" style="font-size: 28px;font-weight:800;letter-spacing:3px;margin:8px 0"></div>
         <div id="user-bind-qr" class="is-hidden" style="margin:8px 0">
           <img id="user-bind-qr-img" alt="掃碼加入" style="width:200px;height:200px;background:#fff;padding:8px;border-radius:8px">
-          <div class="form-hint">請對方用手機相機或 LINE 掃描，會直接開啟聊天室並帶好訊息，按送出即可。</div>
+          <div class="form-hint">用 LINE 掃描後按送出</div>
         </div>
         <div id="user-bind-note" class="form-hint is-hidden"></div>
         <div style="display:flex;gap:8px;margin-top:6px">
@@ -1342,7 +1241,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
       <div class="notice info" style="margin:0">
         <span class="notice-icon">ℹ️</span>
-        長者未回應打卡時，系統依序由小到大通知聯絡人
+        未回應時依序號通知
       </div>
     </div>
     <div class="modal-footer">
@@ -1593,8 +1492,7 @@ async function loadSecurityBanner() {
     const s = await fetch('/api/system/security').then(r => r.json());
     const el = document.getElementById('security-banner');
     if (s.public_admin) {
-      el.innerHTML = '⚠️ <strong>後台目前沒有登入保護</strong>：任何拿到網址的人都能看到長者姓名與地址、修改資料。'
-        + '要啟用請在 Railway 設定 <code>ADMIN_LINE_LOGIN=true</code>（管理員用 LINE 傳「後台」登入）或 <code>DEMO_PASSWORD</code>。';
+      el.innerHTML = '⚠️ <strong>後台未設登入</strong>：設 <code>ADMIN_LINE_LOGIN=true</code> 或 <code>DEMO_PASSWORD</code>';
       el.classList.remove('is-hidden');
     } else if (s.admin) {
       el.className = 'notice';
@@ -1729,7 +1627,7 @@ async function decideVolunteerApplication(id, decision) {
   let note = '';
   if (decision === 'reject') {
     const ok = await askConfirm('婉拒這份志工申請？',
-      '<label for="reject-note" style="display:block;margin-bottom:6px">原因（選填，只給管理員看，不會告訴申請人）</label>'
+      '<label for="reject-note" style="display:block;margin-bottom:6px">原因（選填）</label>'
       + '<textarea id="reject-note" rows="3" maxlength="300" style="width:100%"></textarea>', '婉拒', 'btn-danger');
     if (!ok) return;
     note = (document.getElementById('reject-note')?.value || '').trim();
@@ -1857,7 +1755,7 @@ async function loadKitTesters() {
 }
 function showKitSupply() {
   const t = kitTesters.find(x => x.id === document.getElementById('kit-tester').value);
-  document.getElementById('kit-tester-supply').textContent = t ? (t.supply ? '可派物資：' + t.supply : '尚未登記物資') : '';
+  document.getElementById('kit-tester-supply').textContent = t ? (t.supply ? '物資：' + t.supply : '先用 LINE 登記物資') : '';
 }
 async function runKit(action, status) {
   const tester = document.getElementById('kit-tester').value;

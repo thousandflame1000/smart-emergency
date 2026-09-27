@@ -105,9 +105,8 @@ def family_alert(db: Session, tester_id: str, status: str) -> dict:
         checkin.responded_at = now_utc()
         db.commit()
         notified = send_alerts_for_checkin(checkin.id, "unwell", db)
-    what = "按下「需要幫忙」，已建立緊急求助單" if status == "help_needed" else "回報身體不舒服"
-    return {"elder": elder.name, "notified": notified,
-            "message": f"{elder.name} {what}；已通知 {notified} 位家屬（{tester.name} 的 LINE）。"}
+    what = "求救" if status == "help_needed" else "不舒服"
+    return {"elder": elder.name, "notified": notified, "message": f"長者{what}，已通知 {notified} 位家屬"}
 
 
 def volunteer_task(db: Session, tester_id: str) -> dict:
@@ -115,10 +114,10 @@ def volunteer_task(db: Session, tester_id: str) -> dict:
     from app.services import dispatch
     tester = _tester(db, tester_id)
     if not any(r in (tester.roles or []) for r in ("volunteer", "admin")):
-        raise ValueError(f"{tester.name} 還不是志工，請先在 LINE 送出志工申請並核准。")
+        raise ValueError(f"{tester.name} 還不是志工")
     supply = _tester_supply(db, tester)
     if supply is None:
-        raise ValueError(f"{tester.name} 目前沒有可用物資。請先在 LINE 按「登記物資」登記一項。")
+        raise ValueError("先用 LINE 登記物資")
     resident = _stand_in(db, RESIDENT_NAME, "elderly", supply if supply.lat is not None else tester)
     for old in db.query(CommunityNeed).filter(CommunityNeed.requester_id == resident.id,
                                               CommunityNeed.status.in_(ACTIVE)).all():
@@ -136,8 +135,7 @@ def volunteer_task(db: Session, tester_id: str) -> dict:
     page_admins_about_need(db, resident.name, need, {
         "volunteer": tester.name, "resource_name": supply.name, "dist_km": 0.0, "line_bound": True})
     return {"need_id": str(need.id), "resource": supply.name,
-            "message": f"{resident.name} 已申請「{supply.name}」，系統建議派給 {tester.name}。"
-                       "請在工作區或 LINE 管理卡按「核准派遣」，任務卡就會送到這支 LINE。"}
+            "message": f"已建議派給 {tester.name}，到 LINE 按核准"}
 
 
 def cleanup(db: Session) -> dict:
@@ -159,4 +157,4 @@ def cleanup(db: Session) -> dict:
             db.commit()
             disabled += 1
     return {"removed": removed, "disabled": disabled,
-            "message": f"已清除 {removed} 位演練替身" + (f"，{disabled} 位因有稽核紀錄改為停用" if disabled else "") + "。"}
+            "message": f"已清除 {removed + disabled} 位替身"}

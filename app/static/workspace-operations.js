@@ -142,7 +142,7 @@ async function loadOperationCandidates(node,proposeButton=null){
     const notify=top.notify_channel==='auto'?'🏢 自動完成（不透過 LINE）'
       :top.notify_channel==='line'?'📱 會發 LINE 任務卡'
       :'⚠️ 未綁定 LINE，核准後需自行聯繫';
-    $('need-candidate-summary').innerHTML=`系統建議 <strong>${escapeHtml(top.vol)}</strong>（${escapeHtml(top.name)}・評分 ${top.score}${top.dist_km!=null?'・'+top.dist_km+' km':''}）<br>${notify}<small>照護關係只影響居民脆弱度，不限制志工成為候選。</small>`;
+    $('need-candidate-summary').innerHTML=`系統建議 <strong>${escapeHtml(top.vol)}</strong>（${escapeHtml(top.name)}・評分 ${top.score}${top.dist_km!=null?'・'+top.dist_km+' km':''}）<br>${notify}`;
     if(proposeButton){
       if(top.source==='resource'){proposeButton.innerHTML='<i data-lucide="list-checks"></i>建立待核准建議';proposeButton.disabled=false;proposeButton.onclick=()=>proposeBest(node,top);icons();}
       else{proposeButton.textContent='候選為固定資源點';proposeButton.disabled=true;}
@@ -150,7 +150,7 @@ async function loadOperationCandidates(node,proposeButton=null){
   }catch(e){operationCandidates.delete(key);if(state.selected?.id===node.id&&$('need-candidate-summary'))$('need-candidate-summary').textContent=e.message;}
 }
 async function proposeBest(node,candidate){
-  const body=`將先保留 <strong>${escapeHtml(candidate.vol)}</strong> 的「${escapeHtml(candidate.name)}」並送進待核准。<br>這一步不會發 LINE；下一步由管理員核准後才會送出任務卡。`;
+  const body=`保留 <strong>${escapeHtml(candidate.vol)}</strong> 的「${escapeHtml(candidate.name)}」，核准後才發 LINE。`;
   if(!await askConfirm('建立派遣建議？',body,'建立建議'))return;
   const buttons=[...$('operational-actions').querySelectorAll('button')];buttons.forEach(b=>b.disabled=true);
   try{
@@ -174,7 +174,7 @@ async function loadOperationEvents(node){
   }catch(e){operationEvents.delete(key);if(state.selected?.id===node.id&&$('operation-events'))$('operation-events').textContent=e.message;}
 }
 async function messageAssignee(node){
-  const body='<label for="assignee-message">內容會以 LINE 傳給這筆任務的志工，並記在任務紀錄。</label><textarea id="assignee-message" rows="4" maxlength="500" placeholder="例：改走台9線，先送到光復國小收容所"></textarea>';
+  const body='<textarea id="assignee-message" rows="4" maxlength="500" placeholder="例：改走台9線，先送到光復國小收容所"></textarea>';
   if(!await askConfirm('傳訊息給志工',body,'傳送 LINE'))return;
   const text=($('assignee-message')?.value||'').trim();
   if(!text){message('沒有輸入內容，未傳送',true);return;}
