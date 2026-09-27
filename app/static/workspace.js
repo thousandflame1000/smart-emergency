@@ -314,7 +314,7 @@ async function init(){
   try{const security=await fetch('/api/system/security').then(r=>r.json());principalRoles=security.roles||[];}
   catch(e){/* 查不到身分就維持保守預設（管理員），不擋任何操作——伺服器端還是會照角色擋 */}
   map=L.map('map',{preferCanvas:true}).setView([23.7,121],7);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'strict-origin-when-cross-origin',attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(map);
   mapLayers=L.layerGroup().addTo(map);
   // Thousands of individual markers (e.g. legacy road-node meshes) get slow to render and
   // pan/zoom once on the map at once; cluster them so only nearby markers group into one

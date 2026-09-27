@@ -304,7 +304,7 @@ function renderElderMap(rows){
   if(!window.L){$('elder-map').innerHTML='<p class="empty">地圖元件載入失敗（可能被網路或擴充功能擋住），請改用清單檢視。</p>';return;}
   if(!elderMap){
     elderMap=L.map('elder-map',{preferCanvas:true}).setView([23.7,121],8);
-    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap contributors'}).addTo(elderMap);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'strict-origin-when-cross-origin',attribution:'&copy; OpenStreetMap contributors'}).addTo(elderMap);
     elderPins=L.layerGroup().addTo(elderMap);
   }
   elderMap.invalidateSize();

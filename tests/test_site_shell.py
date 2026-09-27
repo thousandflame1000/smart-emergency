@@ -103,3 +103,16 @@ def test_views_stay_behind_the_login_when_it_is_enabled(web, monkeypatch, db):
         assert web.get(path).status_code == 401, path
     assert web.get("/join").status_code == 200 and web.get("/f/need").status_code == 200
     demo_auth.reset_cache()
+
+
+def test_osm_tile_layers_send_an_origin_referrer_despite_page_no_referrer_policy():
+    """頁面預設 no-referrer，OSM 圖磚伺服器收不到 Referer 就回「blocked」圖磚；
+    每個圖磚圖層都要自己送網域（不含路徑，表單 token 不會外洩）。"""
+    import re
+    from pathlib import Path
+    static = Path(__file__).resolve().parents[1] / "app" / "static"
+    layers = []
+    for path in list(static.glob("*.html")) + list(static.glob("*.js")):
+        layers += re.findall(r"L\.tileLayer\([^)]*\)", path.read_text(encoding="utf-8"))
+    assert layers
+    assert all("referrerPolicy:'strict-origin-when-cross-origin'" in layer for layer in layers)
