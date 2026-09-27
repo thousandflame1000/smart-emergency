@@ -377,6 +377,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   pointer-events: auto;
 }
 .toast-stack .notice.show { opacity: 1; transform: translateX(0); }
+.toast-stack .notice span:last-child { white-space: pre-line; }
 
 /* ── Inline candidate summary next to 確認派遣／否決, so confirming isn't a blind click ── */
 .cand-summary { font-size: 13px; color: var(--muted); margin-bottom: 6px; min-height: 16px; }
@@ -542,6 +543,8 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   .factor-grid { grid-template-columns:1fr; }
 }
 </style>
+<link rel="stylesheet" href="/static/feel.css">
+<script src="/static/feel.js"></script>
 </head>
 <body>
 
@@ -1481,11 +1484,11 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   </div>
 </div>
 
-<div class="modal-overlay" id="modal-confirm" onclick="closeOnOverlay(event,'modal-confirm')">
+<div class="modal-overlay" id="modal-confirm" onclick="if(event.target===this)document.getElementById('confirm-cancel-btn').click()">
   <div class="modal-box">
     <div class="modal-header">
       <span class="modal-title" id="confirm-title">確認</span>
-      <button class="modal-close" onclick="closeModal('modal-confirm')">✕</button>
+      <button class="modal-close" onclick="document.getElementById('confirm-cancel-btn').click()">✕</button>
     </div>
     <div class="modal-body" id="confirm-body"></div>
     <div class="modal-footer">
@@ -1725,14 +1728,18 @@ async function loadVolunteerApplications() {
 async function decideVolunteerApplication(id, decision) {
   let note = '';
   if (decision === 'reject') {
-    note = prompt('請輸入拒絕原因（會直接顯示給管理員自己看，不會透露給申請人）：') || '';
+    const ok = await askConfirm('婉拒這份志工申請？',
+      '<label for="reject-note" style="display:block;margin-bottom:6px">原因（選填，只給管理員看，不會告訴申請人）</label>'
+      + '<textarea id="reject-note" rows="3" maxlength="300" style="width:100%"></textarea>', '婉拒', 'btn-danger');
+    if (!ok) return;
+    note = (document.getElementById('reject-note')?.value || '').trim();
   }
   const params = new URLSearchParams({ decision });
   if (note) params.set('note', note);
   const res = await fetch(`/api/dashboard/volunteer-applications/${id}/decision?${params}`, { method: 'POST' });
   const data = await res.json();
-  if (!res.ok) { alert('審核失敗：' + (data.detail || res.status)); return; }
-  alert(decision === 'approve'
+  if (!res.ok) { notify('審核失敗：' + (data.detail || res.status)); return; }
+  notify(decision === 'approve'
     ? (data.volunteer_notified ? '✅ 已核准，申請人已收到 LINE 通知。' : '✅ 已核准（申請人尚未綁定 LINE，通知失敗，請自行聯繫）')
     : '已拒絕，申請人已收到 LINE 通知。');
   await loadVolunteerApplications();
@@ -1742,8 +1749,23 @@ async function decideVolunteerApplication(id, decision) {
 // ════════════════════════════════════════════════
 // Modal helpers
 // ════════════════════════════════════════════════
-function openModal(id)  { document.getElementById(id).classList.add('open'); }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+// 開啟時游標直接落在第一個欄位，關閉後回到原本按的那顆按鈕，鍵盤操作不必重新找位置。
+const modalOpener = {};
+function openModal(id) {
+  const modal = document.getElementById(id);
+  modalOpener[id] = document.activeElement;
+  modal.classList.add('open');
+  if (id === 'modal-confirm') return;  // askConfirm 自己決定焦點
+  const field = [...modal.querySelectorAll('.modal-body input:not([type=hidden]), .modal-body select, .modal-body textarea')]
+    .find(el => !el.disabled && el.offsetParent !== null);
+  if (field) setTimeout(() => field.focus({ preventScroll: true }), 60);
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  const opener = modalOpener[id];
+  delete modalOpener[id];
+  if (opener && opener.focus && document.contains(opener)) opener.focus({ preventScroll: true });
+}
 function closeOnOverlay(e, id) {
   if (e.target === document.getElementById(id)) closeModal(id);
 }
@@ -1763,6 +1785,13 @@ function showNotice(elId, type, msg) {
 // Toast — replaces alert() so a confirmed action doesn't block the page with
 // a native popup the admin has to dismiss before they can see the updated list.
 // ════════════════════════════════════════════════
+// 原本的 alert() 一律改走這裡：失敗用紅色、缺欄位用黃色，其餘視為完成；不擋畫面。
+function notify(msg) {
+  msg = String(msg);
+  const type = /失敗|錯誤|無法|❌/.test(msg) ? 'danger' : /^(⚠️|請|地址尚未|內容)/.test(msg) ? 'warning' : 'success';
+  toast(type, msg.replace(/^(⚠️|❌|✅)\s*/, ''), Math.min(9000, 3200 + msg.length * 40));
+}
+
 function toast(type, msg, ms = 4200) {
   const stack = document.getElementById('toast-stack');
   const icons = { info:'ℹ️', success:'✅', danger:'❌', warning:'⚠️' };
@@ -1803,6 +1832,9 @@ function askConfirm(title, bodyHtml, okLabel = '確認', okClass = 'btn-success'
     okBtn.onclick = () => cleanup(true);
     cancelBtn.onclick = () => cleanup(false);
     openModal('modal-confirm');
+    // 有輸入框就先讓人打字；沒有的話焦點放在確認鈕，Enter 直接確認、Esc 取消。
+    const field = document.getElementById('confirm-body').querySelector('input, textarea');
+    (field || okBtn).focus();
   });
 }
 
@@ -2058,7 +2090,7 @@ async function makeJoinCode(userId) {
   const id = userId || document.getElementById('user-id').value;
   const res = await fetch(`/api/dashboard/users/${encodeURIComponent(id)}/join_code`, { method: 'POST' });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) { alert('產生失敗：' + (data.detail || data.error || res.status)); return; }
+  if (!res.ok) { notify('產生失敗：' + (data.detail || data.error || res.status)); return; }
   const codeEl = document.getElementById('user-bind-code');
   codeEl.textContent = data.say;
   codeEl.classList.remove('is-hidden');
@@ -2100,8 +2132,8 @@ async function saveUser() {
   const phone   = document.getElementById('user-phone').value.trim();
   const address = document.getElementById('user-address').value.trim();
 
-  if (!name) { alert('請輸入姓名'); return; }
-  if (address && !await geocodeNow('user')) { alert('地址尚未成功定位，請修正地址後再儲存。'); return; }
+  if (!name) { notify('請輸入姓名'); return; }
+  if (address && !await geocodeNow('user')) { notify('地址尚未成功定位，請修正地址後再儲存。'); return; }
   const lat = document.getElementById('user-lat').value;
   const lng = document.getElementById('user-lng').value;
 
@@ -2114,14 +2146,14 @@ async function saveUser() {
   p.append('roles', role);
   if (id) {
     const res = await fetch(`/api/dashboard/users/${id}?${p}`, { method: 'PUT' });
-    if (!res.ok) { const d = await res.json().catch(() => ({})); alert('儲存失敗：' + (d.detail || d.error || res.status)); return; }
+    if (!res.ok) { const d = await res.json().catch(() => ({})); notify('儲存失敗：' + (d.detail || d.error || res.status)); return; }
     closeModal('modal-user');
     loadAll();
     return;
   }
   const res = await fetch(`/api/dashboard/users?${p}`, { method: 'POST' });
   const created = await res.json().catch(() => ({}));
-  if (!res.ok) { alert('新增失敗：' + (created.detail || created.error || res.status)); return; }
+  if (!res.ok) { notify('新增失敗：' + (created.detail || created.error || res.status)); return; }
   // 新增成員後留在視窗裡直接顯示綁定碼，不用另外找 LINE User ID。
   document.getElementById('user-id').value = created.id;
   document.getElementById('user-modal-title').textContent = '編輯使用者';
@@ -2177,8 +2209,8 @@ async function saveResource() {
   const note    = document.getElementById('res-note').value.trim();
   const ownerId = document.getElementById('res-owner-id').value;
 
-  if (!name) { alert('請輸入名稱'); return; }
-  if (addr && !await geocodeNow('res')) { alert('地址尚未成功定位，請修正地址後再儲存。'); return; }
+  if (!name) { notify('請輸入名稱'); return; }
+  if (addr && !await geocodeNow('res')) { notify('地址尚未成功定位，請修正地址後再儲存。'); return; }
   const lat = document.getElementById('res-lat').value;
   const lng = document.getElementById('res-lng').value;
 
@@ -2193,13 +2225,13 @@ async function saveResource() {
   if (id) {
     response = await fetch(`/api/resources/${id}?${p}`, { method: 'PUT' });
   } else {
-    if (!ownerId) { alert('請選擇登記人'); return; }
+    if (!ownerId) { notify('請選擇登記人'); return; }
     p.set('owner_id', ownerId);
     response = await fetch(`/api/resources/?${p}`, { method: 'POST' });
   }
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    alert('儲存失敗：' + (data.detail || data.error || response.status));
+    notify('儲存失敗：' + (data.detail || data.error || response.status));
     return;
   }
   closeModal('modal-resource');
@@ -2311,7 +2343,7 @@ async function saveRelation() {
   const contact_id   = document.getElementById('rel-contact-id').value;
   const relation     = document.getElementById('rel-relation').value;
   const notify_order = document.getElementById('rel-order').value;
-  if (!elderly_id || !contact_id) { alert('請選擇長者和聯絡人'); return; }
+  if (!elderly_id || !contact_id) { notify('請選擇長者和聯絡人'); return; }
   const p = new URLSearchParams({ elderly_id, contact_id, relation, notify_order });
   await fetch(`/api/dashboard/relations?${p}`, { method: 'POST' });
   closeModal('modal-relation');
@@ -2436,7 +2468,7 @@ async function moveRelation(id, direction) {
     const response = await fetch(`/api/dashboard/relations/${id}/move?direction=${direction}`, { method: 'POST' });
     if (!response.ok) throw Error((await response.json()).detail || '調整順序失敗');
     await loadRelations();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast('danger', e.message); }
 }
 
 // ════════════════════════════════════════════════
@@ -2518,7 +2550,7 @@ async function loadDocList() {
 
 async function editChunk(id) {
   const c = await fetch(`/api/rag/chunks/${id}`).then(r => r.json());
-  if (c.detail) { alert('載入失敗：' + c.detail); return; }
+  if (c.detail) { notify('載入失敗：' + c.detail); return; }
   document.getElementById('chunk-id').value       = c.id;
   document.getElementById('chunk-source').value   = c.source;
   document.getElementById('chunk-category').value = c.category;
@@ -2531,7 +2563,7 @@ async function saveChunk() {
   const source   = document.getElementById('chunk-source').value.trim();
   const category = document.getElementById('chunk-category').value;
   const content  = document.getElementById('chunk-content').value.trim();
-  if (!content) { alert('內容不可為空'); return; }
+  if (!content) { notify('內容不可為空'); return; }
 
   try {
     const res  = await fetch(`/api/rag/chunks/${id}`, {
@@ -2544,7 +2576,7 @@ async function saveChunk() {
     closeModal('modal-chunk');
     loadKB();
   } catch(e) {
-    alert('儲存失敗：' + e.message);
+    notify('儲存失敗：' + e.message);
   }
 }
 
@@ -2556,7 +2588,7 @@ async function deleteChunk(id) {
     if (!res.ok) throw new Error(data.detail || '伺服器錯誤');
     loadKB();
   } catch(e) {
-    alert('刪除失敗：' + e.message);
+    notify('刪除失敗：' + e.message);
   }
 }
 
@@ -2580,9 +2612,9 @@ async function addDocument() {
   const resultEl = document.getElementById('doc-result');
   const btn      = document.getElementById('doc-add-btn');
 
-  if (!source)          { alert('請填寫來源名稱'); return; }
-  if (!content)         { alert('請貼上文件內容'); return; }
-  if (content.length < 30) { alert('內容太短（至少 30 字）'); return; }
+  if (!source)          { notify('請填寫來源名稱'); return; }
+  if (!content)         { notify('請貼上文件內容'); return; }
+  if (content.length < 30) { notify('內容太短（至少 30 字）'); return; }
 
   btn.disabled = true; btn.textContent = '向量化中… (約 10-30 秒)';
   resultEl.style.display = 'none';
@@ -2670,7 +2702,7 @@ async function runDispatch(btn) {
     const res  = await fetch('/api/resources/dispatch', { method: 'POST' });
     const data = await res.json();
     if (data.reason === 'not_emergency') {
-      alert('⚠️ 目前為日常模式，請先從儀表板切換至緊急模式');
+      notify('⚠️ 目前為日常模式，請先從儀表板切換至緊急模式');
     } else {
       // 曾經「跳過 N 筆」只給一個數字，管理員要自己一筆筆點「查看詳情」
       // 才查得出原因——這裡直接把後端已經算好的 details 攤開分組顯示，
@@ -2682,11 +2714,11 @@ async function runDispatch(btn) {
         skippedDetails.forEach(d => { byReason[d.reason] = (byReason[d.reason] || 0) + 1; });
         summary += '\n\n跳過原因：\n' + Object.entries(byReason).map(([reason, n]) => `・${reason}：${n} 筆`).join('\n');
       }
-      alert(summary);
+      notify(summary);
       loadAll();
     }
   } catch(e) {
-    alert('執行失敗：' + e.message);
+    notify('執行失敗：' + e.message);
   } finally {
     btn.disabled = false; btn.textContent = original;
   }
@@ -2702,9 +2734,9 @@ async function triggerCheckin() {
   try {
     const res  = await fetch('/api/dashboard/trigger_checkin', { method: 'POST' });
     const data = await res.json();
-    alert(data.message || '已發送');
+    notify(data.message || '已發送');
   } catch(e) {
-    alert('發送失敗：' + e.message);
+    notify('發送失敗：' + e.message);
   } finally {
     btn.disabled = false; btn.textContent = '📤 立即發送打卡';
   }
@@ -2819,13 +2851,13 @@ function editPoint(p) { openPointModal(p); }
 async function savePoint() {
   const id   = document.getElementById('pt-id').value;
   const name = document.getElementById('pt-name').value.trim();
-  if (!name) { alert('請填寫名稱'); return; }
+  if (!name) { notify('請填寫名稱'); return; }
 
   const p = new URLSearchParams({
     name, point_type: document.getElementById('pt-type').value,
   });
   const addr  = document.getElementById('pt-address').value.trim();
-  if (addr && !await geocodeNow('pt')) { alert('地址尚未成功定位，請修正地址後再儲存。'); return; }
+  if (addr && !await geocodeNow('pt')) { notify('地址尚未成功定位，請修正地址後再儲存。'); return; }
   const lat   = document.getElementById('pt-lat').value;
   const lng   = document.getElementById('pt-lng').value;
   const cap   = document.getElementById('pt-capacity').value;
@@ -2846,7 +2878,7 @@ async function savePoint() {
   const response = await fetch(url, { method: id ? 'PUT' : 'POST' });
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    alert('儲存失敗：' + (data.detail || data.error || response.status));
+    notify('儲存失敗：' + (data.detail || data.error || response.status));
     return;
   }
   closeModal('modal-point');
@@ -3003,8 +3035,8 @@ async function saveNeed() {
   const address   = document.getElementById('need-address').value.trim();
   const requester = document.getElementById('need-requester').value;
 
-  if (!address) { alert('請填寫需求地址'); return; }
-  if (!await geocodeNow('need')) { alert('地址尚未成功定位，請修正地址後再新增需求。'); return; }
+  if (!address) { notify('請填寫需求地址'); return; }
+  if (!await geocodeNow('need')) { notify('地址尚未成功定位，請修正地址後再新增需求。'); return; }
   const lat = document.getElementById('need-lat').value;
   const lng = document.getElementById('need-lng').value;
 
@@ -3017,7 +3049,7 @@ async function saveNeed() {
 
   const res  = await fetch(`/api/resources/needs?${p}`, { method: 'POST' });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok || data.error) { alert('新增失敗：' + (data.detail || data.error || res.status)); return; }
+  if (!res.ok || data.error) { notify('新增失敗：' + (data.detail || data.error || res.status)); return; }
   closeModal('modal-need');
   loadNeeds();
 }

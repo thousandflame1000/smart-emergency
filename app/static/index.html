@@ -132,6 +132,8 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
 }
 @media(max-width:760px){.sidebar{width:58px;flex-basis:58px}.brand{padding:16px 0;text-align:center}.brand strong{font-size:0}.brand strong::after{content:"鄰";font-size:20px}.brand span,.nav-label,.nav-item span,.sidebar-bottom span{display:none}.nav-item{justify-content:center;padding:0;border-left:0}.content{padding:14px}.topbar{padding:0 14px}.metrics{grid-template-columns:repeat(2,1fr)}.stamp{display:none}.panel-head input{width:140px}}
 </style>
+<link rel="stylesheet" href="/static/feel.css">
+<script src="/static/feel.js"></script>
 </head>
 <body>
 <aside class="sidebar">
@@ -428,7 +430,7 @@ $('d-close').addEventListener('click',closeDrawer);
 $('scrim').addEventListener('click',closeDrawer);
 document.addEventListener('keydown',event=>{if(event.key==='Escape')closeDrawer();});
 $('refresh').addEventListener('click',loadAll);
-$('mode').addEventListener('click',async()=>{const next=$('mode').classList.contains('emergency')?'normal':'emergency';if(!confirm(next==='emergency'?'確定切換為緊急模式並通知 LINE 使用者？':'確定解除緊急模式？'))return;await fetch('/api/dashboard/mode?mode='+next,{method:'POST'});loadAll();});
+$('mode').addEventListener('click',async()=>{const next=$('mode').classList.contains('emergency')?'normal':'emergency';if(!await askConfirm(next==='emergency'?'切換為緊急模式？':'解除緊急模式？',next==='emergency'?'所有 LINE 使用者都會收到緊急模式通知。':'社區會恢復日常模式，LINE 使用者會收到解除通知。',next==='emergency'?'啟動緊急模式':'解除'))return;await fetch('/api/dashboard/mode?mode='+next,{method:'POST'});loadAll();});
 $('rag-form').addEventListener('submit',async event=>{event.preventDefault();const button=$('rag-submit'),answer=$('rag-answer'),sources=$('rag-sources');button.disabled=true;button.textContent='查詢中';answer.hidden=false;answer.textContent='';sources.hidden=true;try{const response=await fetch('/api/rag/query',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:$('rag-question').value.trim()})});const data=await response.json();if(!response.ok)throw Error(data.detail||data.error||'查詢失敗');answer.textContent=data.answer||'目前沒有可用回答';const refs=(data.sources||[]).map(item=>typeof item==='string'?item:(item.source||item.title||'')).filter(Boolean);sources.textContent=refs.length?'來源：'+refs.join(' · '):'未回傳來源';sources.hidden=false;}catch(error){answer.textContent=error.message;}finally{button.disabled=false;button.textContent='查詢';}});
 window.addEventListener('message',event=>{if(event.origin===location.origin&&event.data&&event.data.navigate)showPage(event.data.navigate);});
 window.addEventListener('DOMContentLoaded',()=>{if(window.lucide)lucide.createIcons();renderTrendRange();showPage(location.hash.slice(1)||'overview');loadAll();});

@@ -17,6 +17,9 @@
   header h1 { margin:0; font-size:22px; }
   header p { margin:4px 0 0; font-size:15px; opacity:.92; }
   main { max-width:560px; margin:0 auto; padding:16px; }
+  .me-code { margin-bottom:14px; padding:14px 16px; border:2px solid var(--accent); border-radius:10px; background:var(--card); line-height:1.6; }
+  .me-code strong { display:block; font-size:24px; letter-spacing:.08em; }
+  button.armed { background:var(--danger) !important; color:#fff !important; border-color:var(--danger) !important; }
   .card { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:16px; box-shadow:0 4px 18px rgba(27,48,39,.06); }
   label.field { display:block; margin:16px 0 0; font-weight:700; }
   label.field small { font-weight:400; color:var(--muted); margin-left:6px; }
@@ -63,6 +66,8 @@
           border-radius:10px; margin-top:8px; }
   .is-hidden { display:none !important; }
 </style>
+<link rel="stylesheet" href="/static/feel.css">
+<script src="/static/feel.js"></script>
 </head>
 <body>
 <header>
@@ -223,14 +228,25 @@
   function section(title) {
     var s = el('div', null, 'me-sec'); s.appendChild(el('h2', title)); $('me').appendChild(s); return s;
   }
+  // 需要確認的動作不跳視窗：第一下把按鈕換成「再按一次確認」，4 秒內再按才送出。
+  var shownCode = null;
   function action(row, label, path, extra, danger, confirmText) {
     var b = el('button', label, danger ? 'danger' : ''); b.type = 'button';
+    var armed = null;
+    function disarm() { clearTimeout(armed); armed = null; b.textContent = label; b.classList.remove('armed'); }
     b.addEventListener('click', function () {
-      if (confirmText && !confirm(confirmText)) return;
+      if (confirmText && !armed) {
+        b.textContent = '再按一次確認';
+        b.classList.add('armed');
+        b.setAttribute('aria-label', confirmText);
+        armed = setTimeout(disarm, 4000);
+        return;
+      }
+      disarm();
       b.disabled = true;
       post(path, extra).then(function (res) {
         if (!res.ok) { showError(res.d.detail || res.d.error || '操作失敗'); b.disabled = false; return; }
-        if (res.d.code) { alert('綁定碼：' + res.d.code + '\n請家人傳「綁定 ' + res.d.code + '」給機器人（24 小時內有效）'); }
+        if (res.d.code) shownCode = res.d.code;
         loadMe();
       });
     });
@@ -243,6 +259,12 @@
         $('error').classList.add('is-hidden');
         if (!res.ok) { showError(res.d.detail || res.d.error || '連結無效'); return; }
         var d = res.d;
+        if (shownCode) {
+          var code = el('div', null, 'me-code');
+          code.appendChild(el('strong', '綁定碼 ' + shownCode));
+          code.appendChild(el('div', '請家人傳「綁定 ' + shownCode + '」給機器人，24 小時內有效。'));
+          box.appendChild(code);
+        }
         var s1 = section('我的需求');
         if (!d.needs.length) s1.appendChild(el('div', '還沒有提出過需求', 'me-empty'));
         d.needs.forEach(function (n) {

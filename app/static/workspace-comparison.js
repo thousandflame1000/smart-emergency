@@ -67,6 +67,6 @@ function initComparison(){
   run('compare',openComparison);run('export-comparison',exportComparison);$('run-comparison').onclick=runComparison;
   $('close-comparison').onclick=()=>{$('comparison-dialog').close();comparisonRequest++;$('run-comparison').disabled=false;};
   $('comparison-dialog').addEventListener('cancel',()=>{comparisonRequest++;$('run-comparison').disabled=false;});
-  run('capture-baseline',()=>{if(!confirm('將目前事件資料固定為新基準？原比較基準將被取代，工作區內容不變。'))return;checkpoint();state.baseline=currentBaseline();changed();renderBaseline();});
+  run('capture-baseline',async()=>{if(!await askConfirm('固定為新基準？','原比較基準將被取代，工作區內容不變。','固定新基準'))return;checkpoint();state.baseline=currentBaseline();changed();renderBaseline();});
   run('copy-scenario',async()=>{await save(true);comparisonMessage('已另存資料快照，固定比較基準一併保留');});
 }

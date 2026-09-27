@@ -1,0 +1,43 @@
+/* 操作手感：每一次按下都有立即回應，等待中的按鈕看得出正在處理，而且不能重複送出。
+   只處理互動回饋，不改各頁的配色與版面。 */
+button, a, select, summary, label, [role="button"], [onclick] {
+  touch-action: manipulation;              /* 手機不必等 300ms 判斷雙擊縮放 */
+  -webkit-tap-highlight-color: transparent;
+}
+button, .btn, [role="button"] {
+  transition: transform .09s ease-out, opacity .15s ease-out, background-color .15s ease-out, box-shadow .15s ease-out;
+}
+button:not(:disabled):active, .btn:not(:disabled):active, [role="button"]:active {
+  transform: scale(.965);
+}
+.is-busy {
+  position: relative;
+  pointer-events: none;
+  cursor: progress;
+  opacity: .72;
+}
+.is-busy::after {
+  content: "";
+  position: absolute; top: 50%; right: 8px;
+  width: 12px; height: 12px; margin-top: -6px;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: feel-spin .7s linear infinite;
+}
+@keyframes feel-spin { to { transform: rotate(360deg); } }
+.feel-toast-stack {
+  position: fixed; left: 50%; bottom: max(20px, env(safe-area-inset-bottom)); z-index: 2147483000;
+  transform: translateX(-50%); display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); pointer-events: none;
+}
+.feel-toast {
+  padding: 12px 16px; border-radius: 12px; background: rgba(28, 32, 30, .94); color: #fff;
+  font: 500 15px/1.5 -apple-system, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  white-space: pre-line; box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+  opacity: 0; transform: translateY(8px); transition: opacity .18s ease-out, transform .18s ease-out;
+}
+.feel-toast.show { opacity: 1; transform: none; }
+.feel-toast.danger { background: rgba(176, 38, 58, .96); }
+@media (prefers-reduced-motion: reduce) {
+  button, .btn, [role="button"], .feel-toast { transition: none; }
+  button:not(:disabled):active, .btn:not(:disabled):active, [role="button"]:active { transform: none; }
+  .is-busy::after { animation-duration: 2s; }
+}

@@ -37,6 +37,12 @@ button { font:inherit; }
 .views { min-width:0; height:100dvh; }
 .views iframe { border:0; width:100%; height:100%; background:var(--bg); }
 [hidden] { display:none !important; }
+.mode-dialog { width:min(380px, calc(100vw - 32px)); padding:20px; border:0; border-radius:14px; color:#17201c; background:#fff; box-shadow:0 20px 50px rgba(0,0,0,.3); }
+.mode-dialog::backdrop { background:rgba(10,14,12,.45); }
+.mode-dialog h2 { font-size:17px; margin-bottom:8px; } .mode-dialog p { color:#4b5750; line-height:1.6; margin-bottom:18px; }
+.mode-dialog .row { display:flex; justify-content:flex-end; gap:8px; }
+.mode-dialog button { min-height:40px; padding:0 16px; border-radius:8px; border:1px solid #cfd8d2; background:#fff; color:#17201c; font-weight:600; cursor:pointer; }
+.mode-dialog button.go { background:#c9364b; border-color:#c9364b; color:#fff; } .mode-dialog button.go.calm { background:#13795b; border-color:#13795b; }
 .mobile-bar, .nav-scrim, .nav-close { display:none; }
 @media (max-width:760px) {
   body { display:block; }
@@ -58,6 +64,8 @@ button { font:inherit; }
   .nav-scrim { display:block; position:fixed; inset:0; z-index:20; border:0; background:rgba(14,24,20,.52); }
 }
 </style>
+<link rel="stylesheet" href="/static/feel.css">
+<script src="/static/feel.js"></script>
 </head>
 <body>
 <button id="nav-scrim" class="nav-scrim" type="button" aria-label="關閉導覽" hidden></button>
@@ -165,9 +173,20 @@ button { font:inherit; }
   }
   function toggleMode() {
     var next = pill.classList.contains('emergency') ? 'normal' : 'emergency';
-    var text = next === 'emergency' ? '確定切換為緊急模式？\n\n系統將廣播通知所有 LINE 用戶' : '確定解除緊急模式？';
-    if (!confirm(text)) return;
-    fetch('/api/dashboard/mode?mode=' + next, { method: 'POST' }).then(loadMode);
+    var dialog = document.getElementById('mode-dialog'), go = document.getElementById('mode-go');
+    document.getElementById('mode-dialog-title').textContent = next === 'emergency' ? '切換為緊急模式？' : '解除緊急模式？';
+    document.getElementById('mode-dialog-text').textContent = next === 'emergency'
+      ? '所有 LINE 使用者都會收到緊急模式通知。' : '社區會恢復日常模式，LINE 使用者會收到解除通知。';
+    go.textContent = next === 'emergency' ? '啟動緊急模式' : '解除';
+    go.className = next === 'emergency' ? 'go' : 'go calm';
+    dialog.onclose = function () {
+      if (dialog.returnValue !== 'go') return;
+      fetch('/api/dashboard/mode?mode=' + next, { method: 'POST' }).then(loadMode)
+        .catch(function () { if (window.feelToast) feelToast('切換失敗，請再試一次', 'danger'); });
+    };
+    dialog.returnValue = '';
+    dialog.showModal();
+    go.focus();
   }
   pill.addEventListener('click', toggleMode);
   mobilePill.addEventListener('click', toggleMode);
@@ -177,5 +196,12 @@ button { font:inherit; }
   go(location.hash.slice(1) || 'workspace');
 })();
 </script>
+<dialog id="mode-dialog" class="mode-dialog" aria-labelledby="mode-dialog-title">
+  <form method="dialog">
+    <h2 id="mode-dialog-title"></h2>
+    <p id="mode-dialog-text"></p>
+    <div class="row"><button value="cancel">取消</button><button id="mode-go" value="go" class="go"></button></div>
+  </form>
+</dialog>
 </body>
 </html>

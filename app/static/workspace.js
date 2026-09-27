@@ -42,6 +42,7 @@ function askConfirm(title, bodyHtml, okLabel='確認') {
     cancelBtn.onclick = () => cleanup(false);
     dialog.addEventListener('cancel', () => resolve(false), {once:true});
     dialog.showModal();
+    ($('confirm-dialog-body').querySelector('input, textarea') || okBtn).focus();
   });
 }
 async function api(path, body, method='POST') {
@@ -62,7 +63,7 @@ function mutate(fn) { checkpoint(); fn(); changed(); render(); }
 function updateHistory() { $('undo').disabled=!state.undo.length; $('redo').disabled=!state.redo.length; }
 function undo(redo=false) { const from=redo?state.redo:state.undo, to=redo?state.undo:state.redo; if(!from.length)return;
   to.push(historySnapshot()); const previous=from.pop();state.graph=previous.graph;state.baseline=previous.baseline;state.selected=null; changed(); render(); }
-function discardConfirmed() { return (!state.dirty && !inventoryDrafts.size) || confirm('目前有未儲存或待寫回變更，確定離開這個工作區？'); }
+async function discardConfirmed() { return (!state.dirty && !inventoryDrafts.size) || await askConfirm('離開這個工作區？','目前有未儲存或待寫回的變更，離開後會遺失。','離開'); }
 function loadDocument(data) {
   inventoryDrafts.clear();updateInventoryCount();
   operationEvents.clear();
@@ -327,14 +328,14 @@ async function init(){
   initComparison();
   initAllocation();
   initOperations();
-  run('save',()=>save());run('duplicate',()=>save(true));run('delete-workspace',()=>deleteWorkspace());run('new',()=>{if(discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');}});
+  run('save',()=>save());run('duplicate',()=>save(true));run('delete-workspace',()=>deleteWorkspace());run('new',async()=>{if(await discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());
   run('sync-db',syncDatabase);run('layer-db',syncDatabase);run('empty-db',syncDatabase);
   run('export',exportDocument);run('analyze',analyze);
   run('close-inspector',clearSelection);$('inspector-backdrop').onclick=clearSelection;
   document.addEventListener('keydown',event=>{if(event.key!=='Escape'||document.querySelector('dialog[open]'))return;if(oneShotAdd){cancelAddObject();message('已取消新增物件');return;}if(state.selected)clearSelection();});
-  $('workspace-list').onchange=async()=>{const id=$('workspace-list').value;if(!id){$('workspace-list').value=workspaceSelection();return;}if(!discardConfirmed()){$('workspace-list').value=workspaceSelection();return;}try{if(id===LIVE_WORKSPACE_ID){await loadLiveWorkspace();message('已載入正式資料；需求、物資與任務會自動更新');}else{loadDocument(await api('/'+encodeURIComponent(id)));message('已載入工作區快照');}}catch(e){message(e.message,true);}};
+  $('workspace-list').onchange=async()=>{const id=$('workspace-list').value;if(!id){$('workspace-list').value=workspaceSelection();return;}if(!await discardConfirmed()){$('workspace-list').value=workspaceSelection();return;}try{if(id===LIVE_WORKSPACE_ID){await loadLiveWorkspace();message('已載入正式資料；需求、物資與任務會自動更新');}else{loadDocument(await api('/'+encodeURIComponent(id)));message('已載入工作區快照');}}catch(e){message(e.message,true);}};
   $('workspace-name').oninput=changed;$('search').oninput=renderObjects;$('mode').onchange=()=>{oneShotAdd=false;document.body.classList.remove('placing-object');state.connect=null;render();};
   $('locate').onsubmit=async e=>{
     e.preventDefault();

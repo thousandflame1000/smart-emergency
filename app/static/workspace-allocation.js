@@ -94,5 +94,5 @@ function initAllocation(){
   $('add-stock').onclick=()=>openAllocationPicker({role:'supply'});$('add-demand').onclick=()=>openAllocationPicker({role:'demand'});
   for(const id of ['allocation-material','allocation-distance','allocation-compare'])$(id).oninput=invalidateAllocation;
   run('allocation-copy',()=>saveAllocation(true));run('allocation-save',()=>saveAllocation(false));
-  run('allocation-baseline',()=>{for(const input of $('allocation-dialog').querySelectorAll('input,select'))if(!input.reportValidity())return;if(!confirm('將目前物件、關係、品項庫存與需求固定為比較基準？'))return;checkpoint();state.baseline=currentBaseline();changed();renderMaterials();});
+  run('allocation-baseline',async()=>{for(const input of $('allocation-dialog').querySelectorAll('input,select'))if(!input.reportValidity())return;if(!await askConfirm('固定為比較基準？','將目前物件、關係、品項庫存與需求固定為比較基準。','固定基準'))return;checkpoint();state.baseline=currentBaseline();changed();renderMaterials();});
 }
