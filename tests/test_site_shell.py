@@ -83,7 +83,6 @@ def test_admin_path_is_blank_and_reserved_for_password_management(web):
 
 def test_line_login_and_logout_land_on_the_single_site(web, monkeypatch):
     from app import demo_auth
-    from app.services import admin_session
     monkeypatch.setattr(settings, "APP_ENV", "production")
     demo_auth.reset_cache()
     out = web.get("/admin/logout", follow_redirects=False)

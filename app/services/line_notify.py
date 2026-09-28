@@ -1,4 +1,3 @@
-import json
 from linebot.v3.messaging import (
     ApiClient, Configuration, MessagingApi,
     PushMessageRequest, ReplyMessageRequest,
@@ -227,22 +226,22 @@ def send_alert_message(
 ) -> None:
     messages = {
         "no_response_1h": (
-            f"⚠️ 關懷提醒",
+            "⚠️ 關懷提醒",
             f"{elderly_name} 今天打卡超過 1 小時未回應，請確認是否安好。",
             "#c94317",
         ),
         "no_response_3h": (
-            f"🚨 緊急關懷",
+            "🚨 緊急關懷",
             f"{elderly_name} 已超過 3 小時未回應！請立即確認或前往探視。",
             "#D32F2F",
         ),
         "help_needed": (
-            f"🆘 需要幫忙",
+            "🆘 需要幫忙",
             f"{elderly_name} 按下了「需要幫忙」，請盡快聯繫。",
             "#c94317",
         ),
         "unwell": (
-            f"🤒 身體不舒服",
+            "🤒 身體不舒服",
             f"{elderly_name} 今天回報身體不舒服，建議打個電話關心一下。",
             "#8a6000",
         ),

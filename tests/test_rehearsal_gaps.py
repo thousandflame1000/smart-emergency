@@ -13,7 +13,7 @@ from app.routers import dashboard as dashboard_router
 from app.routers import linebot as lb
 from app.routers import resources as resources_router
 from app.services import rehearsal_kit
-from tests.test_line_hardening import mk, press, replies, sent_to
+from tests.test_line_hardening import mk, press, sent_to
 from tests.test_role_interfaces import card_text
 
 

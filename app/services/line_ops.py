@@ -410,7 +410,7 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
         from fastapi import HTTPException
         from app.services.volunteer_application import decide
         try:
-            out = decide(db, data.get("id", ""), decision=data.get("d", ""), reviewer_id=str(user.id))
+            decide(db, data.get("id", ""), decision=data.get("d", ""), reviewer_id=str(user.id))
         except HTTPException as exc:
             _say(event, "⚠️ " + str(exc.detail))
             return

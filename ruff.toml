@@ -1,0 +1,12 @@
+target-version = "py312"
+line-length = 120
+extend-exclude = ["venv", "scratch_extract", ".tmp_pipeline_doc", ".plan_audit_render", "migrations"]
+
+[lint]
+select = ["F", "E9"]
+
+[lint.per-file-ignores]
+# 匯入是為了向 SQLAlchemy 註冊資料表，create_all 才看得到
+"app/models/__init__.py" = ["F401"]
+"startup.py" = ["F401"]
+"tests/serve_integrated_workspace.py" = ["F401"]

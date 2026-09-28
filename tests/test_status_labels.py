@@ -9,7 +9,6 @@
 這份測試把前端的 labels.js 與後端的 app/labels.py 綁在一起，任何一邊
 改了字而另一邊沒跟上就會被指出來。
 """
-import json
 import re
 from pathlib import Path
 

@@ -636,7 +636,6 @@ def _handle_claim(event, db, user, need_id: str) -> None:
 
 
 def _register_resource(event, db, user, rest: str) -> None:
-    from app.models.resource import CommunityResource
     detected_type = "other"
     for rtype, keywords in RES_KEYWORDS.items():
         if any(kw in rest for kw in keywords):

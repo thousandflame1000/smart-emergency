@@ -2,14 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from datetime import datetime
 import json
 
 from app.errors import ApiError, raise_if_error
 from app.validation import (
     NEED_TYPES, RESOURCE_TYPES, check_choice, check_coords, check_name, check_urgency,
 )
-from app.timeutil import now_utc, today_tw
+from app.timeutil import now_utc
 from app.database import get_db
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
@@ -645,15 +644,16 @@ def delete_resource_point(point_id: str, db: Session = Depends(get_db),
 def seed_resource_points(city: str = "花蓮縣", clear: bool = False,
                          _principal: dict | None = Depends(require_admin)):
     """從政府開放資料匯入固定資源點（管理員觸發）"""
+    import logging
     import threading
-    result = {"status": "started"}
+    log = logging.getLogger(__name__)
+
     def _run():
         try:
             from seed_resource_points import seed
-            count = seed(city=city, clear=clear)
-            print(f"[seed] 完成，匯入 {count} 筆")
-        except Exception as e:
-            print(f"[seed] 失敗：{e}")
+            log.info("resource point seed done: %s rows", seed(city=city, clear=clear))
+        except Exception:
+            log.exception("resource point seed failed")
     threading.Thread(target=_run, daemon=True).start()
     return {"message": f"正在匯入 {city} 資源點，請稍後刷新頁面查看結果"}
 

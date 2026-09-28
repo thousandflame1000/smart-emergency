@@ -4,7 +4,6 @@
 import time
 
 import pytest
-from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.config import settings
@@ -265,7 +264,7 @@ def test_me_page_shows_volunteer_resources_and_tasks_and_can_withdraw(db, webcli
     me = webclient.get("/f/api/me", params={"t": t}).json()
     assert me["tasks"][0]["report_url"].startswith("http") and me["resources"][0]["available"] is True
     assert webclient.post("/f/api/withdraw_resource", json={"t": t, "target_id": str(res.id)}).status_code == 409
-    other = mk(db, "民眾", ["elderly"], "U-x")
+    mk(db, "民眾", ["elderly"], "U-x")
     assert webclient.post("/f/api/withdraw_resource", json={"t": form_token.make_token("U-x"), "target_id": str(res.id)}
                           ).status_code in (403, 404)
 
@@ -308,7 +307,7 @@ def test_console_is_open_until_an_admin_is_bound_to_line(db, enforced, webclient
 
 
 def test_console_requires_line_login_once_an_admin_is_bound(db, enforced, webclient, line_outbox):
-    adm = mk(db, "管理員小張", ["admin"], "U-adm")
+    mk(db, "管理員小張", ["admin"], "U-adm")
     assert webclient.get("/api/dashboard/users").status_code == 401
     assert webclient.get("/admin").status_code == 401
     assert webclient.get("/health").status_code == 200 and webclient.get("/f/need").status_code == 200

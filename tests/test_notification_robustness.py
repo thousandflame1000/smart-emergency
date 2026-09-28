@@ -10,7 +10,6 @@
 """
 from datetime import date, timedelta
 
-from app.database import SessionLocal
 from app.models.user import User
 from app.models.checkin import DailyCheckin
 from app.models.alert import Alert

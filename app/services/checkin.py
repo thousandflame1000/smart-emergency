@@ -1,4 +1,3 @@
-from datetime import date
 import logging
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -73,7 +72,6 @@ def send_daily_checkins() -> None:
 
 def mark_checkin(checkin_id: str, status: str, db: Session) -> DailyCheckin | None:
     """長者按下按鈕後更新打卡狀態"""
-    from datetime import datetime
 
     checkin = db.query(DailyCheckin).filter(
         DailyCheckin.id == checkin_id
@@ -116,7 +114,6 @@ def mark_checkin(checkin_id: str, status: str, db: Session) -> DailyCheckin | No
 
 def confirm_safe(checkin_id: str, confirmed_by_id: str, db: Session) -> DailyCheckin | None:
     """志工/家屬確認長者安全 → 同時關閉所有相關 Alert"""
-    from datetime import datetime
     from app.models.alert import Alert
 
     checkin = db.query(DailyCheckin).filter(

@@ -6,7 +6,6 @@
 """
 from datetime import UTC, datetime, timedelta
 
-from app.database import SessionLocal
 from app.models.user import User
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed

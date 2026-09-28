@@ -131,9 +131,9 @@ def decide(
         try:
             from app.services.line_notify import send_text
             send_text(application.line_uid,
-                       f"✅ 志工申請已核准，歡迎加入！\n"
-                       f"傳「登記物資」可以開始登記您能提供的物資，\n"
-                       f"傳「我的物資」查看已登記項目。")
+                       "✅ 志工申請已核准，歡迎加入！\n"
+                       "傳「登記物資」可以開始登記您能提供的物資，\n"
+                       "傳「我的物資」查看已登記項目。")
             notified = True
         except Exception:
             pass

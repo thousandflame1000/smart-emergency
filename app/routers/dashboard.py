@@ -1,9 +1,7 @@
-from datetime import date
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from sqlalchemy.exc import IntegrityError
 
 from app.errors import ApiError
 from app.validation import check_coords, check_name, check_roles
@@ -352,7 +350,6 @@ def resolve_user_alerts(user_id: str, db: Session = Depends(get_db)):
     是掛在那裡，逐筆用 confirm_safe 一天一天解要點一百次；這裡直接
     整批清掉。
     """
-    from datetime import datetime
     count = (
         db.query(Alert)
         .filter(Alert.elderly_id == user_id, Alert.status == "sent")

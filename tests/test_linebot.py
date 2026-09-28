@@ -335,7 +335,6 @@ def test_share_location_backfills_own_open_needs_missing_coordinates(db, monkeyp
     monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
     resident = User(name="李小美", roles=["elderly"], line_uid="Uloc2")
     db.add(resident); db.commit(); db.refresh(resident)
-    resident_id = str(resident.id)
     stuck_need = CommunityNeed(requester_id=resident.id, need_type="water",
                                 description="需要水", address="沒填座標", urgency=3, status="open")
     other_need = CommunityNeed(requester_id=resident.id, need_type="food",

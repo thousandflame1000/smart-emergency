@@ -148,7 +148,9 @@ def test_urgency_still_takes_priority_over_vulnerability(db):
 
     db2 = SessionLocal()
     n_urgent = db2.query(CommunityNeed).filter(CommunityNeed.id == need_urgent_id).first()
+    n_calm = db2.query(CommunityNeed).filter(CommunityNeed.id == need_calm_id).first()
     assert str(n_urgent.matched_resource_id) == res_id, "緊急度 5 應該優先於脆弱度分數，先搶到資源"
+    assert n_calm.status == "open" and n_calm.matched_resource_id is None, "唯一的水不能同時給兩筆"
     db2.close()
 
 

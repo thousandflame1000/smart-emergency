@@ -1036,7 +1036,7 @@ def test_acceptance_resets_after_decline_and_redispatch(db, line_outbox):
 
 def test_accept_is_only_for_the_assignee_and_stale_cards_are_harmless(db, line_outbox):
     vol, req, res, need = _claim_world(db)
-    other = mk(db, "別的志工", ["volunteer"], "U-oth")
+    mk(db, "別的志工", ["volunteer"], "U-oth")
     dispatch.manual_dispatch(str(need.id), str(res.id), db)
     press("U-oth", f"action=task_accept&need_id={need.id}")
     assert any("不是這筆任務的受派志工" in t for t in replies(line_outbox))

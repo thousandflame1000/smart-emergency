@@ -7,7 +7,7 @@ from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.resource_point import ResourcePoint
 from app.models.user import User
-from app.services.workspace import GraphDocument, Node
+from app.services.workspace import GraphDocument
 from app.services.workspace_bridge import database_nodes, merge_database
 from app.services.workspace_inventory import row_version
 
@@ -405,7 +405,8 @@ def test_two_concurrent_proposals_reserve_a_resource_once(db, entry_points):
     def propose(item):
         need_id, entry_point = item
         with SessionLocal() as session:
-            cached = [session.get(CommunityNeed, need_id), session.get(CommunityResource, resource_id)]
+            # 先把兩筆讀進 session，模擬「讀完後才撞上另一個請求」的時序
+            session.get(CommunityNeed, need_id), session.get(CommunityResource, resource_id)
             barrier.wait(timeout=10)
             return (propose_manual if entry_point == "workspace" else manual_dispatch)(need_id, resource_id, session)
     with ThreadPoolExecutor(max_workers=2) as pool:

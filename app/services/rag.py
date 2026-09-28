@@ -5,12 +5,16 @@ SQLite 環境：embedding 存 JSON，查詢時用 numpy cosine similarity
 Supabase 環境：之後可換成 pgvector
 """
 import json
+import logging
+
 import numpy as np
 from google import genai
 from google.genai import types
 
-from app.database import SessionLocal, _is_sqlite
+from app.database import SessionLocal
 from app.config import settings
+
+log = logging.getLogger(__name__)
 
 EMBED_MODEL        = "gemini-embedding-001"   # 3072-dim
 GENERATE_MODEL     = "gemini-2.5-flash"
@@ -66,8 +70,9 @@ def query(question: str) -> dict:
             contents=prompt,
         )
         answer   = response.text
-    except Exception as e:
-        # 任何錯誤都 fallback 回傳最相關 chunk
+    except Exception:
+        # 任何錯誤都 fallback 回傳最相關 chunk，但要留下原因，否則線上壞了查不到
+        log.exception("Gemini generate_content failed; falling back to top chunk")
         answer = (
             "⚠️ AI 生成暫時無法使用，以下為直接摘錄最相關資料：\n\n"
             + results[0]["content"][:600]

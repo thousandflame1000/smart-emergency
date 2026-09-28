@@ -6,7 +6,7 @@ import pytest
 from app.models.checkin import DailyCheckin
 from app.models.knowledge import KnowledgeChunk
 from app.models.need import CommunityNeed
-from app.services import dispatch, rag
+from app.services import rag
 from app.timeutil import today_tw
 from tests.test_line_hardening import mk, press, replies, say, sent_to
 from tests.test_role_interfaces import card_text, world
@@ -81,7 +81,7 @@ def test_ingest_stores_version(db, fake_embedding):
 
 
 def test_version_column_is_added_to_an_existing_database(tmp_path):
-    from sqlalchemy import create_engine, inspect, text
+    from sqlalchemy import create_engine, inspect
     from app.schema_migrations import ensure_additive_schema
     engine = create_engine(f"sqlite:///{tmp_path / 'old.db'}")
     with engine.begin() as c:
