@@ -3,8 +3,8 @@
 平時長者關懷資料，是災時物資調度演算法的輸入——不是兩套系統拼接，是同一份資料在不同情境發揮作用。
 
 [![Railway](https://img.shields.io/badge/deployed-Railway-blueviolet)](https://smart-emergency-production-d744.up.railway.app)
-[![Python](https://img.shields.io/badge/python-3.11+-blue)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.115-green)](https://fastapi.tiangolo.com)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://python.org)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-green)](https://fastapi.tiangolo.com)
 
 ## 系統做什麼
 
@@ -15,9 +15,12 @@
 | 求助進度 | 需求被核准派遣、志工無法前往、送達時都會主動推播給求助的人；「我的需求」可查詢、「取消需求」可撤回 |
 | 新用戶 | 加好友或第一句話（哪怕是「救命」）都會被處理並自動註冊；一鍵分享位置補上座標 |
 | 志工申請 | 「我要當志工」一題一題問，管理員在後台審核，結果推播通知 |
+| 查詢物資 | LINE 傳「查詢物資」回最近的公開據點（距離、物資、電話、地圖連結）；緊急模式先列避難所、消防分隊、衛生所 |
 | AI 急救/長照問答 | Gemini embedding + cosine similarity 的本地 RAG，LINE 內直接問答 |
 | 物資媒合 | 脆弱度加權評分 + 匈牙利演算法批次最佳指派（非貪婪逐筆） |
-| 事件處置工作區 | 人員、需求、志工物資、設施與任務關係集中在同一個版本化工作區操作 |
+| 事件處置工作區 | 人員、需求、志工物資、設施與任務關係集中在同一個版本化工作區操作；「自動派遣」一鍵產生待核准建議 |
+| 緊急模式 | 一鍵切換並廣播；總覽物資地圖自動開啟應變據點圖層；排程每 30 分鐘自動媒合 |
+| 操作紀錄 | 所有寫入 `/api/` 的操作留下時間、操作者、動作與結果，後台「操作紀錄」可查 |
 
 ## 架構
 
@@ -28,6 +31,7 @@ LINE Bot ──▶ FastAPI (Railway)
               ├─ /api/dashboard   管理端點
               ├─ /api/rag         知識庫問答
               ├─ /api/workspaces  事件處置與版本化資料工作區
+              ├─ /api/zones       分區
               └─ PostgreSQL (Railway) / SQLite（本地開發）
 ```
 
@@ -51,7 +55,7 @@ LINE Bot ──▶ FastAPI (Railway)
 誠實列出，不在提問環節被動承認：
 
 - 單一 Railway 容器，無備援；Railway 停機系統就停機
-- `/admin`、`/`（同為操作主控台，兩者都能改資料）僅靠共用密碼保護（`DEMO_PASSWORD` 環境變數），無使用者分級權限。**正式環境沒設 `DEMO_PASSWORD` 時整個後台與所有 API 對外公開**（後台頂端會顯示紅色警告，`/api/system/security` 也會回報 `public_admin: true`）
+- 後台登入有三種模式（`/api/system/security` 的 `auth_mode`）：綁定 LINE 的管理員從 LINE 取得登入連結（`line-admin`）、展演共用密碼 `DEMO_PASSWORD`（`password`）、都沒有時完全開放（`open`，後台頂端顯示紅色警告）。只有管理員／非管理員兩級，沒有欄位層級權限
 - 志工身份無驗證機制，需社區組織在真實導入時另行把關
 - 派遣評分係數是初始 heuristic，尚無真實試辦資料校正
 - 候選距離目前採直線距離估計，不代表即時道路可通行；派遣前仍須人工確認
@@ -80,7 +84,10 @@ python ingest_kb.py         # 建置知識庫向量
 ## 測試
 
 ```bash
-pytest tests/ -v
+pip install -r requirements-dev.txt
+ruff check app tests          # 靜態檢查
+pytest -q                      # 單元與 API 測試
+python tests/workspace_integration_browser_check.py   # 工作區瀏覽器端到端（需先啟動 tests/serve_integrated_workspace.py，並安裝 Playwright）
 ```
 
 無須真的 LINE/Gemini API 金鑰，全部跑在獨立 SQLite 檔案上，不碰正式資料庫。
@@ -91,7 +98,7 @@ pytest tests/ -v
 app/
 ├── main.py, config.py, database.py, scheduler.py, demo_auth.py
 ├── models/       SQLAlchemy models
-├── routers/      linebot / dashboard / resources / rag / workspace
-├── services/     dispatch, hungarian, workspace, checkin, alert, rag, line_notify
-└── static/       index.html（主控台）, admin.html（後台）
+├── routers/      linebot / dashboard / resources / rag / workspace / zones / tasks
+├── services/     dispatch, hungarian, workspace, checkin, alert, rag, line_notify, nearby, admin_audit
+└── static/       site.html（外殼與導覽）, index.html（照護現況）, admin.html（資料管理）, workspace.html（事件處置）
 ```
