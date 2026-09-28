@@ -172,6 +172,7 @@
   var SESSION_READY = TOKEN ? fetch('/f/api/session', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: TOKEN })
   }).then(function (r) {
+    r.text();  // 讀完回應，連線才算結束
     if (!r.ok) throw linkError('這個表單連結已過期或無效，請回到 LINE 重新開啟表單。');
     history.replaceState(null, '', location.pathname + (NEED_ID ? '?n=' + encodeURIComponent(NEED_ID) : ''));
     TOKEN = '';

@@ -87,7 +87,9 @@ python ingest_kb.py         # 建置知識庫向量
 pip install -r requirements-dev.txt
 ruff check app tests          # 靜態檢查
 pytest -q                      # 單元與 API 測試
-python tests/workspace_integration_browser_check.py   # 工作區瀏覽器端到端（需先啟動 tests/serve_integrated_workspace.py，並安裝 Playwright）
+python tests/serve_integrated_workspace.py            # 另開一個終端機：本機預覽伺服器
+python tests/workspace_integration_browser_check.py   # 工作區端到端（需 Playwright）
+python tests/form_integration_browser_check.py        # 居民表單端到端
 ```
 
 無須真的 LINE/Gemini API 金鑰，全部跑在獨立 SQLite 檔案上，不碰正式資料庫。
