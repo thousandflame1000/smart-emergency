@@ -65,6 +65,8 @@ def main():
         assert not uploads, uploads
 
         water_id = workspace.evaluate("state.graph.nodes.find(n=>n.properties.resource_type==='water').id")
+        # 即時資料預設開在「需求」分頁（1232d41），點物件前先切回物件清單。
+        frame.locator("#catalog-objects").click()
         frame.locator(f'[data-node="{water_id}"]').click()
         frame.get_by_role("button", name="編輯正式資料").click()
         current_quantity = frame.locator("#inventory-quantity").input_value()
@@ -131,7 +133,7 @@ def main():
             frame.locator("#review-dispatch").click()
             workspace.wait_for_function("!operationRequest && operationStage==='suggested'")
             frame.locator(f'[data-task="{water_need}"]').click()
-            frame.get_by_role("button", name="核准派遣", exact=True).click()
+            frame.get_by_role("button", name="核准並發 LINE 任務卡", exact=True).click()
             frame.locator("#confirm-dialog[open]").wait_for()
             frame.locator("#confirm-dialog-ok").click()
             workspace.wait_for_function("!operationRequest && nodeById(" + json.dumps(water_need) + ").properties.status==='matched'")
