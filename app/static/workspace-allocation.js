@@ -1,4 +1,6 @@
 'use strict';
+function currentBaseline(){return {name:$('workspace-name').value.trim()||'未命名工作區',graph:structuredClone(state.graph),captured_at:new Date().toISOString(),workspace_id:state.id||null,revision:state.revision||0,unsaved:state.dirty};}
+function deltaText(value){return value>0?'+'+value:String(value);}
 let allocationRequest=0, allocationPicker=null;
 const ALLOCATION_REASONS={destination_unavailable:'需求物件未納入分析',missing_coordinates:'需求缺少座標',no_stock:'同品項與單位沒有庫存',no_dispatch_capacity:'供應停用、未定位或出貨上限為零',distance_limit:'超過直線距離上限',capacity_or_priority:'受庫存、出貨上限或優先級限制'};
 function logisticsRows(role){return state.graph.nodes.flatMap(node=>(node.logistics||[]).filter(line=>!role||line.role===role).map(line=>({node,line})));}

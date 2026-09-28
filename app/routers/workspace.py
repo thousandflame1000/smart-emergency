@@ -11,7 +11,6 @@ from app.database import get_db
 from app.models.workspace import TopologyWorkspace
 from app.models.zone import GENERAL_ZONE_ID
 from app.services.workspace import ComparisonBaseline, GraphDocument, ImportRequest, analyze, import_document
-from app.services.workspace_comparison import compare
 from app.services.workspace_allocation import AllocationRequest, plan_allocation
 from app.services.places import search_places
 from app.security import require_admin, require_staff
@@ -32,10 +31,6 @@ class WorkspaceWrite(BaseModel):
 
 class AnalysisRequest(BaseModel):
     graph: GraphDocument
-
-
-class ComparisonRequest(AnalysisRequest):
-    baseline: GraphDocument
 
 
 class DatabaseMergeRequest(BaseModel):
@@ -111,14 +106,6 @@ def analyze_graph(body: AnalysisRequest):
         return analyze(body.graph)
     except ValueError as exc:
         raise HTTPException(400, detail=str(exc)) from exc
-
-
-@router.post("/compare")
-def compare_graphs(body: ComparisonRequest):
-    try:
-        return compare(body.baseline, body.graph)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc)) from exc
 
 
 @router.get("/places")

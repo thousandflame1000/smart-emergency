@@ -55,7 +55,7 @@ function run(id, fn) { $(id).addEventListener('click', async () => {
   const button=$(id); button.disabled=true;
   try { await fn(); } catch(e) { message(e.message,true); } finally { button.disabled=false; updateHistory(); }
 }); }
-function changed() { state.dirty=true; state.editVersion++; state.report=null; if(!state.baseline&&state.graph.nodes.length)state.baseline=currentBaseline(); invalidateComparison();invalidateAllocation(); $('save-state').textContent='有未儲存變更'; $('analysis-result').textContent='分析尚未更新'; }
+function changed() { state.dirty=true; state.editVersion++; state.report=null; if(!state.baseline&&state.graph.nodes.length)state.baseline=currentBaseline(); invalidateAllocation(); $('save-state').textContent='有未儲存變更'; $('analysis-result').textContent='分析尚未更新'; }
 // Baselines are immutable snapshots and can be shared by history entries.
 function historySnapshot(){return {graph:structuredClone(state.graph),baseline:state.baseline};}
 function checkpoint() { state.undo.push(historySnapshot()); if(state.undo.length>25)state.undo.shift(); state.redo=[]; }
@@ -73,7 +73,7 @@ function loadDocument(data) {
   state.zone=data.zone_id&&data.zone_id!=='general'?data.zone_id:''; if($('zone-select'))$('zone-select').value=state.zone; state.selected=null; state.report=null;
   state.undo=[];state.redo=[];state.dirty=false;state.editVersion++;state.connect=null;
   $('workspace-name').value=data.name; $('workspace-folder').value=data.folder||''; $('workspace-list').value=data.id||'';
-  state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateComparison();invalidateAllocation();
+  state.baseline=structuredClone(data.baseline||null)||(state.graph.nodes.length?currentBaseline():null);invalidateAllocation();
   $('save-state').textContent=data.id?`已儲存 · 版本 ${data.revision}`:'尚未儲存';
   $('analysis-result').textContent='';render();fit();
   workspaceUrl(data.id);
@@ -105,7 +105,7 @@ async function loadLiveWorkspace() {
   state.undo=[];state.redo=[];state.dirty=false;state.editVersion++;state.connect=null;state.baseline=null;
   $('workspace-name').value='即時營運現況';$('workspace-folder').value='正式資料';$('workspace-list').value=LIVE_WORKSPACE_ID;
   $('save-state').textContent='即時資料 · 自動更新';$('analysis-result').textContent='';
-  invalidateComparison();invalidateAllocation();workspaceUrl(null);rememberWorkspace(LIVE_WORKSPACE_ID);render();
+  invalidateAllocation();workspaceUrl(null);rememberWorkspace(LIVE_WORKSPACE_ID);render();
   await refreshOperations();
   const hasSos=operationalNodes().some(n=>n.properties.status==='open'&&n.properties.need_type==='sos');
   operationStage=hasSos?'sos':'open';setCatalog('tasks');renderOperations();
@@ -403,7 +403,6 @@ async function init(){
   $('road-search-go').onclick=()=>searchRoad($('road-search-input').value);
   $('road-search-input').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();searchRoad($('road-search-input').value);}});
   $('road-search-clear').onclick=()=>{$('road-search-input').value='';clearRoadHighlight();};
-  initComparison();
   initAllocation();
   initOperations();
   $('zone-select').onchange=()=>selectZone().catch(e=>message(e.message,true));loadZoneOptions();

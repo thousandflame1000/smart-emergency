@@ -42,20 +42,9 @@ LINE Bot ──▶ FastAPI (Railway)
 
 方法論依據見 [`RESEARCH_disaster_logistics.md`](RESEARCH_disaster_logistics.md)（13 篇指定文獻的可驗證程度逐一標註，2 篇取得全文、其餘標為摘要層級，不假裝讀過讀不到的內容）。
 
-## Operational Ontology
+## 派遣稽核
 
-`app/services/ontology.py` + `app/routers/ontology.py`：提供一層類 Palantir Ontology 的語意檢視，把既有 SQLAlchemy 資料表整理成 `Person`、`ResourceRequest`、`Resource`、`Facility`、`Alert`、`CheckIn`、`DecisionEvent` 等 object types，並明確列出 `REQUESTED_BY`、`OWNED_BY`、`MATCHED_TO`、`HAS_ALERT`、`CARE_CONTACT`、`ACTION_ON` 等 link types。
-
-派遣動作會寫入 append-only `dispatch_events` 稽核表：自動建議、手動派遣、確認派遣、拒絕建議都會留下 action、前後狀態、候選資源與分數細節。這補上了「誰/什麼演算法在何時改變了哪筆派遣」的可追溯性，雖然目前尚未做到完整使用者分級簽核。
-
-API：
-
-- `/api/ontology/schema`：object types / link types / actions / functions
-- `/api/ontology/graph`：目前營運圖譜與即時指標
-- `/api/ontology/needs/{need_id}/decision-context`：單筆需求的候選資源、分數拆解、決策事件、建議 action 與 human-in-the-loop 限制
-- `/api/resources/needs/{need_id}/events`：後台需求詳情使用的派遣決策稽核紀錄
-
-Ontology 內容由事件處置工作區與 API 使用，不另設獨立展示入口。
+派遣動作會寫入 append-only `dispatch_events` 稽核表：自動建議、手動派遣、確認派遣、拒絕建議都會留下 action、前後狀態、候選資源與分數細節。`/api/resources/needs/{need_id}/events` 提供單筆需求的決策紀錄。
 
 ## 已知限制
 
@@ -102,7 +91,7 @@ pytest tests/ -v
 app/
 ├── main.py, config.py, database.py, scheduler.py, demo_auth.py
 ├── models/       SQLAlchemy models
-├── routers/      linebot / dashboard / resources / rag / ontology / workspace
+├── routers/      linebot / dashboard / resources / rag / workspace
 ├── services/     dispatch, hungarian, workspace, checkin, alert, rag, line_notify
 └── static/       index.html（主控台）, admin.html（後台）
 ```

@@ -127,7 +127,6 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 #import-result { font-size: 13px; overflow-wrap: anywhere; }
 .preview-table { width: 100%; border-collapse: collapse; margin-top: 12px; } .preview-table td, .preview-table th { padding: 6px; text-align: left; border-bottom: 1px solid var(--line); word-break: break-word; }
 .leaflet-control-attribution { font-size: 10px; }
-#comparison-dialog { width: min(840px, calc(100% - 24px)); }
 #allocation-dialog { width: min(1080px, calc(100% - 24px)); }
 #allocation-dialog > .dialog-heading { position: sticky; top: -22px; z-index: 2; background: var(--paper); padding: 8px 0; border-bottom: 1px solid var(--line); }
 .allocation-heading { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px; gap: 12px; }
@@ -146,14 +145,7 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 #allocation-node-results { max-height: 55dvh; overflow: auto; margin-top: 12px; }
 #allocation-node-results small { display: block; }
 @media (max-width: 760px) { .allocation-row { grid-template-columns: 1fr 1fr; } .allocation-location { grid-column: 1 / -1; } .allocation-remove { justify-self: end; } .allocation-controls { grid-template-columns: 1fr; gap: 0; } #allocation-dialog { padding: 14px; } #allocation-dialog > .dialog-heading { top: -14px; } }
-.comparison-baseline { display: flex; align-items: center; gap: 12px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-.comparison-baseline > div { flex: 1; min-width: 0; }
-.comparison-baseline strong, .comparison-baseline span { display: block; overflow-wrap: anywhere; }
-.comparison-baseline strong { font-size: 15px; margin: 3px 0; }
 .comparison-actions { display: flex; flex-wrap: wrap; gap: 8px; }
-#comparison-status { min-height: 20px; color: var(--accent); font-size: 12px; }
-#comparison-status.error { color: var(--red); }
-#comparison-result { font-size: 13px; overflow-wrap: anywhere; }
 .comparison-table-wrap { max-width: 100%; overflow-x: auto; }
 .comparison-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 .comparison-table td, .comparison-table th { padding: 8px 6px; text-align: left; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
@@ -163,9 +155,6 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 .comparison-table button { white-space: normal; overflow-wrap: anywhere; text-align: left; justify-content: flex-start; max-width: 100%; border: 0; border-radius: 0; padding: 2px 0; color: var(--accent); }
 .comparison-section { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .comparison-section h3 { font-size: 14px; margin: 0 0 10px; }
-.comparison-people { display: flex; flex-wrap: wrap; gap: 6px; padding-top: 6px; }
-.comparison-people button { white-space: normal; overflow-wrap: anywhere; font-size: 12px; }
-@media (max-width: 540px) { #comparison-dialog { padding: 14px; } .comparison-table td, .comparison-table th { padding: 6px 3px; font-size: 12px; } }
 @media (max-width: 540px) { .empty-state { flex-wrap: wrap; justify-content: center; white-space: normal; width: min(310px, calc(100% - 32px)); } .empty-state strong { flex-basis: 100%; text-align: center; } .layer-row { flex: 1 1 135px; } }
 @media (max-width: 1100px) {
   main { grid-template-columns: 180px minmax(240px, 1fr) 260px; }

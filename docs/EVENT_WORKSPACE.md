@@ -57,8 +57,7 @@ database-merge` 帶 `zone_id` 查詢參數時，只投影該分區的物資與�
 關聯分析只計算啟用物件、啟用關係、資料群組、未連結物件、橋接關係與關鍵物件。
 它用來找資料缺口與單點依賴，不代表現場道路、通訊或設施一定中斷。
 
-情境比較固定一份不可變基準，列出物件與關係的新增、移除、修改及連結狀態變化。
-資料排序與畫布座標不影響 SHA-256 指紋，刪除或停用物件不會被誤算為完成處置。
+資料排序與畫布座標不影響 SHA-256 指紋。
 
 ## 物資分配
 
@@ -80,7 +79,6 @@ database-merge` 帶 `zone_id` 查詢參數時，只投影該分區的物資與�
 | GET/PUT | `/api/workspaces/{id}` | 讀取或以 revision 更新工作區 |
 | POST | `/api/workspaces/import-preview` | 預覽 CSV、GeoJSON 點或工作區 JSON 匯入 |
 | POST | `/api/workspaces/analyze` | 分析關聯完整性，不儲存 |
-| POST | `/api/workspaces/compare` | 比較兩份資料快照，不儲存 |
 | POST | `/api/workspaces/allocate` | 試算物資分配，不儲存 |
 | GET | `/api/workspaces/operational-data` | 讀取正式營運資料投影 |
 | POST | `/api/workspaces/database-merge` | 將正式投影併入工作區，不儲存 |

@@ -5,7 +5,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models.workspace import TopologyWorkspace
 from app.services.workspace import ComparisonBaseline, Edge, GraphDocument, ImportRequest, Node, import_document
-from app.services.workspace_comparison import compare, fingerprint
+from app.services.workspace_comparison import fingerprint
 
 
 def event_graph():
@@ -19,53 +19,13 @@ def event_graph():
     ])
 
 
-def test_relation_change_evidence_is_non_mutating():
-    base = event_graph()
-    graph = base.model_copy(deep=True)
-    graph.edges[0].status = "inactive"
-    original = graph.model_dump()
-    result = compare(base, graph)
-    assert result["newly_unlinked_objects"] == ["incident"]
-    assert result["newly_linked_objects"] == []
-    assert result["metric_deltas"]["unlinked_objects"] == 1
-    assert result["changes"]["edges"]["updated"] == [{"id":"focus", "label":"事件追蹤", "fields":["status"]}]
-    assert result["baseline_fingerprint"] != result["scenario_fingerprint"]
-    assert graph.model_dump() == original
-    assert base.edges[0].status == "active"
-    assert compare(graph, base)["newly_linked_objects"] == ["incident"]
-
-
-def test_deleted_or_disabled_objects_are_not_counted_as_newly_linked():
-    base = event_graph()
-    base.edges[0].status = "inactive"
-    graph = base.model_copy(deep=True)
-    graph.nodes[0].available = False
-    result = compare(base, graph)
-    assert result["newly_linked_objects"] == []
-    assert result["exited_objects"] == ["incident"]
-
-
-def test_added_object_and_relation_are_reported_by_stable_identity():
-    base = event_graph()
-    graph = base.model_copy(deep=True)
-    graph.nodes.append(Node(id="volunteer", label="志工", kind="person"))
-    graph.edges.append(Edge(id="assignment", source="volunteer", target="need", kind="assignment"))
-    result = compare(base, graph)
-    assert result["entered_objects"] == ["volunteer"]
-    assert result["changes"]["nodes"]["added"] == [{"id":"volunteer", "label":"志工"}]
-    assert result["changes"]["edges"]["added"] == [{"id":"assignment", "label":"連線"}]
-
-
-def test_reordering_and_layout_do_not_change_fingerprints_or_diffs():
+def test_reordering_and_layout_do_not_change_fingerprints():
     base = event_graph()
     graph = base.model_copy(deep=True)
     graph.nodes.reverse()
     graph.edges.reverse()
     graph.nodes[0].properties["_layout"] = {"x":0, "y":10}
-    result = compare(base, graph)
     assert fingerprint(base) == fingerprint(graph)
-    assert all(value == 0 for value in result["metric_deltas"].values())
-    assert result["changes"]["nodes"] == {"added":[], "removed":[], "updated":[]}
 
 
 def test_snapshot_persistence_normalizes_legacy_data_and_preserves_baseline(db):
@@ -95,12 +55,3 @@ def test_snapshot_persistence_normalizes_legacy_data_and_preserves_baseline(db):
     assert client.put('/api/workspaces/'+saved['id'], json=write).status_code == 409
     write.update(revision=2, baseline=None)
     assert client.put('/api/workspaces/'+saved['id'], json=write).json()["baseline"] is None
-
-
-def test_compare_api_is_read_only(db):
-    client = TestClient(app)
-    payload = {"baseline":event_graph().model_dump(), "graph":event_graph().model_dump()}
-    assert client.post('/api/workspaces/compare', json=payload).status_code == 200
-    payload["graph"]["edges"][0]["target"] = "missing"
-    assert client.post('/api/workspaces/compare', json=payload).status_code == 422
-    assert db.query(TopologyWorkspace).count() == 0

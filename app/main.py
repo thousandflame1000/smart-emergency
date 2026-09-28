@@ -21,7 +21,7 @@ from app.errors import http_exception_handler, validation_error_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.demo_auth import DemoAuthMiddleware
-from app.routers import join_page, webform, linebot, dashboard, resources, rag, ontology, rehearsal, workspace, tasks, zones
+from app.routers import join_page, webform, linebot, dashboard, resources, rag, rehearsal, workspace, tasks, zones
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
@@ -102,7 +102,6 @@ app.include_router(join_page.router, tags=["Join"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
 app.include_router(resources.router, prefix="/api/resources", tags=["Resources"])
 app.include_router(rag.router,       prefix="/api/rag",       tags=["RAG"])
-app.include_router(ontology.router,  prefix="/api/ontology",  tags=["Ontology"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
 app.include_router(workspace.router, prefix="/api/workspaces", tags=["事件處置工作區"])
 app.include_router(zones.router,     prefix="/api/zones",      tags=["分區"])
