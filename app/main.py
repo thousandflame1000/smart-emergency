@@ -141,7 +141,9 @@ def favicon():
 @app.get("/health")
 @limiter.exempt
 def health():
-    return {"status": "ok", "service": "鄰里守望平台"}
+    # Railway 部署時帶入的 commit，用來確認正式站跑的是哪一版
+    commit = os.getenv("RAILWAY_GIT_COMMIT_SHA", "")[:7] or "local"
+    return {"status": "ok", "service": "鄰里守望平台", "commit": commit}
 
 
 @app.get("/ready")

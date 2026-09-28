@@ -115,3 +115,12 @@ def test_osm_tile_layers_send_an_origin_referrer_despite_page_no_referrer_policy
         layers += re.findall(r"L\.tileLayer\([^)]*\)", path.read_text(encoding="utf-8"))
     assert layers
     assert all("referrerPolicy:'strict-origin-when-cross-origin'" in layer for layer in layers)
+
+
+def test_health_reports_deployed_commit(monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "b3cf058deadbeef")
+    assert TestClient(app).get("/health").json()["commit"] == "b3cf058"
+    monkeypatch.delenv("RAILWAY_GIT_COMMIT_SHA")
+    assert TestClient(app).get("/health").json()["commit"] == "local"
