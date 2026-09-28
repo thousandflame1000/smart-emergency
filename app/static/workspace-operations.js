@@ -6,7 +6,7 @@ const ROLE_NAMES={elderly:'長者',volunteer:'志工',family:'家屬',admin:'管
 const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'位置',lng:'位置',address:'地址',is_available:'可用',
   capacity:'容量',phone:'電話',operating_hours:'開放時間'};
 const POINT_TYPE_LABELS={shelter:'避難收容所',community:'里民活動中心',hospital:'醫療院所',fire_station:'消防分隊',
-  police:'警察局/派出所',store:'物資分發點',warehouse:'物資倉庫',clinic:'衛生所',other:'其他'};
+  police:'警察局/派出所',store:'物資分發點',warehouse:'物資倉庫',clinic:'衛生所',government:'公所／政府機關',other:'其他'};
 const inventoryDrafts=new Map(), operationEvents=new Map();
 let operationOwners=[], operationRequest=null, operationStage='open', catalogTab='objects', inventoryReview=null;
 

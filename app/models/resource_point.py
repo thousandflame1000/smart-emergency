@@ -21,6 +21,7 @@ POINT_TYPES = {
     "store":        "物資分發點（超商/全聯）",
     "warehouse":    "物資倉庫",
     "clinic":       "衛生所",
+    "government":   "公所／政府機關",
     "other":        "其他",
 }
 

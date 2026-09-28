@@ -49,3 +49,10 @@ def test_without_location_asks_to_share(db, line_outbox):
     mk(db, "居民", ["elderly"], uid="U-noloc")
     say("U-noloc", "查詢物資")
     assert "請先分享位置" in replies(line_outbox)[-1]
+
+
+def test_every_demo_point_type_has_a_chinese_label():
+    """示範資料裡的類型若沒有中文名稱，LINE 與地圖會直接露出英文代碼。"""
+    import seed_finals_demo
+    from app.models.resource_point import POINT_TYPES
+    assert {ptype for _, ptype, *_ in seed_finals_demo.FACILITIES} <= POINT_TYPES.keys()

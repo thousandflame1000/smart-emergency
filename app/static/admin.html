@@ -1217,6 +1217,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <option value="store">🛒 物資分發點</option>
             <option value="warehouse">📦 物資倉庫</option>
             <option value="clinic">💊 衛生所</option>
+            <option value="government">🏛️ 公所／政府機關</option>
             <option value="other">📍 其他</option>
           </select>
         </div>
@@ -2628,12 +2629,12 @@ async function triggerCheckin() {
 // ════════════════════════════════════════════════
 const PT_ICON = {
   shelter:'🏠', community:'🏘️', hospital:'🏥', fire_station:'🚒',
-  police:'👮', store:'🛒', warehouse:'📦', clinic:'💊', other:'📍',
+  police:'👮', store:'🛒', warehouse:'📦', clinic:'💊', government:'🏛️', other:'📍',
 };
 const PT_LABEL = {
   shelter:'避難所', community:'活動中心', hospital:'醫院',
   fire_station:'消防', police:'警察', store:'分發點',
-  warehouse:'倉庫', clinic:'衛生所', other:'其他',
+  warehouse:'倉庫', clinic:'衛生所', government:'公所', other:'其他',
 };
 const SRC_CLASS = { gov_shelter:'src-gov', gov_fire:'src-gov', gov_clinic:'src-gov',
                     manual:'src-manual', line_report:'src-line' };
