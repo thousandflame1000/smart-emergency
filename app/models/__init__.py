@@ -16,3 +16,4 @@ from app.models.inventory import InventoryEvent
 from app.models.webhook_event import WebhookEvent
 from app.models.privacy import PrivacyConsent
 from app.models.workspace import TopologyWorkspace
+from app.models.admin_audit import AdminAudit

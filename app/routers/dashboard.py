@@ -576,6 +576,13 @@ def alert_history(limit: int = 50, db: Session = Depends(get_db)):
     ]
 
 
+@router.get("/audit")
+def admin_audit_log(limit: int = Query(100, ge=1, le=500), db: Session = Depends(get_db)):
+    """管理員寫入操作紀錄（時間、操作者、動作、結果）。"""
+    from app.services.admin_audit import recent
+    return recent(db, limit)
+
+
 # ──────────────────────────────────────────────
 # 志工自助申請審核——見 app/services/volunteer_application.py
 # ──────────────────────────────────────────────

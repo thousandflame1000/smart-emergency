@@ -90,6 +90,17 @@ async function refreshOperations(options={}){
   })();
   try{return await operationRequest;}finally{operationRequest=null;for(const id of ['sync-db','layer-db'])$(id).disabled=false;}
 }
+async function runAutoDispatch(){
+  if(!await askConfirm('自動派遣','<p>依緊急度、脆弱度、距離與志工負荷排序所有待派需求。</p><p class="muted">個人物資只產生「待核准」建議，核准後才通知志工。</p>','開始'))return;
+  const response=await fetch('/api/resources/dispatch',{method:'POST'});
+  const data=await response.json();
+  if(!response.ok)throw Error(typeof data.detail==='string'?data.detail:'自動派遣失敗');
+  await refreshOperations({silent:true});
+  if(data.suggested){operationStage='suggested';setCatalog('tasks');renderOperations();}
+  const reasons={};for(const d of data.details||[])if(d.result==='skipped')reasons[d.reason]=(reasons[d.reason]||0)+1;
+  const skipped=Object.entries(reasons).map(([r,n])=>`${r} ${n}`).join('、');
+  message(`自動派遣：待核准 ${data.suggested} 筆、資源點媒合 ${data.matched} 筆、略過 ${data.skipped} 筆${skipped?'（'+skipped+'）':''}`);
+}
 function renderOperationalSelection(item,isNode){
   const p=item.properties,el=$('selection');
   const fields=[];

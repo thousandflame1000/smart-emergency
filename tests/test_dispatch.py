@@ -244,3 +244,19 @@ def test_send_task_message_without_coordinates_has_no_distance(db, monkeypatch):
     db2.close()
 
     assert captured.get("distance_km") is None
+
+
+def test_manual_dispatch_runs_in_normal_mode_but_schedule_waits(db, monkeypatch):
+    """計畫書：管理員可按「自動派遣」；排程只在緊急模式每 30 分鐘跑。"""
+    need_id, _ = _make_scenario(db)
+    db.query(SystemConfig).filter(SystemConfig.key == "mode").update({"value": "normal"})
+    db.commit(); db.close()
+    monkeypatch.setattr(dispatch, "send_task_message", lambda *a, **kw: None)
+
+    assert dispatch.auto_dispatch()["reason"] == "not_emergency"
+    result = dispatch.auto_dispatch(manual=True)
+    assert result["suggested"] == 1
+
+    db2 = SessionLocal()
+    assert db2.query(CommunityNeed).filter(CommunityNeed.id == need_id).first().status == "suggested"
+    db2.close()

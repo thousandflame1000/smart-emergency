@@ -21,12 +21,13 @@ import base64
 import hmac
 import time
 
+from starlette.concurrency import run_in_threadpool
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response
 
 from app.config import settings
-from app.services import admin_session
+from app.services import admin_audit, admin_session
 
 # /f/ 是機器人發給民眾與志工的網頁表單，身分由連結上的簽章保證，不能要求他們輸入展演密碼。
 # /admin/login 是管理員用 LINE 連結換取登入 cookie 的入口，本身用簽章保護。
@@ -124,10 +125,13 @@ class DemoAuthMiddleware(BaseHTTPMiddleware):
             admin = {"id": None, "name": "demo-password", "roles": ["admin"]}
         marker = admin_session.current_admin.set(admin)
         try:
-            if admin:
-                return await call_next(request)
-            if not password and not line_login_enforced():
-                return await call_next(request)
+            if admin or (not password and not line_login_enforced()):
+                response = await call_next(request)
+                if admin_audit.should_record(request.method, request.url.path):
+                    path = request.url.path + (f"?{request.url.query}" if request.url.query else "")
+                    await run_in_threadpool(admin_audit.record, admin, request.method, path,
+                                            response.status_code)
+                return response
             headers = {"WWW-Authenticate": 'Basic realm="linri-finals"'} if password else {}
             message = ("需要登入才能存取。管理員請在 LINE 傳「後台」取得登入連結。"
                        if not password else "需要密碼才能存取（決賽展演期間的臨時保護）")

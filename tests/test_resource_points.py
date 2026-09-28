@@ -64,3 +64,12 @@ def test_put_clamps_negative_current_load_to_zero(db, client):
     pts = client.get("/api/resources/points?active_only=false").json()
     pt = next(p for p in pts if p["id"] == pt_id)
     assert pt["current_load"] == 0
+
+
+def test_points_flag_emergency_layer(db, client):
+    """計畫書：緊急圖層顯示消防隊、庇護所、衛生所。"""
+    db.add_all([ResourcePoint(name="消防", point_type="fire_station", lat=24.0, lng=120.6),
+                ResourcePoint(name="超商", point_type="store", lat=24.0, lng=120.6)])
+    db.commit()
+    flags = {p["name"]: p["emergency"] for p in client.get("/api/resources/points").json()}
+    assert flags == {"消防": True, "超商": False}

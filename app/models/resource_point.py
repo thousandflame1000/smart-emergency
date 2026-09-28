@@ -38,6 +38,10 @@ POINT_SUPPLY_TYPES = {
 }
 
 
+# 緊急模式才顯示的應變據點（計畫書：緊急圖層顯示消防隊、庇護所、衛生所）
+EMERGENCY_POINT_TYPES = {"shelter", "fire_station", "clinic", "hospital"}
+
+
 class ResourcePoint(Base):
     __tablename__ = "resource_points"
 

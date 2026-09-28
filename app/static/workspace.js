@@ -414,6 +414,7 @@ async function init(){
   run('save',()=>save());run('duplicate',()=>save(true));run('delete-workspace',()=>deleteWorkspace());run('new',async()=>{if(await discardConfirmed()){loadDocument({id:null,revision:0,name:'未命名工作區',graph:{nodes:[],edges:[]}});message('已建立空白工作區');}});
   run('undo',()=>undo());run('redo',()=>undo(true));run('fit',fit);run('layout',()=>{if(state.view!=='graph')setView('graph');arrangeGraph();checkpoint();cy.nodes().forEach(el=>{nodeById(el.data('nodeId')).properties._layout=el.position();});changed();});
   run('view-map',()=>setView('map'));run('view-graph',()=>setView('graph'));run('import',openImport);run('empty-import',openImport);run('close-import',()=>$('import-dialog').close());
+  $('auto-dispatch').hidden=!isAdmin();run('auto-dispatch',runAutoDispatch);
   run('sync-db',syncDatabase);run('layer-db',syncDatabase);run('empty-db',syncDatabase);
   run('export',exportDocument);run('analyze',analyze);
   run('close-inspector',clearSelection);$('inspector-backdrop').onclick=clearSelection;

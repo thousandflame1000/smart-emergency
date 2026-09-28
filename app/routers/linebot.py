@@ -976,6 +976,7 @@ HELP_BASE = (
     "・「我的中心」— 依您的居民、家屬與志工身分顯示完整功能\n"
     "・「我很好」— 回覆今日打卡\n"
     "・「狀態」— 查看系統模式\n"
+    "・「查詢物資」— 列出離您最近的物資與避難據點\n"
     "・「需要水／需要食物／需要藥」— 提出物資需求\n"
     "・「我的需求」— 查看求助進度；「取消需求」— 撤回\n"
     "・點選 LINE 的「＋」→「位置資訊」分享目前位置 — 更新您的座標\n"
@@ -983,12 +984,13 @@ HELP_BASE = (
 )
 
 
+NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所")
 FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "回報平安",
                   "狀態", "status", "幫助", "help", "?", "？", "操作說明",
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
                   "申請物資", "物資申請", "需要物資", "申請表單", "申請需求",
-                  "接單", "可接任務", "找任務"}
+                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS)
 UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
 FIXED_COMMANDS |= line_ops.COMMAND_WORDS | set(UNWELL_WORDS)
 
@@ -1038,6 +1040,11 @@ def _process_text(event, db, user, text) -> bool:
 
     if text in UNWELL_WORDS:
         _say(event, _report_unwell(user, db))
+        return True
+
+    if text in NEARBY_WORDS:
+        from app.services.nearby import nearby_text
+        _say(event, nearby_text(db, user, _get_mode(db) == "emergency"), ask_location=True)
         return True
 
     if text in ("分享位置", "傳位置", "更新位置"):

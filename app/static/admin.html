@@ -731,6 +731,18 @@ textarea.form-control { resize: vertical; min-height: 80px; }
       </div>
     </div>
 
+    <div class="page" id="page-audit">
+      <div class="card">
+        <div class="card-header"><div class="card-title">操作紀錄</div><button class="btn btn-ghost btn-sm" onclick="loadAudit()">重新整理</button></div>
+        <div class="table-wrap">
+          <table class="tbl">
+            <thead><tr><th>時間</th><th>操作者</th><th>動作</th><th>路徑</th><th>結果</th></tr></thead>
+            <tbody id="audit-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <div class="page" id="page-kb">
 
       <!-- 統計 -->
@@ -1339,6 +1351,7 @@ const PAGE_TITLE = {
   'page-needs':     '調度',
   'page-kb':        '知識庫',
   'page-zones':     '分區',
+  'page-audit':     '操作紀錄',
 };
 let allUsers = [];
 
@@ -1520,6 +1533,7 @@ function showPage(id) {
   if (id === 'page-needs')     { loadNeeds(); loadPoints(); }
   if (id === 'page-kb')        loadKB();
   if (id === 'page-zones')     loadZones();
+  if (id === 'page-audit')     loadAudit();
   if (id === 'page-volunteers') { loadVolunteerApplications(); loadKitTesters(); }
 }
 
@@ -2561,7 +2575,7 @@ async function testQuery() {
 // Dispatch
 // ════════════════════════════════════════════════
 async function runDispatch(btn) {
-  if (!await askConfirm('執行物資自動媒合', '<p>系統需在緊急模式下才會媒合。</p><p class="form-hint" style="margin-top:6px">個人物資只會產生「待核准」建議，要到調度畫面逐筆確認後才會通知志工，不會直接發出去。</p>', '開始媒合')) return;
+  if (!await askConfirm('執行物資自動媒合', '<p class="form-hint">個人物資只會產生「待核准」建議，要到調度畫面逐筆確認後才會通知志工，不會直接發出去。</p>', '開始媒合')) return;
   const original = btn.textContent;
   btn.disabled = true; btn.textContent = '媒合中…';
   try {
@@ -3114,6 +3128,22 @@ async function deleteNeed(needId) {
   if (!res.ok) { toast('danger', '刪除失敗：' + esc(data.detail || res.status)); return; }
   toast('success', '已永久刪除');
   loadNeeds();
+}
+
+const AUDIT_METHOD = { POST: '新增／執行', PUT: '修改', PATCH: '修改', DELETE: '刪除' };
+async function loadAudit() {
+  const body = document.getElementById('audit-tbody');
+  try {
+    const rows = await fetch('/api/dashboard/audit?limit=200').then(r => r.json());
+    body.innerHTML = rows.length ? rows.map(r => `<tr>
+      <td class="muted">${esc(r.at ? new Date(r.at).toLocaleString('zh-TW') : '')}</td>
+      <td>${esc(r.actor)}</td><td>${esc(AUDIT_METHOD[r.method] || r.method)}</td>
+      <td class="muted" style="word-break:break-all">${esc(r.path)}</td>
+      <td><span class="badge ${r.status < 400 ? 'badge-green' : 'badge-red'}">${r.status}</span></td></tr>`).join('')
+      : '<tr><td colspan="5" class="muted">尚無紀錄</td></tr>';
+  } catch (e) {
+    body.innerHTML = '<tr><td colspan="5" class="muted">讀取失敗</td></tr>';
+  }
 }
 
 // ════════════════════════════════════════════════

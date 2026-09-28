@@ -112,6 +112,7 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
 .map-foot{padding:10px 14px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:14px;align-items:center;font-size:13px;color:var(--muted)}
 .map-foot i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px;border:2px solid #fff;box-shadow:0 0 0 1px #0002}
 .pin{border:2px solid #fff;border-radius:50%;box-shadow:0 1px 5px #0006}
+#overview-map{height:min(52vh,440px);width:100%}.overview-map{margin-top:16px}.pt{border:2px solid #fff;border-radius:4px;box-shadow:0 1px 5px #0006}
 .pin.sel{outline:3px solid #f8b52c}
 .toast-stack{position:fixed;right:18px;bottom:18px;z-index:70;display:flex;flex-direction:column;gap:8px}
 .toast{padding:11px 15px;border:1px solid var(--line);border-radius:5px;background:var(--surface);box-shadow:0 4px 16px #17201c1f;font-size:14px;max-width:320px}
@@ -167,6 +168,7 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
         <article class="panel"><div class="panel-head"><h2>未解警報</h2><span class="badge b-muted" id="alert-count">0 筆</span></div><div class="alert-list" id="alerts"></div></article>
         <article class="panel"><div class="panel-head"><h2>今日打卡</h2><input id="overview-search" aria-label="搜尋姓名"></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="overview-elderly"></tbody></table></div></article>
       </div>
+      <article class="panel overview-map"><div class="panel-head"><h2>物資地圖</h2><span class="badge b-muted" id="map-layer-mode">日常圖層</span></div><div id="overview-map"></div><div class="map-foot" id="overview-map-foot"></div></article>
     </section>
     <section class="page" id="page-elderly">
       <div class="page-heading"><div><h2>長者狀態</h2><p id="elderly-count">0 位</p></div>
@@ -244,7 +246,7 @@ function byUrgency(rows){return rows.slice().sort((a,b)=>(STATUS_RANK[a.today_st
 function inGroup(row,group){return !group||(GROUPS[group]||[]).includes(row.today_status||'not_sent');}
 let elderFilter='',relationsCache=null;
 function elderById(id){return elders.find(e=>String(e.id)===String(id));}
-function showPage(id){if(!pageTitles[id])id='overview';document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+id));document.querySelectorAll('[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===id));$('title').textContent=pageTitles[id];if(id==='analytics-page')loadTrends();if(history.replaceState)history.replaceState(null,'','#'+id);}
+function showPage(id){if(!pageTitles[id])id='overview';document.querySelectorAll('.page').forEach(el=>el.classList.toggle('active',el.id==='page-'+id));document.querySelectorAll('[data-page]').forEach(el=>el.classList.toggle('active',el.dataset.page===id));$('title').textContent=pageTitles[id];if(id==='analytics-page')loadTrends();if(id==='overview'&&ovMap)setTimeout(()=>ovMap.invalidateSize(),0);if(history.replaceState)history.replaceState(null,'','#'+id);}
 // 只剩總覽的「今日打卡」用這張表：姓名／狀態／回覆時間，長者名單那頁走卡片。
 function renderElders(target,data){
   $(target).innerHTML=data.length?byUrgency(data).map(row=>`<tr data-row="${esc(row.id)}" tabindex="0"${row.today_status==='help_needed'?' class="sos-row"':''}><td><strong>${esc(row.name)}</strong></td><td>${badge(row.today_status)}</td><td class="muted">${clock(row.responded_at)}</td><td><div class="row-actions">${row.phone?`<a class="mini" href="tel:${esc(row.phone)}" title="撥號給 ${esc(row.name)}">撥號</a>`:''}<button class="mini" data-detail="${esc(row.id)}">詳情</button></div></td></tr>`).join(''):`<tr><td colspan="4" class="empty">這個條件下沒有長者<br><span class="muted" style="font-size:13px">換個狀態或清掉搜尋字看看</span></td></tr>`;
@@ -377,9 +379,38 @@ async function openDrawer(elderlyId){
       : `<div class="warn-box">這位長者沒有設定任何緊急聯絡人。未回應時系統找不到人通知，請到「照護關係」補上。</div>`);
   }catch(error){$('d-contacts').innerHTML=`<div class="sub">緊急聯絡人</div><p class="muted">讀取失敗</p>`;}
 }
+const POINT_COLOR={shelter:'#2c7fad',fire_station:'#c9364b',clinic:'#18765a',hospital:'#18765a'};
+let ovMap=null,ovLayers=null,ovEmergency=null,ovFitted=false;
+function renderOverviewMap(rows,points,emergency){
+  if(!window.L){$('overview-map').innerHTML='<p class="empty">地圖元件載入失敗</p>';return;}
+  if(!ovMap){
+    ovMap=L.map('overview-map',{preferCanvas:true}).setView([23.7,121],8);
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,referrerPolicy:'strict-origin-when-cross-origin',attribution:'&copy; OpenStreetMap contributors'}).addTo(ovMap);
+    ovLayers={elders:L.layerGroup().addTo(ovMap),supply:L.layerGroup().addTo(ovMap),emergency:L.layerGroup()};
+    L.control.layers(null,{'長者':ovLayers.elders,'物資據點':ovLayers.supply,'應變據點':ovLayers.emergency},{collapsed:false}).addTo(ovMap);
+  }
+  ovMap.invalidateSize();
+  Object.values(ovLayers).forEach(l=>l.clearLayers());
+  const dot=(lat,lng,color,cls,size)=>L.marker([lat,lng],{icon:L.divIcon({className:'',iconSize:[size,size],iconAnchor:[size/2,size/2],html:`<div class="${cls}" style="width:${size}px;height:${size}px;background:${color}"></div>`})});
+  const elderPts=rows.filter(r=>r.lat!==null&&r.lng!==null);
+  elderPts.forEach(r=>{const m=dot(r.lat,r.lng,PIN[r.today_status]||'#9ca9a0','pin',(r.today_status==='help_needed'||r.today_status==='no_response')?22:16);m.bindTooltip(document.createTextNode(r.name+' · '+(statuses[r.today_status]||['未知'])[0]));m.on('click',()=>openDrawer(r.id));ovLayers.elders.addLayer(m);});
+  const located=points.filter(p=>p.lat!==null&&p.lng!==null);
+  located.forEach(p=>{const m=dot(p.lat,p.lng,POINT_COLOR[p.point_type]||'#8a6d3b','pt',16);m.bindTooltip(document.createTextNode(p.name+' · '+p.point_type_label));(p.emergency?ovLayers.emergency:ovLayers.supply).addLayer(m);});
+  // 模式改變時才切圖層，平常保留使用者自己的勾選。
+  if(ovEmergency!==emergency){ovEmergency=emergency;emergency?ovLayers.emergency.addTo(ovMap):ovLayers.emergency.remove();}
+  $('map-layer-mode').textContent=emergency?'緊急圖層':'日常圖層';$('map-layer-mode').className='badge '+(emergency?'b-danger':'b-muted');
+  const all=elderPts.map(r=>[r.lat,r.lng]).concat(located.map(p=>[p.lat,p.lng]));
+  if(all.length&&!ovFitted){ovMap.fitBounds(all,{padding:[40,40],maxZoom:15});ovFitted=true;}
+  const emgCount=located.filter(p=>p.emergency).length;
+  $('overview-map-foot').innerHTML=`<span><i style="background:#18765a"></i>長者</span><span><i style="background:#8a6d3b;border-radius:2px"></i>物資據點 ${located.length-emgCount}</span><span><i style="background:#c9364b;border-radius:2px"></i>應變據點 ${emgCount}（消防、庇護所、衛生所、醫院）</span>`;
+}
+async function loadOverviewMap(emergency){
+  try{const points=await fetch('/api/resources/points').then(r=>r.ok?r.json():[]);renderOverviewMap(elders,Array.isArray(points)?points:[],emergency);}
+  catch(error){renderOverviewMap(elders,[],emergency);}
+}
 async function loadAll(){
   if(!elders.length){$('overview-elderly').innerHTML=skeletonRows(5,4);$('elderly-list-panel').innerHTML=Array.from({length:6},()=>'<article class="pcard"><span class="skel" style="width:60%"></span><span class="skel" style="margin-top:12px"></span></article>').join('');$('alerts').innerHTML='<div style="padding:14px 16px">'+Array.from({length:3},()=>'<span class="skel" style="margin-bottom:14px"></span>').join('')+'</div>';}
-  try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();renderOverviewList();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
+  try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();renderOverviewList();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';loadOverviewMap(emergency);$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
 const SERIES=[{key:'checkin_ok',label:'平安',color:'#18765a'},{key:'checkin_no_response',label:'未回應',color:'#c9364b'},{key:'checkin_help_needed',label:'求助',color:'#d9822b'},{key:'alerts',label:'警報',color:'#8f52a8'},{key:'needs',label:'需求',color:'#2c7fad'}];
 let trendDays=14;
 // 手畫 SVG 折線圖，不引進圖表函式庫：外部 CDN 被擋掉時整張圖就沒了，這頁的重點就是那張圖。

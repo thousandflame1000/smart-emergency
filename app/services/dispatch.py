@@ -596,9 +596,9 @@ def _reserve_for_need(
     return True
 
 
-def auto_dispatch() -> dict:
+def auto_dispatch(manual: bool = False) -> dict:
     """
-    緊急模式下每 30 分鐘執行一次。
+    緊急模式下每 30 分鐘執行一次；管理員按「自動派遣」時（manual=True）任何模式都跑。
     注意：這裡只「建議」個人物資媒合，不會自動通知志工——
     所有建議會先進入 need.status = "suggested"，管理員必須在後台按下
     confirm_dispatch 才會真的發 LINE 通知（對應計畫書「所有建議仍須
@@ -609,7 +609,7 @@ def auto_dispatch() -> dict:
     db: Session = SessionLocal()
     try:
         cfg = db.query(SystemConfig).filter(SystemConfig.key == "mode").first()
-        if not cfg or cfg.value != "emergency":
+        if not manual and (not cfg or cfg.value != "emergency"):
             return {"matched": 0, "suggested": 0, "skipped": 0, "notified": 0,
                     "reason": "not_emergency"}
 

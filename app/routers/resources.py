@@ -14,7 +14,7 @@ from app.database import get_db
 from app.models.resource import CommunityResource
 from app.models.need import CommunityNeed
 from app.models.user import User
-from app.models.resource_point import ResourcePoint, POINT_TYPES, POINT_SUPPLY_TYPES
+from app.models.resource_point import EMERGENCY_POINT_TYPES, ResourcePoint, POINT_TYPES, POINT_SUPPLY_TYPES
 from app.models.dispatch_event import DispatchEvent
 from app.models.inventory import InventoryEvent
 from app.models.zone import Zone
@@ -466,8 +466,7 @@ def run_dispatch(_principal: dict | None = Depends(require_admin)):
     管理員需個別呼叫 /needs/{id}/confirm_dispatch 才會真正發送 LINE 通知。
     """
     from app.services.dispatch import auto_dispatch
-    result = auto_dispatch()
-    return result
+    return auto_dispatch(manual=True)
 
 
 @router.post("/needs/{need_id}/confirm_dispatch")
@@ -671,6 +670,7 @@ def _fmt_point(p: ResourcePoint) -> dict:
         "name":            p.name,
         "point_type":      p.point_type,
         "point_type_label": POINT_TYPES.get(p.point_type, p.point_type),
+        "emergency":       p.point_type in EMERGENCY_POINT_TYPES,
         "address":         p.address,
         "lat":             p.lat,
         "lng":             p.lng,
