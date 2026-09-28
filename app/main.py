@@ -39,8 +39,8 @@ async def lifespan(app: FastAPI):
             sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
             import startup
             startup.run()
-        except Exception as e:
-            print(f"[startup] 警告：{e}")
+        except Exception:
+            logging.getLogger("startup").exception("startup seed failed")
     if os.getenv("APP_ENV", "development") == "production":
         import threading
 
@@ -96,16 +96,16 @@ app.add_exception_handler(StarletteHTTPException, http_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_error_handler)
 app.add_middleware(SlowAPIMiddleware)
 
-app.include_router(linebot.router,   prefix="/webhook",       tags=["LINE Bot"])
-app.include_router(webform.router,   prefix="/f",             tags=["Web Form"])
-app.include_router(join_page.router, tags=["Join"])
-app.include_router(dashboard.router, prefix="/api/dashboard", tags=["Dashboard"])
-app.include_router(resources.router, prefix="/api/resources", tags=["Resources"])
-app.include_router(rag.router,       prefix="/api/rag",       tags=["RAG"])
-app.include_router(tasks.router, prefix="/api/tasks", tags=["Tasks"])
+app.include_router(linebot.router,   prefix="/webhook",       tags=["LINE 機器人"])
+app.include_router(webform.router,   prefix="/f",             tags=["居民表單"])
+app.include_router(join_page.router, tags=["加入"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["照護與管理"])
+app.include_router(resources.router, prefix="/api/resources", tags=["需求、物資與派遣"])
+app.include_router(rag.router,       prefix="/api/rag",       tags=["知識庫問答"])
+app.include_router(tasks.router,     prefix="/api/tasks",     tags=["任務"])
 app.include_router(workspace.router, prefix="/api/workspaces", tags=["事件處置工作區"])
 app.include_router(zones.router,     prefix="/api/zones",      tags=["分區"])
-app.include_router(rehearsal.router, tags=["Rehearsal"])
+app.include_router(rehearsal.router, tags=["演練"])
 
 
 _NO_CACHE = {"Cache-Control": "no-cache"}
@@ -186,7 +186,7 @@ def dashboard():
     return FileResponse(os.path.join(os.path.dirname(__file__), "static", "site.html"), headers=_NO_CACHE)
 
 # 靜態資源
-@app.post("/api/system/rich-menu/install", tags=["System"])
+@app.post("/api/system/rich-menu/install", tags=["系統"])
 def install_rich_menu(_principal: dict | None = Depends(require_admin)):
     """在受控維運期間，重建成員與管理員 Rich Menu。"""
     if not settings.RICH_MENU_REBUILD_ENABLED:
@@ -237,7 +237,7 @@ def admin_logout():
     return response
 
 
-@app.get("/api/system/security", tags=["System"])
+@app.get("/api/system/security", tags=["系統"])
 def security_status():
     """Tell the console whether the deployment is publicly readable.
 
