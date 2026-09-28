@@ -2,6 +2,7 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="UTF-8">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>鄰里守望 表單</title>
 <style>
@@ -165,10 +166,13 @@
   var FRAGMENT = new URLSearchParams(location.hash.replace(/^#/, ''));
   var TOKEN = FRAGMENT.get('t') || QUERY.get('t') || '';
   var NEED_ID = FRAGMENT.get('n') || QUERY.get('n') || '';
+  // 連結失效要照實說，不能被後面的 catch 蓋成「無法連線」。
+  function linkError(text) { var e = new Error(text); e.link = true; return e; }
+  function failText(e) { return e && e.link ? e.message : '無法連線，請檢查網路後重新開啟表單。'; }
   var SESSION_READY = TOKEN ? fetch('/f/api/session', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: TOKEN })
   }).then(function (r) {
-    if (!r.ok) throw new Error('這個表單連結已過期或無效，請回到 LINE 重新開啟表單。');
+    if (!r.ok) throw linkError('這個表單連結已過期或無效，請回到 LINE 重新開啟表單。');
     history.replaceState(null, '', location.pathname + (NEED_ID ? '?n=' + encodeURIComponent(NEED_ID) : ''));
     TOKEN = '';
   }) : Promise.resolve();
@@ -348,7 +352,7 @@
   if (KIND === 'me') {
     $('form').classList.add('is-hidden');
     $('me').classList.remove('is-hidden');
-    SESSION_READY.then(loadMe).catch(function (e) { blockForm(e.message); });
+    SESSION_READY.then(loadMe).catch(function (e) { blockForm(failText(e)); });
     return;
   }
 
@@ -369,7 +373,7 @@
     if (res.d.address) $('address').value = res.d.address;
     if (KIND === 'res' && !res.d.is_staff) { blockForm('只有志工可以登記物資，請先送出志工申請。'); }
     if (KIND === 'apply' && res.d.is_staff) { showError('您已經是志工，不用重新申請。'); $('submit').disabled = true; }
-  }).catch(function () { blockForm('無法連線，請檢查網路後重新開啟表單。'); });
+  }).catch(function (e) { blockForm(failText(e)); });
 
   $('form').addEventListener('submit', function (ev) {
     ev.preventDefault();

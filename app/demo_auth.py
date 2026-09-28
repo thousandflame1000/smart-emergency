@@ -35,6 +35,9 @@ from app.services import admin_audit, admin_session
 _EXEMPT_PREFIXES = (
     "/webhook", "/health", "/ready", "/privacy", "/f/", "/admin/login", "/join"
 )
+# 居民從 LINE 開的表單、加入頁與隱私頁要用到的靜態檔；不放行的話展演密碼一開，
+# 長輩手機上的表單會失去樣式，甚至跳出密碼視窗。只列這幾個，不開放整個 /static。
+_PUBLIC_ASSETS = frozenset({"/static/feel.css", "/static/feel.js", "/static/favicon.svg", "/favicon.ico"})
 
 _CACHE_SECONDS = 30
 _cache: dict = {}
@@ -111,7 +114,7 @@ def _basic_password_ok(request: Request, password: str) -> bool:
 
 class DemoAuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.url.path.startswith(_EXEMPT_PREFIXES):
+        if request.url.path.startswith(_EXEMPT_PREFIXES) or request.url.path in _PUBLIC_ASSETS:
             return await call_next(request)
 
         admin = None

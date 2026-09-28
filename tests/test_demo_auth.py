@@ -82,3 +82,12 @@ def test_webhook_and_health_stay_exempt_even_when_enabled(client, db):
     # 密碼閘擋下（不會是 401）
     r = client.post("/webhook/line", content=b"{}")
     assert r.status_code != 401
+
+
+def test_resident_form_assets_stay_public_but_console_assets_do_not(client):
+    """展演密碼開著時，長輩從 LINE 開的表單仍要有樣式，不能跳密碼視窗。"""
+    settings.DEMO_PASSWORD = "typhoon2026"
+    for path in ("/f/need", "/static/feel.css", "/static/feel.js", "/static/favicon.svg", "/favicon.ico"):
+        assert client.get(path).status_code == 200, path
+    assert client.get("/static/admin.html").status_code == 401
+    assert client.get("/static/feel.css.map").status_code == 401

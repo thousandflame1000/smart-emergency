@@ -133,6 +133,11 @@ def admin_page():
     return HTMLResponse('<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8"><title>管理</title></head><body></body></html>')
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "favicon.svg"), media_type="image/svg+xml")
+
+
 @app.get("/health")
 @limiter.exempt
 def health():
