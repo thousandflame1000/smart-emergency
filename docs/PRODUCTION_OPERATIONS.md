@@ -12,6 +12,20 @@
 - 將 Railway health check 指向 `/ready`，外部監控同時檢查 `/health`、`/ready`、outbox `FAILED/DEAD` 與 webhook inbox `FAILED/DEAD` 數量。
 - 若開啟 `EXTERNAL_AI_ENABLED=true`，先完成供應商資料處理評估；禁止把可直接識別個人的健康、地址、電話或照護資料放進 prompt/知識庫。
 
+## 部署後確認
+
+- Railway 由 `master` 自動部署。`GET /health` 回傳的 `commit` 應與剛推送的 commit 前 7 碼相同；不同代表部署失敗或尚未完成。
+- `GET /api/system/security` 的 `auth_mode` 不可為 `open`；`open` 代表後台與所有 API 對外公開，必須設 `DEMO_PASSWORD` 或綁定 LINE 管理員。
+- `/privacy` 會顯示外部 AI 是否啟用。未啟用時 LINE 問答改以本機關鍵字檢索回覆知識庫原文，功能不中斷。
+- 圖文選單（`app/services/rich_menu.py`、`app/static/richmenu/*.png`）有變更時，暫時設 `RICH_MENU_REBUILD_ENABLED=true`，以管理員身分呼叫 `POST /api/system/rich-menu/install`，確認 `cutover_complete: true` 後改回 `false`。
+- 新的 LINE 訊息格式上線前，用 `https://api.line.me/v2/bot/message/validate/reply`（或 `/push`）驗證；格式錯誤時 LINE 會整則拒收，使用者什麼都收不到。
+
+## 稽核與故障行為
+
+- 後台與 LINE 上所有會改資料的管理操作都寫入 `admin_audit`，後台「操作紀錄」可查時間、操作者、來源與成功與否。純計算（分析、試算、比對）不記錄。
+- 沒有照護聯絡人（或全部通知失敗）的長者，打卡 3 小時未回應時會改通知所有綁定 LINE 的管理員一次。
+- 「重新載入知識庫」在外部 AI 未啟用時會拒絕執行；啟用時先產生全部新段落才一次替換，中途失敗保留原內容。
+
 ## 個資作業
 
 - 使用者送出居民、志工、物資與任務表單前，系統會要求確認告知事項，並在 `privacy_consents` 記錄版本與時間。
