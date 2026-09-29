@@ -60,3 +60,28 @@ def test_family_alert_card_can_call_and_navigate_to_the_elder(db, line_outbox):
     send_alert_message("U-fam", "王奶奶", "unwell", "c1", elderly=elder)
     card = json.dumps(line_outbox.sent[-1][2].contents.to_dict(), ensure_ascii=False)
     assert "tel:" in card and "destination=" not in card, "身體不舒服只需要打電話，不用導航"
+
+
+def test_elder_with_nobody_to_tell_pages_admins_once_after_three_hours(db, line_outbox):
+    from datetime import timedelta
+    from app.models.care_relation import CareRelation
+    from app.models.checkin import DailyCheckin
+    from app.models.user import User
+    from app.services import alert as alert_svc
+    from app.timeutil import now_utc, today_tw
+    admin = User(name="管理員", roles=["admin"], line_uid="U-adm3")
+    lonely = User(name="獨居阿伯", roles=["elderly"], line_uid="U-lonely", phone="0911222333")
+    cared = User(name="有家人", roles=["elderly"], line_uid="U-cared")
+    fam = User(name="女兒", roles=["family"], line_uid="U-fam3")
+    db.add_all([admin, lonely, cared, fam]); db.commit()
+    db.add(CareRelation(elderly_id=cared.id, contact_id=fam.id, relation="family"))
+    sent = (now_utc() - timedelta(hours=4)).replace(tzinfo=None)
+    for elder in (lonely, cared):
+        db.add(DailyCheckin(elderly_id=elder.id, date=today_tw(), status="pending", prompt_sent_at=sent))
+    db.commit()
+
+    alert_svc.check_no_response()
+    alert_svc.check_no_response()  # 排程每 15 分鐘跑一次，不能每次都再吵管理員
+    to_admin = [m for kind, to, m in line_outbox.sent if to == "U-adm3"]
+    assert len(to_admin) == 1 and "獨居阿伯" in to_admin[0].alt_text
+    assert not any("有家人" in getattr(m, "alt_text", "") for m in to_admin)

@@ -71,10 +71,25 @@ def check_no_response() -> None:
                 _escalate(db, checkin, "no_response_1h", now)
 
             if elapsed_min >= 180:
-                _escalate(db, checkin, "no_response_3h", now)
+                first_time = not db.query(Alert).filter(Alert.checkin_id == checkin.id,
+                                                        Alert.alert_type == "no_response_3h").first()
+                if _escalate(db, checkin, "no_response_3h", now) == 0 and first_time:
+                    _page_admins_nobody_told(db, checkin)
 
     finally:
         db.close()
+
+
+def _page_admins_nobody_told(db: Session, checkin: DailyCheckin) -> None:
+    """沒有照護聯絡人（或全部送不到）的長者，三小時沒回應時不能沒人知道。"""
+    import re
+    elder = checkin.elderly
+    buttons = [{"label": "✅ 已確認安全", "data": f"action=confirm_safe&checkin_id={checkin.id}", "color": "#c0392b"}]
+    if elder.phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", elder.phone):
+        buttons.insert(0, {"label": f"📞 撥打 {elder.name}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", elder.phone),
+                           "color": "#c0392b"})
+    notify_admins(db, f"🚨 {elder.name} 已超過 3 小時未回應打卡，而且沒有任何家屬或志工收到通知。\n"
+                      f"請直接聯繫或派人探視（{elder.address or '地址未填'}）。", buttons=buttons)
 
 
 def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime) -> int:
