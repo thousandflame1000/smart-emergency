@@ -1263,3 +1263,22 @@ def test_elder_describing_feeling_unwell_in_own_words_alerts_family(db, line_out
     line_outbox.sent.clear()
     say("U-unw", "頭暈快昏倒了")
     assert replies(line_outbox)[-1] == "緊急求助確認", "有危險字眼時先確認求救"
+
+
+def test_elder_saying_fine_in_own_words_counts_as_check_in(db, line_outbox):
+    """「我今天很好喔」要算打卡，否則一小時後家人收到假的未回應警報。"""
+    elder = mk(db, "王奶奶", ["elderly"], "U-ok")
+    checkin = DailyCheckin(elderly_id=elder.id, date=today_tw(), status="pending")
+    db.add(checkin); db.commit()
+    say("U-ok", "我今天很好喔")
+    db.refresh(checkin)
+    assert checkin.status == "ok"
+    assert "收到" in replies(line_outbox)[-1]
+
+    other = mk(db, "李伯伯", ["elderly"], "U-notok")
+    pending = DailyCheckin(elderly_id=other.id, date=today_tw(), status="pending")
+    db.add(pending); db.commit()
+    for text in ("我不是很好", "還好但頭好暈", "你好嗎"):
+        say("U-notok", text)
+        db.refresh(pending)
+        assert pending.status != "ok", text

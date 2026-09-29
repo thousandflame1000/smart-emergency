@@ -1019,6 +1019,21 @@ def _sounds_unwell(user, text: str) -> bool:
     return positive
 
 
+OK_HINTS = ("很好", "都好", "一切好", "一切都好", "平安", "沒事", "安好", "不錯", "OK", "ok")
+
+
+def _sounds_ok(user, text: str, db) -> bool:
+    """今天還沒打卡的長輩回「我今天很好喔」「都好，不用擔心」也算平安；
+    只認精確的「我很好」時，這些回覆不會記錄，一小時後家人反而收到未回應警報。"""
+    from app.models.checkin import DailyCheckin
+    if ("elderly" not in (user.roles or []) or len(text) > 20 or any(h in text for h in QUESTION_HINTS)
+            or _sounds_unwell(user, text) or not _find_positive(text, OK_HINTS)[0]):
+        return False
+    return db.query(DailyCheckin).filter(
+        DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw(),
+        DailyCheckin.status.in_(["pending", "no_response"])).first() is not None
+
+
 def _process_text(event, db, user, text) -> bool:
     """Handle one text message. Returns True when a specific reply was sent."""
     intent = parse_intent(text)
@@ -1044,7 +1059,7 @@ def _process_text(event, db, user, text) -> bool:
     if line_ops.handle_text(event, db, user, text):
         return True
 
-    if text in CHECKIN_OK_WORDS:
+    if text in CHECKIN_OK_WORDS or (not intent["sos"] and _sounds_ok(user, text, db)):
         from app.models.checkin import DailyCheckin
         checkin = (db.query(DailyCheckin)
                    .filter(DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw(),
