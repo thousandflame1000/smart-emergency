@@ -18,7 +18,7 @@
 - Railway 由 `master` 自動部署。`GET /health` 回傳的 `commit` 應與剛推送的 commit 前 7 碼相同；不同代表部署失敗或尚未完成。
 - `GET /api/system/security` 的 `auth_mode` 不可為 `open`；`open` 代表後台與所有 API 對外公開，必須設 `DEMO_PASSWORD` 或綁定 LINE 管理員。
 - `/privacy` 會顯示外部 AI 是否啟用。未啟用時 LINE 問答改以本機關鍵字檢索回覆知識庫原文，功能不中斷。
-- 圖文選單（`app/services/rich_menu.py`、`app/static/richmenu/*.png`）有變更時，暫時設 `RICH_MENU_REBUILD_ENABLED=true`，以管理員身分呼叫 `POST /api/system/rich-menu/install`，確認 `cutover_complete: true` 後改回 `false`。
+- 圖文選單（`app/services/rich_menu.py`、`app/static/richmenu/*.png`）有變更時，「系統狀態」會顯示「LINE 圖文選單：舊版」，按列上的「重裝 LINE 選單」即可。要鎖住重裝時設 `RICH_MENU_REBUILD_ENABLED=false`。
 - 新的 LINE 訊息格式上線前，用 `https://api.line.me/v2/bot/message/validate/reply`（或 `/push`）驗證；格式錯誤時 LINE 會整則拒收，使用者什麼都收不到。
 
 ## 稽核與故障行為

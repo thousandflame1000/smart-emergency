@@ -100,7 +100,7 @@ def checks(db: Session) -> list[dict]:
     mode = auth_mode()
     auth_detail = {"open": "未設保護，任何人都能開後台", "password": "展演密碼保護", "line-admin": "LINE 管理員登入"}[mode]
     out.append(_item("auth", "後台登入保護", "ok" if mode != "open" else ("error" if production else "warn"), auth_detail,
-                     "在 Railway 設 DEMO_PASSWORD，或讓管理員在 LINE 傳「後台」完成綁定。"))
+                     "在 Railway 設 ADMIN_LINE_LOGIN=true：管理員在 LINE 按「開啟後台」一鍵登入，不用密碼（也可改設 DEMO_PASSWORD）。"))
 
     line = _line_check()
     out.append(line)
