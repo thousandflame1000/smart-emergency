@@ -108,7 +108,6 @@ button { font:inherit; }
     { id: 'members', label: '長者管理', icon: '🧓', view: CONSOLE, page: 'page-elderly' },
     { id: 'volunteers', label: '志工 / 家屬', icon: '🙋', view: CONSOLE, page: 'page-volunteers' },
     { id: 'relations', label: '照護關係', icon: '🔗', view: CONSOLE, page: 'page-relations' },
-    { id: 'zones', label: '分區', icon: '🗺️', view: CONSOLE, page: 'page-zones' },
     { id: 'audit', label: '操作紀錄', icon: '🧾', view: CONSOLE, page: 'page-audit' },
     { sec: '知識' },
     { id: 'ai', label: 'AI 助手', icon: '🤖', view: DASH, page: 'ai-page' },
@@ -142,6 +141,7 @@ button { font:inherit; }
     b.appendChild(icon); b.appendChild(label);
     if (item.id === 'workspace') {
       var count = document.createElement('span'); count.className = 'nav-count'; count.id = 'workspace-count'; count.hidden = true;
+      count.setAttribute('aria-hidden', 'true');
       b.appendChild(count);
     }
     b.addEventListener('click', function () { go(item.id); setNav(false); });
@@ -184,7 +184,7 @@ button { font:inherit; }
       mobilePill.classList.toggle('emergency', emergency);
       document.getElementById('emergency-banner').hidden = !emergency;
       var count = document.getElementById('workspace-count');
-      if (count) { count.hidden = !s.open_needs; count.textContent = s.open_needs || ''; count.title = '待處理需求 ' + (s.open_needs || 0) + ' 筆'; }
+      if (count) { count.hidden = !s.open_needs; count.textContent = s.open_needs || ''; var ws = count.parentNode; if (ws) ws.title = '事件處置工作區' + (s.open_needs ? '（待處理需求 ' + s.open_needs + ' 筆）' : ''); }
       document.getElementById('mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       document.getElementById('mobile-mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       pill.setAttribute('aria-label', emergency ? '目前為緊急模式，按下可解除' : '目前為日常模式，按下可啟動緊急模式');
