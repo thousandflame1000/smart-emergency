@@ -40,3 +40,14 @@ def test_line_admin_actions_are_logged_too(db, line_outbox):
     assert set(rows) == {"求救已處理", "核准派遣"}
     assert rows["求救已處理"].actor_label == "管理員小張" and rows["求救已處理"].status_code == 200
     assert rows["核准派遣"].status_code == 409
+
+
+def test_emergency_broadcast_points_to_supply_lookup(db, line_outbox):
+    from app.routers.dashboard import broadcast_mode_change
+    from tests.test_line_hardening import mk
+    mk(db, "居民甲", ["elderly"], "U-b1")
+    mk(db, "停用", ["elderly"], "U-b2", is_active=False)
+    assert broadcast_mode_change("emergency") == 1
+    kind, to, message = line_outbox.sent[-1]
+    assert to == "U-b1" and "查詢物資" in message.text
+    assert [i.action.text for i in message.quick_reply.items] == ["查詢物資", "需要幫忙"]

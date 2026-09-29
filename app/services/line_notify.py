@@ -480,6 +480,14 @@ def reply_text_with_commands(reply_token: str, text: str, commands: list[tuple[s
     _get_api().reply_message(ReplyMessageRequest(reply_token=reply_token, messages=[message]))
 
 
+def send_text_with_commands(line_uid: str, text: str, commands: list[tuple[str, str]]) -> None:
+    """Push variant of reply_text_with_commands."""
+    from linebot.v3.messaging import MessageAction, QuickReply, QuickReplyItem
+    message = TextMessage(text=text, quick_reply=QuickReply(items=[
+        QuickReplyItem(action=MessageAction(label=label, text=command)) for label, command in commands]))
+    _get_api().push_message(PushMessageRequest(to=line_uid, messages=[message]))
+
+
 def send_text_with_location_prompt(line_uid: str, text: str) -> None:
     """Push variant of the location quick-reply, for confirmations sent after a web form."""
     from linebot.v3.messaging import LocationAction, QuickReply, QuickReplyItem

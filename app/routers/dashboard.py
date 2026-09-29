@@ -189,6 +189,39 @@ def list_alerts(db: Session = Depends(get_db)):
     ]
 
 
+EMERGENCY_BROADCAST = ("🚨 社區緊急模式啟動\n\n"
+                       "請保持冷靜，確認自身安全。\n"
+                       "找最近的避難所或物資點：按「查詢物資」。\n"
+                       "需要協助：按「需要幫忙」；缺物資請傳「需要水」「需要食物」等。\n"
+                       "生命危險請直接撥打 119。")
+NORMAL_BROADCAST = "✅ 緊急模式已解除\n\n社區恢復日常模式。\n感謝所有志工的協助！"
+
+
+def broadcast_mode_change(mode: str) -> int:
+    """在背景執行緒發送，自己開 session（請求的 session 回應後就關了）。回傳成功人數。"""
+    import logging
+    from app.database import SessionLocal
+    from app.services.line_notify import send_text, send_text_with_commands
+    log = logging.getLogger(__name__)
+    db = SessionLocal()
+    try:
+        uids = [u.line_uid for u in db.query(User).filter(User.line_uid.isnot(None), User.is_active.is_(True)).all()]
+    finally:
+        db.close()
+    sent = 0
+    for uid in uids:
+        try:
+            if mode == "emergency":
+                send_text_with_commands(uid, EMERGENCY_BROADCAST, [("📦 查詢物資", "查詢物資"), ("🆘 需要幫忙", "需要幫忙")])
+            else:
+                send_text(uid, NORMAL_BROADCAST)
+            sent += 1
+        except Exception:
+            log.warning("mode broadcast failed for one user", exc_info=True)
+    log.info("mode broadcast (%s): %s/%s sent", mode, sent, len(uids))
+    return sent
+
+
 @router.post("/mode")
 @limiter.limit("5/minute")
 def set_mode(request: Request, mode: str, db: Session = Depends(get_db)):
@@ -212,31 +245,7 @@ def set_mode(request: Request, mode: str, db: Session = Depends(get_db)):
     # 模式有變化才廣播
     if old_mode != mode:
         import threading
-        def _broadcast():
-            try:
-                from app.services.line_notify import send_text
-                all_users = db.query(User).filter(
-                    User.line_uid != None,
-                    User.is_active == True,
-                ).all()
-                if mode == "emergency":
-                    msg = ("🚨 社區緊急模式啟動\n\n"
-                           "請保持冷靜，確認自身安全。\n"
-                           "如需協助請傳「需要幫忙」；物資不夠請傳「需要水」「需要食物」等。\n"
-                           "生命危險請直接撥打 119。\n"
-                           "管理員將持續更新資訊。")
-                else:
-                    msg = ("✅ 緊急模式已解除\n\n"
-                           "社區恢復日常模式。\n"
-                           "感謝所有志工的協助！")
-                for u in all_users:
-                    try:
-                        send_text(u.line_uid, msg)
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-        threading.Thread(target=_broadcast, daemon=True).start()
+        threading.Thread(target=broadcast_mode_change, args=(mode,), daemon=True).start()
 
     return {"mode": mode, "message": f"已切換為{'緊急' if mode == 'emergency' else '日常'}模式"}
 
