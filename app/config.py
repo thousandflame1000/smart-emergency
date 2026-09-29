@@ -56,6 +56,14 @@ class Settings(BaseSettings):
     # 以前還要到 Railway 暫時打開這個開關，太繞；需要鎖住時設 false。
     RICH_MENU_REBUILD_ENABLED: bool = True
 
+    # LINE 裡全螢幕開啟的 App（LIFF）。ID 不是機密；前段數字就是 LINE Login channel ID，
+    # 伺服器用它向 LINE 驗證 ID token。清空就回到只有聊天室按鈕的模式。
+    LIFF_ID: str = "2011793999-3QbSnXoe"
+
+    @property
+    def LINE_LOGIN_CHANNEL_ID(self) -> str:
+        return self.LIFF_ID.split("-", 1)[0] if self.LIFF_ID else ""
+
     # 機器人發給使用者的網頁表單連結要用的對外網址。
     PUBLIC_BASE_URL: str = "https://smart-emergency-production-d744.up.railway.app"
 

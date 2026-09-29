@@ -70,6 +70,21 @@ def send_daily_checkins() -> None:
         db.close()
 
 
+def record_ok(db: Session, user) -> None:
+    """長者主動回報平安。今天的打卡存在就更新；還沒有（例如早上 8 點前先回報，或排程沒發）
+    就直接記一筆，之前按了「我很好」卻什麼都沒存，畫面還是「今天還沒回報」。"""
+    row = db.query(DailyCheckin).filter(DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw()).first()
+    if row is None:
+        if not user.has_role("elderly"):
+            return
+        row = DailyCheckin(elderly_id=user.id, date=today_tw(), status="pending")
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    if row.status in ("pending", "no_response"):
+        mark_checkin(str(row.id), "ok", db)
+
+
 def mark_checkin(checkin_id: str, status: str, db: Session) -> DailyCheckin | None:
     """長者按下按鈕後更新打卡狀態"""
 

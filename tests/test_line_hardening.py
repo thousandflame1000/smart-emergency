@@ -1310,8 +1310,10 @@ def test_menu_buttons_are_silent_and_work_for_brand_new_users(db, line_outbox):
     """選單按鈕不在聊天室代打字（postback），第一次就直接按選單的人也要被自動註冊並得到回應。"""
     from app.services.rich_menu import MENUS, _request
     for name in MENUS:
-        assert all(area.action.type == "postback" and area.action.data.startswith("cmd=")
-                   for area in _request(name).areas)
+        for area in _request(name).areas:
+            assert (area.action.type == "postback" and area.action.data.startswith("cmd=")) or                    (area.action.type == "uri" and area.action.uri.startswith("https://liff.line.me/"))
+    resident = {a.action.label: a.action for a in _request("鄰里守望-成員").areas}
+    assert resident["緊急求助"].type == "postback" and resident["回報平安"].type == "postback", "救命與打卡不能依賴網頁"
     press("U-first-tap", "cmd=查詢物資")
     assert db.query(User).filter(User.line_uid == "U-first-tap").first() is not None
     assert any("請先分享位置" in t for t in replies(line_outbox))

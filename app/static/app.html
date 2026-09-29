@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<title>鄰里守望</title>
+<style>
+:root{--bg:#f3f6f3;--card:#fff;--ink:#17201c;--muted:#5f6c65;--line:#dde4df;--green:#13795b;--green-soft:#e6f3ee;
+  --red:#c9364b;--red-soft:#fdecef;--amber:#9a6500;--amber-soft:#fff5e0;--blue:#2471a3;--radius:14px}
+*{box-sizing:border-box;margin:0}
+body{background:var(--bg);color:var(--ink);font:17px/1.55 "Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  padding-bottom:calc(76px + env(safe-area-inset-bottom));-webkit-tap-highlight-color:transparent}
+button,a.btn{font:inherit;cursor:pointer}
+header{position:sticky;top:0;z-index:5;background:var(--green);color:#fff;padding:14px 18px 16px}
+header h1{font-size:20px;font-weight:800}header p{font-size:14px;opacity:.9;margin-top:2px}
+.banner{background:var(--red);color:#fff;font-weight:700;padding:10px 18px;font-size:15px}
+main{padding:14px 14px 8px}
+.view[hidden]{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
+.card h2{font-size:17px;margin-bottom:8px}
+.muted{color:var(--muted);font-size:15px}
+.status{display:flex;align-items:center;gap:12px}
+.status .dot{width:14px;height:14px;border-radius:50%;background:#b8c3bc;flex:none}
+.status.ok .dot{background:var(--green)}.status.warn .dot{background:var(--amber)}.status.bad .dot{background:var(--red)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.big{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;min-height:108px;padding:16px;border:0;
+  border-radius:var(--radius);color:#fff;text-align:left;text-decoration:none;font-weight:800;font-size:19px}
+.big small{display:block;font-weight:500;font-size:14px;opacity:.92;margin-top:4px}
+.big .ic{font-size:28px;line-height:1}
+.b-green{background:var(--green)}.b-amber{background:#b7791f}.b-red{background:var(--red)}.b-blue{background:var(--blue)}
+.wide{grid-column:1 / -1;min-height:84px;flex-direction:row;align-items:center;justify-content:flex-start;gap:16px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:46px;padding:10px 16px;border-radius:10px;
+  border:1px solid var(--line);background:#fff;color:var(--ink);text-decoration:none;font-weight:700;font-size:16px}
+.btn.primary{background:var(--green);border-color:var(--green);color:#fff}
+.btn.full{width:100%}
+.row-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.place{border-left:5px solid var(--green)}.place.emg{border-left-color:var(--red)}
+.place .name{font-weight:800;font-size:18px}.place .meta{color:var(--muted);font-size:15px;margin-top:2px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.chip{border:1px solid var(--line);background:#fff;border-radius:18px;padding:8px 14px;font-size:15px}
+label.field{display:block;font-weight:700;margin-bottom:6px}
+textarea{width:100%;min-height:84px;padding:12px;border:1px solid var(--line);border-radius:10px;font:inherit;resize:vertical}
+.answer{white-space:pre-wrap;line-height:1.75}
+.item{padding:12px 0;border-top:1px solid var(--line)}.item:first-of-type{border-top:0}
+.item strong{font-size:17px}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(4,1fr);background:#fff;
+  border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs button{border:0;background:none;padding:9px 0 10px;color:var(--muted);font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button .ic{font-size:23px;line-height:1.1}
+nav.tabs button[aria-current="page"]{color:var(--green)}
+.toast{position:fixed;left:14px;right:14px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:20;background:#17201c;color:#fff;
+  border-radius:12px;padding:14px 16px;font-size:16px;white-space:pre-wrap;box-shadow:0 6px 24px #0004}
+.toast[hidden]{display:none}
+dialog{border:0;border-radius:18px;padding:22px;max-width:360px;width:calc(100% - 36px)}
+dialog::backdrop{background:#0008}
+dialog h2{font-size:21px;margin-bottom:8px}
+.center{text-align:center;padding:40px 18px}
+</style>
+</head>
+<body>
+<header><h1 id="hello">鄰里守望</h1><p id="subtitle">社區照護與應變</p></header>
+<div class="banner" id="emergency" hidden>🚨 社區緊急模式中：先確認自身安全，有危險請按「需要幫忙」或撥 119</div>
+
+<main>
+  <div id="loading" class="center muted">載入中…</div>
+
+  <section class="view" id="view-home" hidden>
+    <div class="card"><div class="status" id="today"><span class="dot"></span><div><strong id="today-title">今天還沒回報</strong><div class="muted" id="today-sub">每天早上按一下「我很好」就可以</div></div></div></div>
+    <div class="grid">
+      <button class="big b-green" id="btn-ok"><span class="ic">✅</span><span>我很好<small>回報今天平安</small></span></button>
+      <button class="big b-amber" id="btn-unwell"><span class="ic">🤒</span><span>不舒服<small>家人會收到通知</small></span></button>
+      <button class="big b-red wide" id="btn-sos"><span class="ic">🆘</span><span>需要幫忙<small>通知家人與管理員，會先跟你確認</small></span></button>
+      <a class="big b-blue" href="/f/need" id="btn-need"><span class="ic">📝</span><span>申請物資<small>水、食物、藥品</small></span></a>
+      <button class="big b-green" data-go="nearby"><span class="ic">🧭</span><span>找避難所<small>附近的物資據點</small></span></button>
+    </div>
+    <div class="card" id="volunteer-card" hidden><h2>志工</h2><p class="muted">接到的任務、回報送達都在「我的」</p>
+      <div class="row-actions"><button class="btn primary" data-go="me">查看我的任務</button></div></div>
+  </section>
+
+  <section class="view" id="view-nearby" hidden>
+    <div class="card"><h2>附近的避難所與物資</h2>
+      <p class="muted" id="nearby-hint">用手機定位找最近的地方</p>
+      <div class="row-actions"><button class="btn primary full" id="btn-locate">📍 用我現在的位置</button></div></div>
+    <div id="nearby-list"></div>
+    <p class="muted" style="font-size:14px;padding:0 4px 8px">距離為直線估算，實際路況以現場為準。</p>
+  </section>
+
+  <section class="view" id="view-ask" hidden>
+    <div class="card"><h2>急救與照護問答</h2>
+      <label class="field" for="question">問題</label>
+      <textarea id="question" maxlength="500"></textarea>
+      <div class="chips" id="samples"></div>
+      <button class="btn primary full" id="btn-ask">送出問題</button></div>
+    <div class="card" id="answer-card" hidden><div class="answer" id="answer"></div><p class="muted" id="sources" style="margin-top:10px"></p></div>
+  </section>
+
+  <section class="view" id="view-me" hidden>
+    <div class="card"><h2>我的需求</h2><div id="me-needs"></div></div>
+    <div class="card" id="me-tasks-card" hidden><h2>我的任務</h2><div id="me-tasks"></div></div>
+    <div class="card"><h2>我的家人</h2><div id="me-family"></div>
+      <div class="row-actions"><button class="btn primary" id="btn-invite">👨‍👩‍👧 邀請家人</button></div></div>
+    <div class="card"><h2>我的資料</h2><p class="muted">姓名、電話、地址，志工靠這些找到你</p>
+      <div class="row-actions"><a class="btn" href="/f/profile">編輯我的資料</a></div></div>
+  </section>
+</main>
+
+<nav class="tabs" aria-label="主選單" hidden>
+  <button data-tab="home"><span class="ic">🏠</span>首頁</button>
+  <button data-tab="nearby"><span class="ic">🧭</span>物資</button>
+  <button data-tab="ask"><span class="ic">💬</span>問答</button>
+  <button data-tab="me"><span class="ic">👤</span>我的</button>
+</nav>
+
+<div class="toast" id="toast" role="status" hidden></div>
+<dialog id="sos-dialog">
+  <h2>確定要求救嗎？</h2>
+  <p class="muted">會立刻通知你的家人與社區管理員。<br>有生命危險請直接撥 <strong>119</strong>。</p>
+  <div class="row-actions">
+    <button class="btn" id="sos-cancel">取消</button>
+    <button class="btn primary" id="sos-confirm" style="background:var(--red);border-color:var(--red)">對，我需要幫忙</button>
+  </div>
+</dialog>
+
+<script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script>
+(function () {
+  var LIFF_ID = '{{LIFF_ID}}';
+  var $ = function (id) { return document.getElementById(id); };
+  var me = null;
+
+  function el(tag, text, cls) { var n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; }
+  function toast(text) { var t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(function () { t.hidden = true; }, 4500); }
+  function api(path, body) {
+    return fetch(path, body === undefined ? { credentials: 'same-origin' } :
+      { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) {
+        if (!r.ok) throw new Error(d.detail && typeof d.detail === 'string' ? d.detail : (d.error || '連線失敗，請稍後再試'));
+        return d; }); });
+  }
+  function fail(text) { $('loading').hidden = false; $('loading').textContent = text; }
+
+  // ── 分頁 ──
+  var loaded = {};
+  function show(tab) {
+    ['home', 'nearby', 'ask', 'me'].forEach(function (name) {
+      $('view-' + name).hidden = name !== tab;
+      var b = document.querySelector('[data-tab="' + name + '"]');
+      if (name === tab) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+    });
+    window.scrollTo(0, 0);
+    if (tab === 'nearby' && !loaded.nearby) loadNearby();
+    if (tab === 'me') loadMe();
+  }
+  document.querySelectorAll('[data-tab]').forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.tab); }); });
+  document.querySelectorAll('[data-go]').forEach(function (b) { b.addEventListener('click', function () { show(b.dataset.go); }); });
+
+  // ── 首頁 ──
+  var TODAY = {
+    ok: ['ok', '今天已回報平安', '謝謝你，家人不會收到未回應通知'],
+    confirmed_safe: ['ok', '家人已確認你平安', ''],
+    unwell: ['warn', '今天回報了身體不舒服', '家人已收到通知；變嚴重請按「需要幫忙」'],
+    help_needed: ['bad', '已送出求救', '家人和管理員都收到通知了，請保持手機暢通'],
+    no_response: ['warn', '今天還沒回報', '按「我很好」讓家人放心'],
+    pending: ['warn', '今天還沒回報', '按「我很好」讓家人放心']
+  };
+  function renderHome() {
+    var s = TODAY[me.checkin] || ['', '今天還沒回報', '每天早上按一下「我很好」就可以'];
+    $('today').className = 'status ' + s[0]; $('today-title').textContent = s[1]; $('today-sub').textContent = s[2];
+    $('hello').textContent = me.name ? me.name + '，你好' : '鄰里守望';
+    $('emergency').hidden = !me.emergency;
+    $('volunteer-card').hidden = !me.is_volunteer;
+  }
+  function refreshMe() { return api('/app/api/me').then(function (d) { me = d; renderHome(); }); }
+  $('btn-ok').addEventListener('click', function () {
+    api('/app/api/checkin', { status: 'ok' }).then(function (d) { toast(d.message); return refreshMe(); }).catch(function (e) { toast(e.message); });
+  });
+  $('btn-unwell').addEventListener('click', function () {
+    api('/app/api/checkin', { status: 'unwell' }).then(function (d) { toast(d.message); return refreshMe(); }).catch(function (e) { toast(e.message); });
+  });
+  $('btn-sos').addEventListener('click', function () { $('sos-dialog').showModal(); });
+  $('sos-cancel').addEventListener('click', function () { $('sos-dialog').close(); });
+  $('sos-confirm').addEventListener('click', function () {
+    $('sos-dialog').close();
+    api('/app/api/sos', {}).then(function (d) { toast(d.message); return refreshMe(); }).catch(function (e) { toast(e.message + '\n有生命危險請直接撥 119'); });
+  });
+
+  // ── 物資 ──
+  function renderPlaces(d) {
+    var list = $('nearby-list'); list.innerHTML = '';
+    if (!d.has_location) { $('nearby-hint').textContent = '按下方按鈕用手機定位，找最近的避難所、衛生所與物資點'; return; }
+    $('nearby-hint').textContent = d.emergency ? '緊急模式：先列出避難所、消防分隊與衛生所' : '依距離由近到遠';
+    if (!d.points.length) { list.appendChild(el('div', '附近還沒有登記的據點。緊急時請撥 119。', 'card muted')); return; }
+    d.points.forEach(function (p) {
+      var c = el('div', null, 'card place' + (p.emergency ? ' emg' : ''));
+      c.appendChild(el('div', p.name, 'name'));
+      c.appendChild(el('div', p.type + '・約 ' + p.km + ' 公里', 'meta'));
+      if (p.supplies) c.appendChild(el('div', p.supplies, 'meta'));
+      if (p.capacity) c.appendChild(el('div', '收容 ' + p.load + '/' + p.capacity + ' 人', 'meta'));
+      if (p.hours) c.appendChild(el('div', '開放 ' + p.hours, 'meta'));
+      var row = el('div', null, 'row-actions');
+      var nav = el('a', '🧭 導航', 'btn primary'); nav.href = p.navigate; nav.target = '_blank'; nav.rel = 'noopener'; row.appendChild(nav);
+      if (p.tel) { var call = el('a', '📞 ' + p.phone, 'btn'); call.href = p.tel; row.appendChild(call); }
+      c.appendChild(row); list.appendChild(c);
+    });
+  }
+  function loadNearby() { loaded.nearby = true; api('/app/api/nearby').then(renderPlaces).catch(function (e) { toast(e.message); }); }
+  $('btn-locate').addEventListener('click', function () {
+    if (!navigator.geolocation) { toast('這支手機無法定位，請在 LINE 聊天室用「＋」→「位置資訊」分享'); return; }
+    var btn = $('btn-locate'); btn.disabled = true; btn.textContent = '定位中…';
+    navigator.geolocation.getCurrentPosition(function (pos) {
+      api('/app/api/location', { lat: pos.coords.latitude, lng: pos.coords.longitude })
+        .then(function () { return api('/app/api/nearby'); }).then(renderPlaces)
+        .catch(function (e) { toast(e.message); })
+        .then(function () { btn.disabled = false; btn.textContent = '📍 用我現在的位置'; });
+    }, function () {
+      btn.disabled = false; btn.textContent = '📍 用我現在的位置';
+      toast('沒有取得定位權限。也可以在 LINE 聊天室用「＋」→「位置資訊」分享位置。');
+    }, { enableHighAccuracy: true, timeout: 12000 });
+  });
+
+  // ── 問答 ──
+  ['有人中風怎麼辦', 'CPR 步驟', '長者跌倒怎麼處理', '低血糖怎麼辦', '颱風前要準備什麼'].forEach(function (q) {
+    var c = el('button', q, 'chip'); c.type = 'button';
+    c.addEventListener('click', function () { $('question').value = q; ask(); });
+    $('samples').appendChild(c);
+  });
+  function ask() {
+    var q = $('question').value.trim(); if (!q) { toast('請先輸入問題'); return; }
+    var btn = $('btn-ask'); btn.disabled = true; btn.textContent = '查詢中…';
+    api('/app/api/ask', { question: q }).then(function (d) {
+      $('answer-card').hidden = false; $('answer').textContent = d.answer || '目前沒有相關資料，請撥 1966 或 119。';
+      $('sources').textContent = d.sources && d.sources.length ? '來源：' + d.sources.join('、') : '';
+    }).catch(function (e) { toast(e.message); }).then(function () { btn.disabled = false; btn.textContent = '送出問題'; });
+  }
+  $('btn-ask').addEventListener('click', ask);
+
+  // ── 我的 ──
+  function loadMe() {
+    api('/f/api/me').then(function (d) {
+      var needs = $('me-needs'); needs.innerHTML = '';
+      if (!d.needs.length) needs.appendChild(el('p', '還沒有提出過需求', 'muted'));
+      d.needs.forEach(function (n) {
+        var r = el('div', null, 'item'); r.appendChild(el('strong', n.type + '　' + n.status_zh));
+        r.appendChild(el('div', n.created + (n.description ? '　' + n.description : ''), 'muted')); needs.appendChild(r);
+      });
+      var fam = $('me-family'); fam.innerHTML = '';
+      if (!d.family.length) fam.appendChild(el('p', '還沒有綁定家人。邀請後，你沒回報平安或求救時家人會收到通知。', 'muted'));
+      d.family.forEach(function (f) { fam.appendChild(el('div', f.name + (f.relation ? '（' + f.relation + '）' : ''), 'item')); });
+      $('me-tasks-card').hidden = !d.tasks.length;
+      var tasks = $('me-tasks'); tasks.innerHTML = '';
+      d.tasks.forEach(function (t) {
+        var r = el('div', null, 'item'); r.appendChild(el('strong', t.description || '任務'));
+        r.appendChild(el('div', t.address || '', 'muted'));
+        var row = el('div', null, 'row-actions');
+        if (t.lat != null) { var nav = el('a', '🧭 導航', 'btn primary'); nav.href = 'https://www.google.com/maps/dir/?api=1&destination=' + t.lat + ',' + t.lng; nav.target = '_blank'; row.appendChild(nav); }
+        if (t.report_url) { var rep = el('a', '📝 回報現況', 'btn'); rep.href = t.report_url; row.appendChild(rep); }
+        r.appendChild(row); tasks.appendChild(r);
+      });
+    }).catch(function (e) { toast(e.message); });
+  }
+  $('btn-invite').addEventListener('click', function () {
+    api('/f/api/invite', {}).then(function (d) {
+      if (d.share) location.href = d.share; else toast('請家人加入官方帳號後傳：綁定 ' + d.code);
+    }).catch(function (e) { toast(e.message); });
+  });
+
+  // ── 啟動：LIFF 取得身分 → 伺服器驗證 → 開始 ──
+  function start(body) {
+    return api('/app/api/session', body).then(refreshMe).then(function () {
+      $('loading').hidden = true; document.querySelector('nav.tabs').hidden = false;
+      var go = new URLSearchParams(location.search).get('go');
+      if (go === 'need') { location.href = '/f/need'; return; }
+      show(['nearby', 'ask', 'me'].indexOf(go) >= 0 ? go : 'home');
+    });
+  }
+  var token = new URLSearchParams(location.hash.slice(1)).get('t');
+  if (token) {
+    history.replaceState(null, '', location.pathname + location.search);
+    start({ token: token }).catch(function (e) { fail(e.message); });
+  } else if (!window.liff) {
+    fail('請從 LINE 打開鄰里守望。');
+  } else {
+    liff.init({ liffId: LIFF_ID }).then(function () {
+      if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
+      return start({ id_token: liff.getIDToken() });
+    }).catch(function (e) { fail('無法確認身分：' + (e.message || e) + '\n請從 LINE 重新打開。'); });
+  }
+})();
+</script>
+</body>
+</html>

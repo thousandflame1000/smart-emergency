@@ -49,7 +49,7 @@ def _line_check() -> dict:
 
 def _menu_check() -> dict:
     """LINE 上的圖文選單是不是目前這一版；舊版時居民看不到新按鈕（例如「查詢物資」）。"""
-    from app.services.rich_menu import MENUS, _apis
+    from app.services.rich_menu import MENUS, _apis, _request
     label = "LINE 圖文選單"
     try:
         api, _ = _apis()
@@ -58,11 +58,12 @@ def _menu_check() -> dict:
         return _item("richmenu", label, "warn", "讀不到 LINE 上的選單", "確認上方 LINE 官方帳號是綠燈。")
     stale = []
     for name, spec in MENUS.items():
-        expected = [f"cmd={cell[4]}" for row in spec["rows"] for cell in row]
+        key = lambda action: getattr(action, "data", None) or getattr(action, "uri", None)  # noqa: E731
+        expected = [key(area.action) for area in _request(name).areas]
         menu = live.get(name)
-        # 舊版是「代打一句話」的按鈕（沒有 data），也算舊版
-        actual = [getattr(area.action, "data", None) for area in (menu.areas if menu else [])]
-        if sorted(actual) != sorted(expected):
+        # 舊版是「代打一句話」的按鈕（沒有 data 也沒有 App 連結），也算舊版
+        actual = [key(area.action) for area in (menu.areas if menu else [])]
+        if sorted(map(str, actual)) != sorted(map(str, expected)):
             stale.append(name.split("-")[-1])
     return _item("richmenu", label, "ok" if not stale else "warn",
                  "已是最新版" if not stale else f"{'、'.join(stale)}選單是舊版",

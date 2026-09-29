@@ -8,7 +8,7 @@ import logging
 import os
 
 from linebot.v3.messaging import (
-    ApiClient, Configuration, MessagingApi, MessagingApiBlob, PostbackAction,
+    ApiClient, Configuration, MessagingApi, MessagingApiBlob, PostbackAction, URIAction,
     RichMenuArea, RichMenuBounds, RichMenuBulkLinkRequest, RichMenuRequest, RichMenuSize,
 )
 
@@ -52,6 +52,23 @@ MENUS = {
 }
 
 
+# 這些按鈕直接打開 LINE 裡的全螢幕 App（LIFF）對應分頁；其餘是靜默按鈕。
+# 「緊急求助」「回報平安」刻意不走網頁：救命與打卡要一按就完成，不能等頁面載入。
+LIFF_TABS = {"查詢物資": "nearby", "申請物資": "need", "我的需求": "me"}
+
+
+def liff_url(tab: str = "home") -> str | None:
+    return f"https://liff.line.me/{settings.LIFF_ID}?go={tab}" if settings.LIFF_ID else None
+
+
+def menu_action(label: str, command: str):
+    url = liff_url(LIFF_TABS[command]) if command in LIFF_TABS else None
+    if url:
+        return URIAction(label=label, uri=url)
+    # 靜默按鈕：按了不會在聊天室冒出一句「我很好」，直接出結果，像 App 而不是對話框。
+    return PostbackAction(label=label, data=f"cmd={command}")
+
+
 def layout(rows):
     """回傳 [(x, y, w, h, cell)]，每列高度平分、列內寬度平分。"""
     out = []
@@ -78,8 +95,7 @@ def _request(name: str) -> RichMenuRequest:
     areas = [
         RichMenuArea(
             bounds=RichMenuBounds(x=x, y=y, width=w, height=h),
-            # 靜默按鈕：按了不會在聊天室冒出一句「我很好」，直接出結果，像 App 而不是對話框。
-            action=PostbackAction(label=cell[0], data=f"cmd={cell[4]}"),
+            action=menu_action(cell[0], cell[4]),
         )
         for x, y, w, h, cell in layout(spec["rows"])
     ]

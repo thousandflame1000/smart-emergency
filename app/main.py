@@ -21,7 +21,7 @@ from app.errors import http_exception_handler, validation_error_handler
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.demo_auth import DemoAuthMiddleware
-from app.routers import join_page, webform, linebot, dashboard, resources, rag, rehearsal, workspace, tasks, zones
+from app.routers import join_page, liff_app, webform, linebot, dashboard, resources, rag, rehearsal, workspace, tasks, zones
 # 確保所有 model 被 import，Base.metadata.create_all 才會建表
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
@@ -105,6 +105,7 @@ app.add_middleware(SlowAPIMiddleware)
 app.include_router(linebot.router,   prefix="/webhook",       tags=["LINE 機器人"])
 app.include_router(webform.router,   prefix="/f",             tags=["居民表單"])
 app.include_router(join_page.router, tags=["加入"])
+app.include_router(liff_app.router, tags=["LINE App"])
 app.include_router(dashboard.router, prefix="/api/dashboard", tags=["照護與管理"])
 app.include_router(resources.router, prefix="/api/resources", tags=["需求、物資與派遣"])
 app.include_router(rag.router,       prefix="/api/rag",       tags=["知識庫問答"])

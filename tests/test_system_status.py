@@ -105,9 +105,12 @@ def test_outdated_line_menu_is_spotted(monkeypatch):
             SimpleNamespace(name=name, areas=[SimpleNamespace(action=SimpleNamespace(data=f"cmd={t}")) for t in texts])
             for name, texts in texts_by_name.items()])
 
-    current = {name: [c[4] for row in spec["rows"] for c in row] for name, spec in rich_menu.MENUS.items()}
-    old = {name: [t for t in texts if t != "查詢物資"] + ["分享位置"] for name, texts in current.items()}
-    for live, level in ((old, "warn"), (current, "ok")):
-        api = SimpleNamespace(get_rich_menu_list=lambda live=live: menus(live))
+    def menus_from(builder):
+        return SimpleNamespace(richmenus=[SimpleNamespace(name=name, areas=builder(name)) for name in rich_menu.MENUS])
+    current = lambda name: rich_menu._request(name).areas  # noqa: E731
+    old = lambda name: [SimpleNamespace(action=SimpleNamespace(text=c[4]))  # noqa: E731
+                        for row in rich_menu.MENUS[name]["rows"] for c in row]
+    for builder, level in ((old, "warn"), (current, "ok")):
+        api = SimpleNamespace(get_rich_menu_list=lambda builder=builder: menus_from(builder))
         monkeypatch.setattr(rich_menu, "_apis", lambda api=api: (api, None))
         assert system_status._menu_check()["level"] == level

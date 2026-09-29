@@ -25,6 +25,7 @@ from app.services import dispatch
 from app.services.line_notify import reply_flex_message, reply_text
 from app.timeutil import now_utc, today_tw
 from app.validation import tel_uri
+from app.services.rich_menu import liff_url
 
 logger = logging.getLogger(__name__)
 
@@ -127,9 +128,10 @@ def _resident_center_cards(user: User) -> list[dict]:
     cards = [bubble(
         "居民服務", "#2471a3",
         ["先處理眼前需要；不確定需求類型時，選「申請需求」即可一次填寫。"],
-        [{"label": "申請需求", "text": "申請物資"},
-         {"label": "查看進度", "text": "我的需求"},
-         {"label": "我的資料", "text": "我的資料"}],
+        ([{"label": "📱 打開 App", "uri": liff_url()}] if liff_url() else [])
+        + [{"label": "申請需求", "text": "申請物資"},
+           {"label": "查看進度", "text": "我的需求"},
+           {"label": "我的資料", "text": "我的資料"}],
     )]
     if "family" in (user.roles or []):
         cards.append(bubble(

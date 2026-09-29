@@ -1121,12 +1121,7 @@ def _process_text(event, db, user, text) -> bool:
         return True
 
     if text in CHECKIN_OK_WORDS or (not intent["sos"] and _sounds_ok(user, text, db)):
-        from app.models.checkin import DailyCheckin
-        checkin = (db.query(DailyCheckin)
-                   .filter(DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw(),
-                           DailyCheckin.status.in_(["pending", "no_response"])).first())
-        if checkin:
-            checkin_svc.mark_checkin(str(checkin.id), "ok", db)
+        checkin_svc.record_ok(db, user)
         _say(event, "✅ 收到，今天也要保重喔！")
         return True
 
@@ -1270,6 +1265,24 @@ def _send_welcome(event, user: User) -> None:
         [{"label": "📇 填寫我的資料", "uri": form_url("profile", user.line_uid)}]))
 
 
+def save_location(db, user, lat: float, lng: float, address: str | None = None) -> tuple[int, int]:
+    """存下使用者座標；之前缺座標而永遠配不到的需求與物資順手補上。回 (補上的需求數, 補上的物資數)。"""
+    from app.models.need import CommunityNeed
+    from app.models.resource import CommunityResource
+    user.lat, user.lng = lat, lng
+    if address:
+        user.address = address
+    needs_fixed = (db.query(CommunityNeed)
+                   .filter(CommunityNeed.requester_id == user.id,
+                           CommunityNeed.status.in_(["open", "suggested"]), CommunityNeed.lat.is_(None))
+                   .update({"lat": lat, "lng": lng}, synchronize_session=False))
+    res_fixed = (db.query(CommunityResource)
+                 .filter(CommunityResource.owner_id == user.id, CommunityResource.lat.is_(None))
+                 .update({"lat": lat, "lng": lng}, synchronize_session=False))
+    db.commit()
+    return needs_fixed, res_fixed
+
+
 @handler.add(MessageEvent, message=LocationMessageContent)
 def handle_location(event: MessageEvent):
     """LINE 原生「分享位置」：點一下就拿到真實 GPS，不需要長者記得地址。"""
@@ -1280,22 +1293,8 @@ def handle_location(event: MessageEvent):
     if first_contact:
         user = _register_user(db, line_uid)
 
-    user.lat = event.message.latitude
-    user.lng = event.message.longitude
-    if event.message.address:
-        user.address = event.message.address
-
-    from app.models.need import CommunityNeed
-    from app.models.resource import CommunityResource
-    # 之前缺座標而永遠配不到的需求與物資，順手一起補上。
-    needs_fixed = (db.query(CommunityNeed)
-                   .filter(CommunityNeed.requester_id == user.id,
-                           CommunityNeed.status.in_(["open", "suggested"]), CommunityNeed.lat.is_(None))
-                   .update({"lat": user.lat, "lng": user.lng}, synchronize_session=False))
-    res_fixed = (db.query(CommunityResource)
-                 .filter(CommunityResource.owner_id == user.id, CommunityResource.lat.is_(None))
-                 .update({"lat": user.lat, "lng": user.lng}, synchronize_session=False))
-    db.commit()
+    needs_fixed, res_fixed = save_location(db, user, event.message.latitude, event.message.longitude,
+                                           event.message.address)
 
     notes = []
     if needs_fixed:
