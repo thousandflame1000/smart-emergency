@@ -34,7 +34,7 @@ button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--n
 .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th{padding:10px 14px;text-align:left;color:var(--muted);font-size:12px;background:#f8faf8;white-space:nowrap}td{padding:11px 14px;border-top:1px solid var(--line);font-size:14px}tbody tr:hover{background:#f8faf8}.muted{color:var(--muted)}
 .badge{display:inline-flex;align-items:center;min-height:23px;padding:2px 8px;border:1px solid;border-radius:3px;font-size:13px;font-weight:700}.b-ok{color:var(--ok);border-color:#9bcbbb;background:#edf8f4}.b-danger{color:var(--danger);border-color:#e8a8b2;background:#fff1f3}.b-warning{color:var(--warning);border-color:#e4c17a;background:#fff8e8}.b-muted{color:var(--muted);border-color:var(--line);background:#f4f6f4}
 .alert-list{max-height:520px;overflow:auto}.alert-row{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}.alert-row:first-child{border-top:0}.dot{width:8px;height:8px;border-radius:50%;background:var(--warning)}.dot.high{background:var(--danger)}.alert-row strong{font-size:14px}.alert-row p{margin-top:3px;color:var(--muted);font-size:13px}.alert-row time{color:var(--muted);font:12px var(--mono)}
-.search-field{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;white-space:nowrap}
+.search-field{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;white-space:nowrap}.pp-title{font-weight:700;margin-bottom:2px}
 .empty{padding:36px 18px;text-align:center;color:var(--muted)}.page-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.page-heading h2{font-size:16px}.page-heading p{margin-top:4px;color:var(--muted);font-size:13px}
 .trend-table td:not(:first-child),.trend-table th:not(:first-child){text-align:right;font-family:var(--mono)}
 .ask{max-width:900px}.query-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:16px}.query-row input{height:40px;border:1px solid var(--line);border-radius:4px;padding:0 12px}.primary{height:40px;border:0;border-radius:4px;background:var(--accent);color:#fff;padding:0 18px;font-weight:700;cursor:pointer}.primary:disabled{opacity:.55;cursor:wait}.answer{padding:16px;border-top:1px solid var(--line);line-height:1.75;white-space:pre-wrap}.sources{padding:12px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
@@ -383,6 +383,18 @@ async function openDrawer(elderlyId){
 }
 const POINT_COLOR={shelter:'#2c7fad',fire_station:'#c9364b',clinic:'#18765a',hospital:'#18765a'};
 let ovMap=null,ovLayers=null,ovEmergency=null,ovFitted=false;
+const SUPPLY_ZH={water:'飲用水',food:'食物',first_aid:'急救用品',shelter:'收容',vehicle:'交通',tool:'工具',other:'其他'};
+// 名稱、地址都是可編輯資料，一律用文字節點組，不拼 HTML。
+function pointPopup(p){
+  const box=document.createElement('div'),line=(text,cls)=>{const el=document.createElement('div');if(cls)el.className=cls;el.textContent=text;box.appendChild(el);return el;};
+  line(p.name,'pp-title');line(p.point_type_label+(p.address?' · '+p.address:''),'muted');
+  const supplies=Object.entries(p.supplies||{}).filter(([,v])=>v).map(([k,v])=>(SUPPLY_ZH[k]||k)+' '+v).join('、');
+  if(supplies)line(supplies);
+  if(p.capacity)line(`收容 ${p.current_load||0}/${p.capacity} 人`);
+  if(p.operating_hours)line('開放 '+p.operating_hours);
+  if(p.phone){const a=document.createElement('a');a.href='tel:'+p.phone.replace(/[^0-9+]/g,'');a.textContent='☎ '+p.phone;line('').appendChild(a);}
+  return box;
+}
 function renderOverviewMap(rows,points,emergency){
   if(!window.L){$('overview-map').innerHTML='<p class="empty">地圖元件載入失敗</p>';return;}
   if(!ovMap){
@@ -397,7 +409,7 @@ function renderOverviewMap(rows,points,emergency){
   const elderPts=rows.filter(r=>r.lat!==null&&r.lng!==null);
   elderPts.forEach(r=>{const m=dot(r.lat,r.lng,PIN[r.today_status]||'#9ca9a0','pin',(r.today_status==='help_needed'||r.today_status==='no_response')?22:16);m.bindTooltip(document.createTextNode(r.name+' · '+(statuses[r.today_status]||['未知'])[0]));m.on('click',()=>openDrawer(r.id));ovLayers.elders.addLayer(m);});
   const located=points.filter(p=>p.lat!==null&&p.lng!==null);
-  located.forEach(p=>{const m=dot(p.lat,p.lng,POINT_COLOR[p.point_type]||'#8a6d3b','pt',16);m.bindTooltip(document.createTextNode(p.name+' · '+p.point_type_label));(p.emergency?ovLayers.emergency:ovLayers.supply).addLayer(m);});
+  located.forEach(p=>{const m=dot(p.lat,p.lng,POINT_COLOR[p.point_type]||'#8a6d3b','pt',16);m.bindTooltip(document.createTextNode(p.name+' · '+p.point_type_label));m.bindPopup(()=>pointPopup(p));(p.emergency?ovLayers.emergency:ovLayers.supply).addLayer(m);});
   // 模式改變時才切圖層，平常保留使用者自己的勾選。
   if(ovEmergency!==emergency){ovEmergency=emergency;emergency?ovLayers.emergency.addTo(ovMap):ovLayers.emergency.remove();}
   $('map-layer-mode').textContent=emergency?'緊急圖層':'日常圖層';$('map-layer-mode').className='badge '+(emergency?'b-danger':'b-muted');
