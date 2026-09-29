@@ -52,6 +52,7 @@ Layer 2（資源點，固定設施、非稀缺）維持獨立逐筆比對，因�
 """
 import json
 import hashlib
+import logging
 import math
 from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
@@ -82,6 +83,8 @@ from app.services.inventory import (
 )
 from app.services.line_notify import send_task_message
 from app.services.outbox import OutboxService, finish_inline_delivery, send_text_reliably
+
+_log = logging.getLogger(__name__)
 
 
 # ──────────────────────────────────────────────────────────
@@ -1320,7 +1323,7 @@ def claim_need(need_id: str, user, db: Session) -> dict:
             buttons=[{"label": "↩ 撤銷這次接單", "data": f"action=admin_revoke&need_id={need.id}", "color": "#c0392b"}],
         )
     except Exception:
-        pass
+        _log.warning("notification side effect failed", exc_info=True)
     return {"message": "claimed", "need_id": need_id, "resource_name": resource.name}
 
 
@@ -1504,7 +1507,7 @@ def report_task(
                          if outcome == "cannot_go" else None),
             )
         except Exception:
-            pass
+            _log.warning("notification side effect failed", exc_info=True)
     return result
 
 

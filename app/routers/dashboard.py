@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -15,6 +16,8 @@ from app.models.need import CommunityNeed
 from app.models.config import SystemConfig
 from app.rate_limit import limiter
 from app.security import require_admin
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -395,7 +398,7 @@ def unlink_line(user_id: str, db: Session = Depends(get_db)):
             from app.services.rich_menu import _apis
             _apis()[0].unlink_rich_menu_id_from_user(old_uid)
         except Exception:
-            pass
+            logger.warning("notification side effect failed", exc_info=True)
     return {"message": "已解除綁定"}
 
 

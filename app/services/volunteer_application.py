@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import logging
+
 from datetime import UTC, datetime
 from typing import Any
 
@@ -15,6 +17,8 @@ from sqlalchemy.orm import Session
 
 from app.models.user import User
 from app.models.volunteer_application import VolunteerApplication
+
+_log = logging.getLogger(__name__)
 
 
 def _now() -> datetime:
@@ -56,7 +60,7 @@ def submit(
                      {"label": "婉拒", "data": f"action=admin_app&id={application.id}&d=reject"}],
         )
     except Exception:
-        pass
+        _log.warning("notification side effect failed", exc_info=True)
     return application
 
 
@@ -136,7 +140,7 @@ def decide(
                        "傳「我的物資」查看已登記項目。")
             notified = True
         except Exception:
-            pass
+            _log.warning("notification side effect failed", exc_info=True)
     else:
         db.commit()
         try:
@@ -146,6 +150,6 @@ def decide(
                        "如有疑問請直接聯繫社區管理員。")
             notified = True
         except Exception:
-            pass
+            _log.warning("notification side effect failed", exc_info=True)
 
     return {**serialize(application), "volunteer_notified": notified}

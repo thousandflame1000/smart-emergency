@@ -176,7 +176,7 @@ async def simulate_checkin(elderly_name: str):
                 send_checkin_message(elderly.line_uid, str(checkin.id))
                 line_sent = True
             except Exception:
-                pass
+                logger.warning("notification side effect failed", exc_info=True)
 
         return {
             "message": f"已為 {elderly_name} 建立今日打卡記錄"
@@ -1269,7 +1269,7 @@ def handle_location(event: MessageEvent):
         try:
             send_text(line_uid, _welcome_text(user.name))
         except Exception:
-            pass
+            logger.warning("notification side effect failed", exc_info=True)
 
 
 @handler.add(MessageEvent)
