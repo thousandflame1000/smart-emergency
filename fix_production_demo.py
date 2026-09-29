@@ -13,13 +13,21 @@
    (23.0–23.5)，相距約 120 公里，而緊急度 5 的媒合半徑只有 2 公里。
    「待派」卡與「查看詳情」都會是空的。
 3. admin 角色 0 人，所以 LINE 的決策中心選單沒有人拿得到。
+4. 應變據點全在台中，花東長者按「查詢物資」只會看到上百公里外的地方，
+   總覽的緊急圖層也是空的。補上花東各鄉鎮的避難所、消防分隊與衛生所。
+
+線上設了 DEMO_PASSWORD 之後，執行前先設同名環境變數，腳本會帶著登入。
 
 用法：
   python fix_production_demo.py --plan    只印出會改什麼
   python fix_production_demo.py           實際送出
+  python fix_production_demo.py --points-only [--plan]
+                                          只補花東應變據點，不動任何人或物資
 """
 import argparse
+import base64
 import json
+import os
 import sys
 import urllib.error
 import urllib.parse
@@ -51,6 +59,9 @@ VOL_NAMES = ["鄭建宏", "謝佳蓉", "洪志明", "邱雅婷"]
 def call(method, path, params=None):
     url = BASE + path + ("?" + urllib.parse.urlencode(params, doseq=True) if params else "")
     req = urllib.request.Request(url, method=method)
+    if os.environ.get("DEMO_PASSWORD"):
+        token = base64.b64encode(f"demo:{os.environ['DEMO_PASSWORD']}".encode()).decode()
+        req.add_header("Authorization", "Basic " + token)
     try:
         with urllib.request.urlopen(req, timeout=40) as r:
             return json.loads(r.read().decode("utf-8") or "{}")
@@ -76,6 +87,26 @@ def rows(d, *keys):
 def place_for(lat):
     """離這個緯度最近的行政區。"""
     return min(PLACES, key=lambda p: abs(p[0] - (lat or 0)))
+
+
+# 花東應變據點：座標為鄉鎮概略位置，地址到路名為止。光復、瑞穗、鳳林沿用決賽示範資料，
+# 另補主角所在的玉里。
+YULI_FACILITIES = [
+    ("衛生福利部玉里醫院", "hospital", 23.3339, 121.3131, "花蓮縣玉里鎮新興街"),
+    ("玉里鎮衛生所", "clinic", 23.3345, 121.3180, "花蓮縣玉里鎮中華路"),
+    ("花蓮縣消防局玉里分隊", "fire_station", 23.3358, 121.3163, "花蓮縣玉里鎮中華路"),
+    ("玉里國小", "shelter", 23.3368, 121.3150, "花蓮縣玉里鎮中山路二段"),
+    ("玉里國中", "shelter", 23.3297, 121.3187, "花蓮縣玉里鎮"),
+    ("玉里鎮公所", "government", 23.3351, 121.3171, "花蓮縣玉里鎮康樂街"),
+]
+
+
+def facility_changes() -> list:
+    from seed_finals_demo import FACILITIES
+    existing = {p.get("name") for p in rows(get("/api/resources/points"), "points")}
+    return [("new_point", None, "（新增據點）", {"name": name, "point_type": ptype, "lat": lat, "lng": lng,
+                                              "address": addr, "note": "示範資料：座標為鄉鎮概略位置"})
+            for name, ptype, lat, lng, addr in YULI_FACILITIES + list(FACILITIES) if name not in existing]
 
 
 def plan_changes():
@@ -208,9 +239,10 @@ def plan_changes():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--plan", action="store_true")
+    ap.add_argument("--points-only", action="store_true", help="只新增應變據點，不修改使用者與物資")
     args = ap.parse_args()
 
-    changes = plan_changes()
+    changes = facility_changes() if args.points_only else plan_changes() + facility_changes()
     if not changes:
         print("沒有需要修改的項目。")
         return
@@ -229,6 +261,8 @@ def main():
     for kind, ident, old, fields in changes:
         if kind == "new_resource":
             res = call("POST", "/api/resources/", fields)
+        elif kind == "new_point":
+            res = call("POST", "/api/resources/points", fields)
         else:
             path = (f"/api/dashboard/users/{ident}" if kind == "user"
                     else f"/api/resources/{ident}")
