@@ -74,7 +74,7 @@ def test_escalate_continues_after_one_contact_send_fails(db, monkeypatch):
 
     sent_to = []
 
-    def fake_send(line_uid, elderly_name, alert_type, checkin_id):
+    def fake_send(line_uid, elderly_name, alert_type, checkin_id, elderly=None):
         if line_uid == "Ubad":
             raise Exception("LINE API 錯誤：無效的使用者")
         sent_to.append(line_uid)

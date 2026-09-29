@@ -148,6 +148,7 @@ def _escalate(db: Session, checkin: DailyCheckin, alert_type: str, now: datetime
                 elderly_name=checkin.elderly.name,
                 alert_type=alert_type,
                 checkin_id=str(checkin.id),
+                elderly=checkin.elderly,
             )
         except Exception as exc:
             finish_inline_delivery(db, delivery_id, exc)

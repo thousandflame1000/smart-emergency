@@ -227,7 +227,9 @@ def send_alert_message(
     elderly_name: str,
     alert_type: str,
     checkin_id: str,
+    elderly=None,
 ) -> None:
+    """elderly：長者的 User；有電話給「撥打」、有座標給「導航」，家屬不必再去翻資料。"""
     messages = {
         "no_response_1h": (
             "⚠️ 關懷提醒",
@@ -291,6 +293,20 @@ def send_alert_message(
             ],
         },
     }
+    import re
+    phone = getattr(elderly, "phone", None)
+    if phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", phone):
+        flex["footer"]["contents"].insert(0, {
+            "type": "button", "style": "secondary", "height": "sm",
+            "action": {"type": "uri", "label": f"📞 撥打 {elderly_name}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", phone)},
+        })
+    if alert_type in ("no_response_3h", "help_needed") and getattr(elderly, "lat", None) is not None:
+        flex["footer"]["contents"].append({
+            "type": "button", "style": "link", "height": "sm",
+            "action": {"type": "uri", "label": "🧭 導航到住處",
+                       "uri": f"https://www.google.com/maps/dir/?api=1&destination={elderly.lat},{elderly.lng}"},
+        })
+    flex["footer"]["spacing"] = "sm"
     _get_api().push_message(PushMessageRequest(
         to=line_uid,
         messages=[_flex(body_text, flex)],

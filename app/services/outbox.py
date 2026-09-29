@@ -62,6 +62,7 @@ class LineOutboxDispatcher:
                 elderly_name=str(payload.get("elderly_name") or ""),
                 alert_type=str(payload.get("alert_type") or ""),
                 checkin_id=str(payload.get("checkin_id") or ""),
+                elderly=alert.elderly,
             )
             contact_id = str(payload.get("contact_id") or "")
             notified = [str(value) for value in (alert.notified_users or [])]
