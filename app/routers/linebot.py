@@ -323,6 +323,17 @@ def _looks_like_question(text: str) -> bool:
 # ──────────────────────────────────────────────
 # 一鍵求助
 # ──────────────────────────────────────────────
+def _sos_admin_buttons(user, sos_need) -> list[dict]:
+    """管理員收到求救時最先要做的是打電話，其次是知道人在哪。"""
+    buttons = [{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={sos_need.id}", "color": "#c0392b"}]
+    if user.phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", user.phone):
+        buttons.insert(0, {"label": f"📞 撥打 {user.name}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", user.phone),
+                           "color": "#c0392b"})
+    if sos_need.lat is not None and sos_need.lng is not None:
+        buttons.append({"label": "🧭 導航", "uri": f"https://www.google.com/maps/dir/?api=1&destination={sos_need.lat},{sos_need.lng}"})
+    return buttons
+
+
 def _trigger_sos(user, db) -> dict:
     """真的觸發緊急求助，並回報「實際上有誰被通知」。
 
@@ -383,7 +394,7 @@ def _trigger_sos(user, db) -> dict:
     admins = notify_admins(
         db,
         f"🆘 {user.name} 剛按下一鍵求助（{where}）。{'已' if created else '之前已'}建立緊急求助單，請立即聯繫確認。",
-        buttons=[{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={sos_need.id}", "color": "#c0392b"}],
+        buttons=_sos_admin_buttons(user, sos_need),
     )
     return {"contacts": contacts, "admins": admins, "created": created}
 

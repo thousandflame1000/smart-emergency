@@ -1294,3 +1294,13 @@ def test_unrecognised_message_offers_one_tap_commands_that_all_work(db, line_out
         line_outbox.sent.clear()
         say("U-fallback", command)
         assert not any("傳「幫助」可查看可用指令" in t for t in replies(line_outbox)), command
+
+
+def test_admin_sos_push_lets_them_call_and_navigate(db, line_outbox):
+    import json as _json
+    mk(db, "管理員", ["admin"], "U-sos-adm")
+    mk(db, "王奶奶", ["elderly"], "U-sos-eld", phone="0912345678", lat=23.67, lng=121.42)
+    press("U-sos-eld", "action=confirm_sos")
+    card = [m for kind, to, m in line_outbox.sent if kind == "push" and to == "U-sos-adm"][-1]
+    text = _json.dumps(card.contents.to_dict(), ensure_ascii=False)
+    assert "tel:0912345678" in text and "destination=23.67,121.42" in text and "admin_sos" in text
