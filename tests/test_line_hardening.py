@@ -1246,3 +1246,20 @@ def test_fall_reports_ask_for_rescue_but_fall_questions_get_the_sop(db, line_out
     say("U-fall", "我沒有跌倒")
     assert replies(line_outbox)[-1] != "緊急求助確認"
     assert asked == ["阿嬤跌倒了怎麼辦", "中風"]
+
+
+def test_elder_describing_feeling_unwell_in_own_words_alerts_family(db, line_outbox):
+    elder = mk(db, "王奶奶", ["elderly"], "U-unw")
+    fam = mk(db, "女兒", ["family"], "U-unw-fam")
+    db.add(CareRelation(elderly_id=elder.id, contact_id=fam.id, relation="family", notify_order=1)); db.commit()
+    say("U-unw", "今天頭好暈")
+    assert "已通知您的家人" in replies(line_outbox)[-1]
+    assert sent_to(line_outbox, "U-unw-fam"), "家人要收到通知"
+
+    for text in ("我沒有不舒服", "頭痛怎麼辦"):
+        line_outbox.sent.clear()
+        say("U-unw", text)
+        assert not any("已通知您的家人" in t or "已經回報過" in t for t in replies(line_outbox)), text
+    line_outbox.sent.clear()
+    say("U-unw", "頭暈快昏倒了")
+    assert replies(line_outbox)[-1] == "緊急求助確認", "有危險字眼時先確認求救"

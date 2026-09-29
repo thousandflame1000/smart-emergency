@@ -263,7 +263,7 @@ NEED_KEYWORDS = {
 }
 # 命中這些詞代表可能是人身安全事件：先跳確認卡，不直接建立需求。
 SOS_WORDS = ["需要幫忙", "救命", "緊急", "昏倒", "胸痛", "無法呼吸", "呼吸困難", "失去意識",
-             "流血不止", "大量出血", "起火", "火災", "著火"]
+             "流血不止", "大量出血", "起火", "火災", "著火", "喘不過氣"]
 # 長輩自己傳「我跌倒了」是求救，不是問問題；帶疑問詞的（跌倒了怎麼辦？）才交給知識庫。
 FALL_WORDS = ["跌倒", "摔倒", "跌跤", "摔跤", "爬不起來", "站不起來"]
 NEGATORS = ("不", "沒", "別", "免", "無需", "已經有", "已有")
@@ -997,6 +997,9 @@ FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安
                   "申請物資", "物資申請", "需要物資", "申請表單", "申請需求",
                   "接單", "可接任務", "找任務"} | set(NEARBY_WORDS)
 UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
+# 長輩不會照指令打字：「今天頭好暈」「有點發燒」也是在說身體不適，要讓家人知道。
+UNWELL_HINTS = ("不舒服", "不太舒服", "頭暈", "頭很暈", "頭好暈", "暈眩", "發燒", "頭痛", "頭好痛", "肚子痛", "胃痛",
+                "好痛", "很痛", "沒力氣", "全身無力", "吃不下", "拉肚子", "想吐")
 FIXED_COMMANDS |= line_ops.COMMAND_WORDS | set(UNWELL_WORDS)
 
 
@@ -1006,6 +1009,14 @@ def _is_known_command(text: str, intent: dict) -> bool:
         or bool(intent["needs"]) or bool(line_ops.BIND_RE.match(text)) or bool(line_ops.JOIN_RE.match(text))
         or any(text.startswith(p) for p in APPLY_PREFIXES + ["新增長者", "幫長者登記", "代辦長者", "登記長者", "我有"])
     )
+
+
+def _sounds_unwell(user, text: str) -> bool:
+    """居民用自己的話說身體不適（不是在發問、也不是否定句）。"""
+    if "elderly" not in (user.roles or []) or len(text) > 40 or any(h in text for h in QUESTION_HINTS):
+        return False
+    positive, _ = _find_positive(text, UNWELL_HINTS)
+    return positive
 
 
 def _process_text(event, db, user, text) -> bool:
@@ -1043,7 +1054,7 @@ def _process_text(event, db, user, text) -> bool:
         _say(event, "✅ 收到，今天也要保重喔！")
         return True
 
-    if text in UNWELL_WORDS:
+    if not intent["sos"] and (text in UNWELL_WORDS or _sounds_unwell(user, text)):
         _say(event, _report_unwell(user, db))
         return True
 
