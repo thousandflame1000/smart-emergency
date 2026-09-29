@@ -51,3 +51,32 @@ def test_emergency_broadcast_points_to_supply_lookup(db, line_outbox):
     kind, to, message = line_outbox.sent[-1]
     assert to == "U-b1" and "查詢物資" in message.text
     assert [i.action.text for i in message.quick_reply.items] == ["查詢物資", "需要幫忙"]
+
+
+def test_audit_log_speaks_chinese_and_skips_read_only_posts(db):
+    from app.services.admin_audit import describe, should_record
+    assert describe("POST", "/api/dashboard/mode?mode=emergency") == "啟動緊急模式"
+    assert describe("POST", "/api/resources/needs/abc-123/confirm_dispatch?expected_version=9f") == "核准派遣"
+    assert describe("POST", "/api/resources/needs") == "新增需求"
+    assert describe("PUT", "/api/workspaces/ws-1") == "儲存工作區"
+    assert describe("DELETE", "/api/resources/res-1") == "刪除物資"
+    assert describe("LINE", "求救已處理 need-1") == "求救已處理"
+    assert describe("POST", "/api/unknown/thing") == "/api/unknown/thing"
+    for path in ("/api/workspaces/analyze", "/api/workspaces/allocate", "/api/rag/query"):
+        assert not should_record("POST", path)
+    assert should_record("POST", "/api/workspaces/database-push")
+
+
+def test_every_write_endpoint_has_a_readable_action_name():
+    import re
+    from app.main import app
+    from app.services.admin_audit import describe, should_record
+    missing = []
+    for route in app.routes:
+        for method in getattr(route, "methods", set()) & {"POST", "PUT", "PATCH", "DELETE"}:
+            path = re.sub(r"\{[^}]+\}", "x1", route.path)
+            if path == "/api/dashboard/mode":
+                path += "?mode=emergency"
+            if should_record(method, path) and describe(method, path) == path:
+                missing.append(f"{method} {route.path}")
+    assert not missing, missing

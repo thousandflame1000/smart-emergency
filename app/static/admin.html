@@ -737,7 +737,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         <div class="card-header"><div class="card-title">操作紀錄</div><button class="btn btn-ghost btn-sm" onclick="loadAudit()">重新整理</button></div>
         <div class="table-wrap">
           <table class="tbl">
-            <thead><tr><th>時間</th><th>操作者</th><th>動作</th><th>路徑</th><th>結果</th></tr></thead>
+            <thead><tr><th>時間</th><th>操作者</th><th>來源</th><th>動作</th><th>結果</th></tr></thead>
             <tbody id="audit-tbody"></tbody>
           </table>
         </div>
@@ -3137,16 +3137,15 @@ async function deleteNeed(needId) {
   loadNeeds();
 }
 
-const AUDIT_METHOD = { POST: '新增／執行', PUT: '修改', PATCH: '修改', DELETE: '刪除', LINE: 'LINE 操作' };
 async function loadAudit() {
   const body = document.getElementById('audit-tbody');
   try {
     const rows = await fetch('/api/dashboard/audit?limit=200').then(r => r.json());
     body.innerHTML = rows.length ? rows.map(r => `<tr>
       <td class="muted">${esc(r.at ? new Date(r.at).toLocaleString('zh-TW') : '')}</td>
-      <td>${esc(r.actor)}</td><td>${esc(AUDIT_METHOD[r.method] || r.method)}</td>
-      <td class="muted" style="word-break:break-all">${esc(r.path)}</td>
-      <td><span class="badge ${r.status < 400 ? 'badge-green' : 'badge-red'}">${r.status}</span></td></tr>`).join('')
+      <td>${esc(r.actor)}</td><td class="muted">${r.method === 'LINE' ? 'LINE' : '後台'}</td>
+      <td title="${esc(r.path)}" style="word-break:break-all">${esc(r.action)}</td>
+      <td><span class="badge ${r.status < 400 ? 'badge-green' : 'badge-red'}">${r.status < 400 ? '成功' : '失敗'}</span></td></tr>`).join('')
       : '<tr><td colspan="5" class="muted">尚無紀錄</td></tr>';
   } catch (e) {
     body.innerHTML = '<tr><td colspan="5" class="muted">讀取失敗</td></tr>';
