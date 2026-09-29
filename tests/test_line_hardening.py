@@ -1282,3 +1282,15 @@ def test_elder_saying_fine_in_own_words_counts_as_check_in(db, line_outbox):
         say("U-notok", text)
         db.refresh(pending)
         assert pending.status != "ok", text
+
+
+def test_unrecognised_message_offers_one_tap_commands_that_all_work(db, line_outbox):
+    mk(db, "王奶奶", ["elderly"], "U-fallback")
+    say("U-fallback", "嗯嗯")
+    message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    commands = [item.action.text for item in message.quick_reply.items]
+    assert commands == ["我很好", "查詢物資", "需要幫忙", "幫助"]
+    for command in commands:
+        line_outbox.sent.clear()
+        say("U-fallback", command)
+        assert not any("傳「幫助」可查看可用指令" in t for t in replies(line_outbox)), command
