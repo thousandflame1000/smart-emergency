@@ -1042,8 +1042,14 @@ def _process_text(event, db, user, text) -> bool:
         return True
 
     if text in NEARBY_WORDS:
-        from app.services.nearby import nearby_text
-        _say(event, nearby_text(db, user, _get_mode(db) == "emergency"), ask_location=True)
+        from app.services.line_notify import reply_flex_message
+        from app.services.nearby import NO_POINTS_TEXT, missing_text, nearby_cards
+        missing = missing_text(user)
+        cards = None if missing else nearby_cards(db, user, _get_mode(db) == "emergency")
+        if cards:
+            reply_flex_message(event.reply_token, *cards, location_prompt=True)
+        else:
+            _say(event, missing or NO_POINTS_TEXT, ask_location=True)
         return True
 
     if text in ("分享位置", "傳位置", "更新位置"):
@@ -1259,7 +1265,9 @@ def _handle_task_button(event, db, user, action, need_id) -> None:
         elif result.get("error"):
             _say(event, "這筆任務已經不在您手上了，請以最新的任務訊息為準。")
         else:
-            _say(event, "🙋 已確認接單，謝謝您！求助的人已收到通知。路上小心，完成後請回報。")
+            reply_text_with_commands(event.reply_token,
+                                     "🙋 已確認接單，謝謝您！求助的人已收到通知。路上小心，完成後請回報。",
+                                     [("📋 導航與聯絡", "我的任務")])
         return
 
     if action == "task_delivered":

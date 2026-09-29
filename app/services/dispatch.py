@@ -1396,6 +1396,7 @@ def list_my_tasks(user, db: Session) -> list[dict]:
             "address": need.address or "地址未填", "resource_name": res.name,
             "dist_km": None if math.isinf(d) else round(d, 1), "lat": need.lat, "lng": need.lng,
             "accepted": str(need.id) in accepted,
+            "requester_phone": need.requester.phone if need.requester else None,
         })
     return out
 

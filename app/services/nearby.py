@@ -4,6 +4,7 @@
 發給所有人。緊急模式時先列應變據點（庇護所、消防分隊、衛生所、醫院）。
 """
 import json
+import re
 
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,7 @@ from app.services.geo import haversine_km
 
 SUPPLY_ZH = {"water": "飲用水", "food": "食物", "first_aid": "急救用品", "shelter": "收容",
              "vehicle": "交通", "tool": "工具", "other": "其他"}
+EMERGENCY_COLOR, SUPPLY_COLOR = "#c0392b", "#148f77"
 
 
 def nearest_points(db: Session, lat: float, lng: float, emergency: bool, limit: int = 5) -> list[dict]:
@@ -33,23 +35,41 @@ def _supplies(p: ResourcePoint) -> str:
     return "、".join(f"{SUPPLY_ZH.get(k, k)}{v}" for k, v in data.items() if v)
 
 
-def nearby_text(db: Session, user, emergency: bool) -> str:
+def _details(p: ResourcePoint, km: float) -> list[str]:
+    lines = [f"{POINT_TYPES.get(p.point_type, p.point_type)}・約 {km:.1f} 公里（直線）"]
+    supplies = _supplies(p)
+    if supplies:
+        lines.append(supplies)
+    if p.capacity:
+        lines.append(f"收容 {p.current_load or 0}/{p.capacity} 人")
+    if p.operating_hours:
+        lines.append(f"開放 {p.operating_hours}")
+    return lines
+
+
+def missing_text(user) -> str | None:
+    """沒位置時的提示；有位置則回 None。"""
     if user.lat is None or user.lng is None:
         return "📍 請先分享位置，才能找離您最近的物資與避難據點。"
+    return None
+
+
+def nearby_cards(db: Session, user, emergency: bool) -> tuple[str, dict] | None:
+    """回 (alt_text, carousel)；附近沒有任何據點時回 None。"""
+    from app.services.line_ops import bubble, carousel
     rows = nearest_points(db, user.lat, user.lng, emergency)
     if not rows:
-        return "附近還沒有登記的物資或避難據點。緊急時請撥 119。"
-    lines = ["🚨 緊急模式・最近的應變據點" if emergency else "📦 離您最近的物資據點"]
+        return None
+    cards = []
     for i, row in enumerate(rows, 1):
         p = row["point"]
-        lines.append(f"\n{i}. {p.name}（{POINT_TYPES.get(p.point_type, p.point_type)}）{row['km']:.1f} 公里")
-        supplies = _supplies(p)
-        if supplies:
-            lines.append(f"   {supplies}")
-        if p.capacity:
-            lines.append(f"   收容 {p.current_load or 0}/{p.capacity} 人")
-        if p.phone:
-            lines.append(f"   ☎ {p.phone}")
-        lines.append(f"   https://www.google.com/maps/search/?api=1&query={p.lat},{p.lng}")
-    lines.append("\n距離為直線估算；實際路況以現場為準。")
-    return "\n".join(lines)
+        color = EMERGENCY_COLOR if emergency and p.point_type in EMERGENCY_POINT_TYPES else SUPPLY_COLOR
+        buttons = [{"label": "🧭 導航", "uri": f"https://www.google.com/maps/dir/?api=1&destination={p.lat},{p.lng}"}]
+        if p.phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", p.phone):
+            buttons.append({"label": f"📞 {p.phone}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", p.phone)})
+        cards.append(bubble(f"{i}. {p.name}", color, _details(p, row["km"]), buttons))
+    alt = ("🚨 最近的應變據點：" if emergency else "📦 最近的物資據點：") + "、".join(r["point"].name for r in rows)
+    return alt[:400], carousel(cards)
+
+
+NO_POINTS_TEXT = "附近還沒有登記的物資或避難據點。緊急時請撥 119。"

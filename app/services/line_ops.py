@@ -117,6 +117,7 @@ def my_tasks(event, db: Session, user: User) -> None:
     bubbles = [build_task_bubble(
         user.line_uid, t["description"], t["address"], t["resource_name"], need_id=t["need_id"],
         distance_km=t["dist_km"], dest_lat=t["lat"], dest_lng=t["lng"], accepted=t["accepted"],
+        requester_phone=t.get("requester_phone"),
     ) for t in tasks]
     _flex(event, f"您有 {len(tasks)} 個進行中的任務", carousel(bubbles))
 

@@ -5,11 +5,15 @@ from linebot.v3.messaging import (
 )
 from app.config import settings
 
-def _flex(alt_text: str, contents) -> FlexMessage:
+def _flex(alt_text: str, contents, location_prompt: bool = False) -> FlexMessage:
     """Build a Flex message. A plain dict must go through FlexContainer.from_dict: handed to
     FlexMessage directly, the SDK keeps only the top-level type and serializes an empty bubble."""
     if isinstance(contents, dict):
         contents = FlexContainer.from_dict(contents)
+    if location_prompt:
+        from linebot.v3.messaging import LocationAction, QuickReply, QuickReplyItem
+        return FlexMessage(alt_text=alt_text, contents=contents, quick_reply=QuickReply(
+            items=[QuickReplyItem(action=LocationAction(label="📍 分享我的位置"))]))
     return FlexMessage(alt_text=alt_text, contents=contents)
 
 
@@ -72,10 +76,10 @@ def push_flex_message(line_uid: str, alt_text: str, contents: dict) -> None:
     ))
 
 
-def reply_flex_message(reply_token: str, alt_text: str, contents: dict) -> None:
+def reply_flex_message(reply_token: str, alt_text: str, contents: dict, location_prompt: bool = False) -> None:
     _get_api().reply_message(ReplyMessageRequest(
         reply_token=reply_token,
-        messages=[_flex(alt_text, contents)],
+        messages=[_flex(alt_text, contents, location_prompt)],
     ))
 
 
@@ -306,6 +310,7 @@ def build_task_bubble(
     dest_lat: float | None = None,
     dest_lng: float | None = None,
     accepted: bool = False,
+    requester_phone: str | None = None,
 ) -> dict:
     # 任務卡之前只有地址文字，志工接不接單之前完全不知道要跑多遠、
     # 也沒有地圖連結——只能自己另外查。距離跟地圖連結都是既有資料
@@ -332,6 +337,15 @@ def build_task_bubble(
                 "uri": f"https://www.google.com/maps/dir/?api=1&destination={dest_lat},{dest_lng}",
             },
         })
+    # 接單後才給求助者電話：出發前先打一通確認，找不到人也能問路。
+    if accepted and requester_phone:
+        import re
+        if re.fullmatch(r"[0-9+\-()\s]{7,20}", requester_phone):
+            footer_contents.append({
+                "type": "button", "style": "link", "height": "sm",
+                "action": {"type": "uri", "label": "📞 撥打求助者",
+                           "uri": "tel:" + re.sub(r"[^0-9+]", "", requester_phone)},
+            })
     report_buttons = []
     if need_id:
         from app.services.form_token import form_url

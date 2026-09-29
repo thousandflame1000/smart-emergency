@@ -1208,3 +1208,21 @@ def test_admin_only_message_offers_a_way_forward(db, line_outbox):
     say("Uplain", "總覽")
     text = " ".join(replies(line_outbox))
     assert "僅限管理員" in text and "聯絡" in text, text
+
+
+def test_requester_phone_is_offered_only_after_the_volunteer_accepts(db, line_outbox):
+    """接單前不外流電話；接單後「我的任務」可一鍵撥給求助者。"""
+    import json as _json
+    vol, req, res, need = _claim_world(db)
+    req.phone = "0912-345-678"; db.commit()
+    dispatch.manual_dispatch(str(need.id), str(res.id), db)
+
+    def tasks_card():
+        line_outbox.sent.clear()
+        say("U-cv", "我的任務")
+        flex = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+        return _json.dumps(flex.contents.to_dict(), ensure_ascii=False)
+
+    assert "tel:" not in tasks_card()
+    press("U-cv", f"action=task_accept&need_id={need.id}")
+    assert "tel:0912345678" in tasks_card()
