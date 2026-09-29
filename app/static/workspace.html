@@ -92,7 +92,7 @@
           </div>
         </div>
       </div>
-      <input id="search" type="search" aria-label="搜尋物件">
+      <label class="search-field">搜尋<input id="search" type="search" aria-label="搜尋物件"></label>
       <div id="objects" class="object-list"></div>
       <div id="operation-tasks" class="object-list" hidden></div>
       <div id="operation-resources" class="object-list" hidden></div>
@@ -102,16 +102,10 @@
       <!-- 原本這裡是兩個要人手填緯度、經度的數字欄。調度者記不住小數點座標，
            打地名才是人的用法；旁邊的道路搜尋也是同一個道理。 -->
       <form id="locate" class="locate">
-        <input id="locate-place" type="search" aria-label="跳到地點" required>
+        <label class="search-field">地點<input id="locate-place" type="search" aria-label="跳到地點" required></label>
         <button title="跳到這個地點" aria-label="跳到這個地點"><i data-lucide="locate-fixed"></i></button>
       </form>
-      <div id="locate-status" class="road-search-result" role="status" hidden></div>
-      <div id="road-search" class="road-search">
-        <input id="road-search-input" type="search" aria-label="搜尋道路名稱">
-        <button id="road-search-go" title="搜尋道路" aria-label="搜尋道路"><i data-lucide="search"></i></button>
-        <button id="road-search-clear" title="清除" aria-label="清除搜尋" hidden><i data-lucide="x"></i></button>
-      </div>
-      <div id="road-search-result" class="road-search-result" hidden></div>
+      <div id="locate-status" class="map-status" role="status" hidden></div>
       <div id="empty" class="empty-state"><strong>尚未載入事件資料</strong><button id="empty-db" class="primary">讀取平台現況</button><button id="empty-import">匯入檔案</button></div>
       <div id="connect-state" class="connect-state" hidden></div>
     </section>

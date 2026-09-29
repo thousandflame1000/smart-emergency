@@ -34,6 +34,7 @@ button,input{font:inherit}.sidebar{width:220px;flex:0 0 220px;background:var(--n
 .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse}th{padding:10px 14px;text-align:left;color:var(--muted);font-size:12px;background:#f8faf8;white-space:nowrap}td{padding:11px 14px;border-top:1px solid var(--line);font-size:14px}tbody tr:hover{background:#f8faf8}.muted{color:var(--muted)}
 .badge{display:inline-flex;align-items:center;min-height:23px;padding:2px 8px;border:1px solid;border-radius:3px;font-size:13px;font-weight:700}.b-ok{color:var(--ok);border-color:#9bcbbb;background:#edf8f4}.b-danger{color:var(--danger);border-color:#e8a8b2;background:#fff1f3}.b-warning{color:var(--warning);border-color:#e4c17a;background:#fff8e8}.b-muted{color:var(--muted);border-color:var(--line);background:#f4f6f4}
 .alert-list{max-height:520px;overflow:auto}.alert-row{display:grid;grid-template-columns:10px 1fr auto;gap:10px;align-items:center;padding:12px 16px;border-top:1px solid var(--line)}.alert-row:first-child{border-top:0}.dot{width:8px;height:8px;border-radius:50%;background:var(--warning)}.dot.high{background:var(--danger)}.alert-row strong{font-size:14px}.alert-row p{margin-top:3px;color:var(--muted);font-size:13px}.alert-row time{color:var(--muted);font:12px var(--mono)}
+.search-field{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;white-space:nowrap}
 .empty{padding:36px 18px;text-align:center;color:var(--muted)}.page-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.page-heading h2{font-size:16px}.page-heading p{margin-top:4px;color:var(--muted);font-size:13px}
 .trend-table td:not(:first-child),.trend-table th:not(:first-child){text-align:right;font-family:var(--mono)}
 .ask{max-width:900px}.query-row{display:grid;grid-template-columns:1fr auto;gap:8px;padding:16px}.query-row input{height:40px;border:1px solid var(--line);border-radius:4px;padding:0 12px}.primary{height:40px;border:0;border-radius:4px;background:var(--accent);color:#fff;padding:0 18px;font-weight:700;cursor:pointer}.primary:disabled{opacity:.55;cursor:wait}.answer{padding:16px;border-top:1px solid var(--line);line-height:1.75;white-space:pre-wrap}.sources{padding:12px 16px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}
@@ -167,7 +168,7 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
       </div>
       <div class="grid">
         <article class="panel"><div class="panel-head"><h2>未解警報</h2><span class="badge b-muted" id="alert-count">0 筆</span></div><div class="alert-list" id="alerts"></div></article>
-        <article class="panel"><div class="panel-head"><h2>今日打卡</h2><input id="overview-search" aria-label="搜尋姓名"></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="overview-elderly"></tbody></table></div></article>
+        <article class="panel"><div class="panel-head"><h2>今日打卡</h2><label class="search-field">搜尋<input id="overview-search" aria-label="搜尋姓名"></label></div><div class="table-wrap"><table><thead><tr><th>姓名</th><th>狀態</th><th>回覆時間</th><th></th></tr></thead><tbody id="overview-elderly"></tbody></table></div></article>
       </div>
       <article class="panel overview-map"><div class="panel-head"><h2>物資地圖</h2><span class="badge b-muted" id="map-layer-mode">日常圖層</span></div><div id="overview-map"></div><div class="map-foot" id="overview-map-foot"></div></article>
     </section>
@@ -175,7 +176,7 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
       <div class="page-heading"><div><h2>長者狀態</h2><p id="elderly-count">0 位</p></div>
         <div style="display:flex;gap:8px;align-items:center">
           <div class="viewseg" id="elder-view"><button type="button" data-elderview="list" class="on">清單</button><button type="button" data-elderview="map">地圖</button></div>
-          <input id="elderly-search" aria-label="搜尋姓名或地址">
+          <label class="search-field">搜尋<input id="elderly-search" aria-label="搜尋姓名或地址"></label>
         </div>
       </div>
       <div class="chips" id="elderly-chips"></div>

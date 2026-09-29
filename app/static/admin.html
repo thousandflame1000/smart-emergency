@@ -7,7 +7,8 @@
 <title>鄰里守望 — 管理後台</title>
 <script>if (/[?&]embed=1/.test(location.search)) document.documentElement.classList.add('embed');</script>
 <script src="/static/labels.js"></script>
-<style>.embed .sidebar { display: none !important; }</style>
+<style>.embed .sidebar { display: none !important; }.search-field{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;white-space:nowrap}
+</style>
 <style>
 /* ══════════════════════════════════════════════════════════
    鄰里守望管理後台 — 視覺系統
@@ -614,7 +615,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           </button>
         </div>
         <div class="list-toolbar">
-          <input type="search" id="elderly-search" aria-label="搜尋長者">
+          <label class="search-field">搜尋<input type="search" id="elderly-search" aria-label="搜尋長者"></label>
           <div id="elderly-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
         <div id="elderly-grid" class="people-grid">
@@ -671,7 +672,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <button class="btn btn-primary btn-sm" onclick="openUserModal('volunteer')">＋ 新增成員</button>
         </div>
         <div class="list-toolbar">
-          <input type="search" id="volunteers-search" aria-label="搜尋成員">
+          <label class="search-field">搜尋<input type="search" id="volunteers-search" aria-label="搜尋成員"></label>
           <div id="volunteers-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
         <div id="volunteers-board" class="board">
