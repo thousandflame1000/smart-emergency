@@ -34,9 +34,11 @@ button { font:inherit; }
 .mode-button.emergency { background:rgba(245,69,92,.12); color:#ff7587; border-color:rgba(245,69,92,.55); }
 .mode-indicator { width:9px; height:9px; border-radius:50%; background:currentColor; box-shadow:0 0 0 3px rgba(119,214,181,.12); flex:0 0 auto; }
 .emergency .mode-indicator { box-shadow:0 0 0 3px rgba(245,69,92,.15); }
-.app-main { min-width:0; height:100dvh; }
-.views { min-width:0; height:100dvh; }
-.views iframe { border:0; width:100%; height:100%; background:var(--bg); }
+.app-main { min-width:0; height:100dvh; display:flex; flex-direction:column; }
+.views { min-width:0; flex:1; min-height:0; }
+.emergency-banner { flex:none; padding:8px 16px; background:#b52e42; color:#fff; font-size:14px; font-weight:600; }
+.emergency-banner span { font-weight:400; opacity:.9; margin-left:8px; }
+.views iframe { display:block; border:0; width:100%; height:100%; background:var(--bg); }
 [hidden] { display:none !important; }
 .mode-dialog { width:min(380px, calc(100vw - 32px)); padding:20px; border:0; border-radius:14px; color:#17201c; background:#fff; box-shadow:0 20px 50px rgba(0,0,0,.3); }
 .mode-dialog::backdrop { background:rgba(10,14,12,.45); }
@@ -56,7 +58,7 @@ button { font:inherit; }
   .mobile-bar svg { width:20px; height:20px; }
   #mobile-mode { width:auto; min-width:auto; gap:7px; padding:7px 10px; color:#076a5f; font-weight:700; }
   #mobile-mode.emergency { color:#b52e42; border-color:#e8a8b2; background:#fff1f3; }
-  .views { height:calc(100dvh - 58px); flex:1; }
+  .views { flex:1; min-height:0; }
   .sidebar { position:fixed; inset:0 auto 0 0; width:min(304px,86vw); transform:translateX(-102%); transition:transform .2s ease; box-shadow:16px 0 36px rgba(0,0,0,.24); }
   .sidebar.open { transform:translateX(0); }
   .nav-close { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border:0; border-radius:4px; background:transparent; color:var(--text-dim); cursor:pointer; }
@@ -81,6 +83,7 @@ button { font:inherit; }
     <div class="mobile-context"><strong id="mobile-title">事件處置工作區</strong><span>鄰里守望</span></div>
     <button id="mobile-mode" class="mode-button" type="button"><span class="mode-indicator" aria-hidden="true"></span><span id="mobile-mode-text">日常模式</span></button>
   </header>
+  <div id="emergency-banner" class="emergency-banner" role="status" hidden>🚨 緊急模式<span>每 30 分鐘自動媒合，派遣仍需人工核准</span></div>
   <div class="views" id="views"><iframe id="view" title="內容"></iframe></div>
 </div>
 
@@ -168,6 +171,7 @@ button { font:inherit; }
       var emergency = s.mode === 'emergency';
       pill.classList.toggle('emergency', emergency);
       mobilePill.classList.toggle('emergency', emergency);
+      document.getElementById('emergency-banner').hidden = !emergency;
       document.getElementById('mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       document.getElementById('mobile-mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       pill.setAttribute('aria-label', emergency ? '目前為緊急模式，按下可解除' : '目前為日常模式，按下可啟動緊急模式');
@@ -194,6 +198,7 @@ button { font:inherit; }
   pill.addEventListener('click', toggleMode);
   mobilePill.addEventListener('click', toggleMode);
   loadMode();
+  setInterval(loadMode, 60000);
   setInterval(loadMode, 30000);
 
   go(location.hash.slice(1) || 'workspace');
