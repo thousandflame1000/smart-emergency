@@ -6,6 +6,8 @@
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-green)](https://fastapi.tiangolo.com)
 
+> 決賽前設定與演練步驟：[`docs/FINALS_SETUP.md`](docs/FINALS_SETUP.md)
+
 ## 系統做什麼
 
 | 功能 | 實作 |
