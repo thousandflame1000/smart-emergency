@@ -3132,7 +3132,7 @@ async function deleteNeed(needId) {
   loadNeeds();
 }
 
-const AUDIT_METHOD = { POST: '新增／執行', PUT: '修改', PATCH: '修改', DELETE: '刪除' };
+const AUDIT_METHOD = { POST: '新增／執行', PUT: '修改', PATCH: '修改', DELETE: '刪除', LINE: 'LINE 操作' };
 async function loadAudit() {
   const body = document.getElementById('audit-tbody');
   try {

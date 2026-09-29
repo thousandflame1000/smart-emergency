@@ -22,3 +22,21 @@ def test_audit_failure_does_not_break_the_request(db, monkeypatch):
     from app.services import admin_audit
     monkeypatch.setattr(admin_audit, "SessionLocal", lambda: (_ for _ in ()).throw(RuntimeError("db down")))
     assert TestClient(app).post("/api/dashboard/mode?mode=normal").status_code == 200
+
+
+def test_line_admin_actions_are_logged_too(db, line_outbox):
+    from app.models.need import CommunityNeed
+    from tests.test_line_hardening import mk, press
+    mk(db, "管理員小張", ["admin"], "U-audit-adm")
+    elder = mk(db, "王奶奶", ["elderly"], "U-audit-eld")
+    need = CommunityNeed(requester_id=elder.id, need_type="sos", description="一鍵求助", urgency=5)
+    db.add(need); db.commit()
+
+    press("U-audit-adm", f"action=admin_sos&need_id={need.id}")
+    press("U-audit-adm", "action=admin_confirm&need_id=not-a-need")
+    press("U-audit-adm", f"action=admin_cands&need_id={need.id}")  # read only, not logged
+
+    rows = {r.path.split(" ")[0]: r for r in db.query(AdminAudit).filter(AdminAudit.method == "LINE").all()}
+    assert set(rows) == {"求救已處理", "核准派遣"}
+    assert rows["求救已處理"].actor_label == "管理員小張" and rows["求救已處理"].status_code == 200
+    assert rows["核准派遣"].status_code == 409

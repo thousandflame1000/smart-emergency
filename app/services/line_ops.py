@@ -366,7 +366,13 @@ def admin_login_link(event, user: User) -> None:
         [{"label": "🔓 登入後台", "uri": login_url(str(user.id))}]))
 
 
-def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> None:
+# LINE 上會改資料的管理動作，寫進後台「操作紀錄」
+AUDITED_ADMIN_ACTIONS = {"admin_match": "派遣", "admin_confirm": "核准派遣", "admin_decline": "退回建議",
+                         "admin_revoke": "撤銷任務", "admin_sos": "求救已處理", "admin_app": "審核志工"}
+
+
+def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> bool:
+    """回傳動作是否成功，給操作紀錄用。"""
     label = f"admin:{user.name}"
     if action == "admin_cands":
         admin_candidates(event, db, data.get("need_id", ""))
@@ -375,16 +381,19 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
                                           actor_id=str(user.id), actor_label=label)
         if result.get("error"):
             _say(event, "⚠️ " + result["error"])
+            return False
         else:
             note = "任務卡已傳給志工" if result.get("volunteer_notified") else "志工未綁定 LINE，請自行聯繫"
             _say(event, f"✅ 已派遣。{note}；求助的人也已收到通知。")
     elif action == "admin_confirm":
         result = dispatch.confirm_dispatch(data.get("need_id", ""), db)
         _say(event, "⚠️ " + result["error"] if result.get("error") else "✅ " + result["message"])
+        return not result.get("error")
     elif action == "admin_decline":
         result = dispatch.decline_suggestion(data.get("need_id", ""), db)
         _say(event, "⚠️ " + result["error"] if result.get("error") else
              "已退回建議，物資已釋放，需求回到待派遣。傳「待派」可改派其他志工。")
+        return not result.get("error")
     elif action == "admin_revoke":
         need = db.query(CommunityNeed).filter(CommunityNeed.id == data.get("need_id", "")).first()
         volunteer_uid = None
@@ -394,6 +403,7 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
                                                   actor_id=str(user.id), actor_label=label)
         if result.get("already_open") or result.get("error"):
             _say(event, "這筆任務已經不在進行中了（可能已完成、已取消或早就撤銷）。")
+            return False
         else:
             _say(event, "✅ 已撤銷，需求退回待派遣。求助的人已收到通知，志工的物資已釋放。")
             if volunteer_uid:
@@ -406,6 +416,7 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
         result = dispatch.resolve_sos(data.get("need_id", ""), db, actor_label=label)
         _say(event, "⚠️ " + result["error"] if result.get("error") else
              ("這筆求救單已經處理過了。" if result.get("already_resolved") else "✅ 已標記為聯繫處理，當事人已收到通知。"))
+        return not result.get("error")
     elif action == "admin_app":
         from fastapi import HTTPException
         from app.services.volunteer_application import decide
@@ -413,8 +424,9 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
             decide(db, data.get("id", ""), decision=data.get("d", ""), reviewer_id=str(user.id))
         except HTTPException as exc:
             _say(event, "⚠️ " + str(exc.detail))
-            return
+            return False
         _say(event, "✅ 已核准，對方已收到通知並換上志工選單。" if data.get("d") == "approve" else "已婉拒，對方已收到通知。")
+    return True
 
 
 # ── 綁定碼共用：猜錯太多次就先擋住，避免有人亂猜綁到別人的紀錄 ─────────────────
@@ -808,7 +820,14 @@ def handle_postback(event, db: Session, user: User, action: str, data: dict) -> 
         if not is_admin(user):
             _say(event, "此功能僅限管理員使用。如果您負責社區調度，請聯絡現有管理員把您加入。")
             return True
-        _admin_postback(event, db, user, action, data)
+        ok = _admin_postback(event, db, user, action, data)
+        if action in AUDITED_ADMIN_ACTIONS:
+            from app.services import admin_audit
+            target = data.get("need_id") or data.get("id") or ""
+            if action == "admin_app":
+                target = f"{'核准' if data.get('d') == 'approve' else '婉拒'} {target}"
+            admin_audit.record({"id": str(user.id), "name": user.name}, "LINE",
+                               f"{AUDITED_ADMIN_ACTIONS[action]} {target}".strip(), 200 if ok else 409)
         return True
     if action == "cancel_needs":
         cancel_my_needs(event, db, user)
