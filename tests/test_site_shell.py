@@ -124,3 +124,16 @@ def test_health_reports_deployed_commit(monkeypatch):
     assert TestClient(app).get("/health").json()["commit"] == "b3cf058"
     monkeypatch.delenv("RAILWAY_GIT_COMMIT_SHA")
     assert TestClient(app).get("/health").json()["commit"] == "local"
+
+
+def test_browsers_get_a_readable_404_page_while_apis_keep_json():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    client = TestClient(app)
+    page = client.get("/no-such-page", headers={"Accept": "text/html"})
+    assert page.status_code == 404 and "找不到這個頁面" in page.text and 'href="/"' in page.text
+    form = client.get("/f/unknown", headers={"Accept": "text/html"})
+    assert form.status_code == 404 and "找不到這個表單" in form.text and "LINE" in form.text
+    api = client.get("/api/resources/needs/nope/events", headers={"Accept": "text/html"})
+    assert api.headers["content-type"].startswith("application/json")
+    assert client.get("/no-such-page").json()["error"]
