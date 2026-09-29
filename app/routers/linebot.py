@@ -1047,6 +1047,7 @@ def _is_known_command(text: str, intent: dict) -> bool:
     return (
         text in FIXED_COMMANDS or text in CANCEL_NEED_WORDS
         or bool(intent["needs"]) or bool(line_ops.BIND_RE.match(text)) or bool(line_ops.JOIN_RE.match(text))
+        or bool(__import__("app.services.qr_login", fromlist=["CODE_RE"]).CODE_RE.match(text.upper()))
         or any(text.startswith(p) for p in APPLY_PREFIXES + ["新增長者", "幫長者登記", "代辦長者", "登記長者", "我有"])
     )
 
@@ -1074,6 +1075,23 @@ def _sounds_ok(user, text: str, db) -> bool:
         DailyCheckin.status.in_(["pending", "no_response"])).first() is not None
 
 
+def _handle_qr_login(event, db, user, text) -> bool:
+    """電腦後台登入頁的 QR Code 會讓手機 LINE 送出「登入 碼」，核准後電腦自動登入。"""
+    from app.services import admin_audit, qr_login
+    m = qr_login.CODE_RE.match(text.upper())
+    if not m:
+        return False
+    result = qr_login.approve(db, m.group(1), user)
+    if result == "ok":
+        admin_audit.record({"id": str(user.id), "name": user.name}, "LINE", "掃碼登入後台", 200)
+        _say(event, "✅ 電腦已登入後台，12 小時內有效。\n如果不是你本人在電腦前操作，請立刻聯絡其他管理員。")
+    elif result == "forbidden":
+        _say(event, "只有管理員可以登入後台。")
+    else:
+        _say(event, "這個登入碼已過期或用過了。請在電腦上重新整理登入頁，再掃一次。")
+    return True
+
+
 def _process_text(event, db, user, text) -> bool:
     """Handle one text message. Returns True when a specific reply was sent."""
     intent = parse_intent(text)
@@ -1094,6 +1112,9 @@ def _process_text(event, db, user, text) -> bool:
             return True
 
     if _handle_form_text(event, db, user, text):
+        return True
+
+    if _handle_qr_login(event, db, user, text):
         return True
 
     if line_ops.handle_text(event, db, user, text):

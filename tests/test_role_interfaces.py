@@ -703,3 +703,40 @@ def test_decision_center_tells_admins_what_needs_fixing(db, line_outbox):
     card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
     text = _json.dumps(card.contents.to_dict(), ensure_ascii=False)
     assert "系統需處理" in text and "知識庫" in text
+
+
+# ═══════════════ 電腦後台掃碼登入 ═══════════════
+def test_scan_to_log_in_on_a_computer(db, enforced, webclient, line_outbox):
+    import json as _json
+    import re as _re
+    vol, req, adm, res, need = world(db)
+    browser = webclient.get("/", headers={"Accept": "text/html"}, follow_redirects=False)
+    assert browser.status_code == 303 and browser.headers["location"] == "/admin/qr-login"
+
+    page = webclient.get("/admin/qr-login")
+    code = _json.loads(_re.search(r"var code=(\"[A-Z2-9]{6}\")", page.text).group(1))
+    status = lambda: webclient.get("/admin/qr-login/status", params={"n": code})
+    assert status().json()["state"] == "waiting"
+
+    say("U-vol", f"登入 {code}")                      # 志工不能核准
+    assert "只有管理員" in replies(line_outbox)[-1] and status().json()["state"] == "waiting"
+    say("U-adm", f"登入 {code.lower()}")               # 手機打小寫也認得
+    assert "電腦已登入後台" in replies(line_outbox)[-1]
+
+    done = status()
+    assert done.json()["state"] == "ok" and "admin_session" in done.cookies
+    webclient.cookies.set("admin_session", done.cookies["admin_session"])
+    assert webclient.get("/api/dashboard/users").status_code == 200
+    assert status().json()["state"] == "expired", "登入碼只能用一次"
+
+
+def test_expired_scan_code_cannot_be_approved(db, line_outbox):
+    import json as _json
+    from app.models.config import SystemConfig
+    from app.services import qr_login
+    vol, req, adm, res, need = world(db)
+    code = qr_login.start(db)
+    row = db.query(SystemConfig).filter(SystemConfig.key == qr_login.PREFIX + code).first()
+    row.value = _json.dumps({"exp": "2000-01-01T00:00:00", "user_id": None}); db.commit()
+    say("U-adm", f"登入 {code}")
+    assert "過期" in replies(line_outbox)[-1]

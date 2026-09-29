@@ -236,6 +236,70 @@ def admin_login(t: str = ""):
     return response
 
 
+_QR_LOGIN_PAGE = """<!DOCTYPE html><html lang="zh-Hant"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/favicon.ico">
+<title>登入後台｜鄰里守望</title><style>
+body{{margin:0;min-height:100vh;display:grid;place-items:center;background:#f3f6f3;color:#17201c;
+font-family:"Noto Sans TC","Microsoft JhengHei",sans-serif}}
+main{{max-width:380px;margin:24px;padding:28px;background:#fff;border:1px solid #d7dfda;border-radius:8px;text-align:center}}
+h1{{margin:0 0 6px;font-size:20px}}ol{{text-align:left;color:#3d4a43;line-height:1.9;padding-left:22px;margin:14px 0}}
+img{{width:220px;height:220px}}.code{{font:700 22px monospace;letter-spacing:.15em;margin:6px 0}}
+#status{{min-height:22px;color:#5f6c65;font-size:14px}}#status.ok{{color:#13795b;font-weight:700}}#status.bad{{color:#c9364b}}
+button{{margin-top:10px;padding:8px 16px;border:1px solid #d7dfda;border-radius:6px;background:#fff;cursor:pointer}}
+</style></head><body><main><h1>登入後台</h1>
+{body}
+<p id="status" role="status">等待手機確認…</p>
+<p style="font-size:13px;color:#5f6c65;margin:14px 0 0">也可以在手機 LINE 按「開啟後台」用連結登入。</p>
+</main><script>
+(function(){{var code={code_json},status=document.getElementById('status'),timer;
+function poll(){{fetch('/admin/qr-login/status?n='+encodeURIComponent(code),{{credentials:'same-origin'}})
+.then(function(r){{return r.json();}}).then(function(d){{
+ if(d.state==='ok'){{status.textContent='已登入，正在開啟後台…';status.className='ok';clearInterval(timer);location.replace('/');}}
+ else if(d.state==='expired'){{clearInterval(timer);status.className='bad';status.innerHTML='登入碼已過期。<br><button onclick="location.reload()">產生新的 QR Code</button>';}}
+}}).catch(function(){{}});}}
+timer=setInterval(poll,2000);}})();
+</script></body></html>"""
+
+
+@app.get("/admin/qr-login", include_in_schema=False)
+def admin_qr_login():
+    """電腦後台掃碼登入頁：手機 LINE 掃描、按送出，這頁自動登入。"""
+    import json as _json
+    from app.database import SessionLocal
+    from app.services import qr_login
+    from app.services.line_notify import oa_message_link
+    from app.services.qr import svg_data_uri
+    db = SessionLocal()
+    try:
+        code = qr_login.start(db)
+    finally:
+        db.close()
+    link = oa_message_link(f"登入 {code}")
+    if link:
+        body = (f'<img src="{svg_data_uri(link)}" alt="登入 QR Code"><ol><li>用手機 LINE 掃描上方 QR Code</li>'
+                f'<li>跳到鄰里守望聊天室後按「送出」</li><li>這個頁面會自動登入</li></ol>')
+    else:
+        body = f'<ol><li>在手機 LINE 傳給鄰里守望：</li></ol><div class="code">登入 {html.escape(code)}</div>'
+    return HTMLResponse(_QR_LOGIN_PAGE.format(body=body, code_json=_json.dumps(code)), headers=_NO_CACHE)
+
+
+@app.get("/admin/qr-login/status", include_in_schema=False)
+def admin_qr_login_status(n: str = ""):
+    from app.database import SessionLocal
+    from app.services import admin_session, qr_login
+    db = SessionLocal()
+    try:
+        state, user_id = qr_login.claim(db, n.strip().upper())
+    finally:
+        db.close()
+    response = JSONResponse({"state": state}, headers={"Cache-Control": "no-store"})
+    if state == "ok":
+        response.set_cookie(admin_session.COOKIE_NAME, admin_session.make_session(user_id),
+                            max_age=admin_session.SESSION_TTL, httponly=True, samesite="lax",
+                            secure=settings.APP_ENV == "production")
+    return response
+
+
 @app.get("/admin/logout", include_in_schema=False)
 def admin_logout():
     from fastapi.responses import RedirectResponse
