@@ -56,3 +56,13 @@ def test_every_demo_point_type_has_a_chinese_label():
     import seed_finals_demo
     from app.models.resource_point import POINT_TYPES
     assert {ptype for _, ptype, *_ in seed_finals_demo.FACILITIES} <= POINT_TYPES.keys()
+
+
+def test_sharing_location_offers_a_one_tap_supply_lookup(db, line_outbox):
+    """從「查詢物資」去分享位置後，不必再回選單找按鈕。"""
+    from app.routers import linebot as lb
+    from tests.test_line_hardening import _Ev, _Msg
+    mk(db, "居民", ["elderly"], uid="U-tap")
+    lb.handle_location(_Ev("U-tap", msg=_Msg(latitude=23.9, longitude=121.6)))
+    message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    assert [item.action.text for item in message.quick_reply.items] == ["查詢物資"]

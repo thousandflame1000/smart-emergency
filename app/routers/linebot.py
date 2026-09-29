@@ -18,7 +18,7 @@ from app.config import settings
 from app.database import get_db
 from app.services import checkin as checkin_svc
 from app.services import conversation, line_ops
-from app.services.line_notify import reply_text
+from app.services.line_notify import reply_text, reply_text_with_commands
 from app.services.task_commands import TaskWorkflowError
 from app.services.task_line_execution import TaskLineExecutionService
 from app.services.task_line_messages import reply_task_progress_message
@@ -1196,8 +1196,12 @@ def handle_location(event: MessageEvent):
     if res_fixed:
         notes.append(f"已一併補上 {res_fixed} 份物資的位置，現在可以被媒合了。")
     note = ("\n\n" + "\n".join(notes)) if notes else ""
-    _say(event, f"✅ 已更新您的位置{'：' + event.message.address if event.message.address else ''}\n"
-                f"之後的求助跟派遣都會用這個位置計算距離。{note}")
+    # 多半是從「查詢物資」過來分享位置的，給一顆按鈕直接查，不必再回選單找。
+    reply_text_with_commands(
+        event.reply_token,
+        f"✅ 已更新您的位置{'：' + event.message.address if event.message.address else ''}\n"
+        f"之後的求助跟派遣都會用這個位置計算距離。{note}",
+        [("📦 查詢附近物資", "查詢物資")])
     if first_contact:
         from app.services.line_notify import send_text
         try:

@@ -313,6 +313,7 @@ class _FakeLocationEvent:
 def test_share_location_updates_user_coordinates(db, monkeypatch):
     replies = []
     monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    monkeypatch.setattr(lb, "reply_text_with_commands", lambda token, text, commands: replies.append(text))
     resident = User(name="陳小華", roles=["elderly"], line_uid="Uloc1")
     db.add(resident); db.commit(); db.refresh(resident)
     resident_id = str(resident.id)
@@ -333,6 +334,7 @@ def test_share_location_backfills_own_open_needs_missing_coordinates(db, monkeyp
     時應該順手把自己名下沒座標的待處理需求一起補上。"""
     replies = []
     monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    monkeypatch.setattr(lb, "reply_text_with_commands", lambda token, text, commands: replies.append(text))
     resident = User(name="李小美", roles=["elderly"], line_uid="Uloc2")
     db.add(resident); db.commit(); db.refresh(resident)
     stuck_need = CommunityNeed(requester_id=resident.id, need_type="water",
@@ -358,6 +360,7 @@ def test_share_location_without_prior_message_registers_and_saves(db, monkeypatc
     """之前要先傳一句話才能分享位置；現在直接自動註冊並存下座標。"""
     replies = []
     monkeypatch.setattr(lb, "reply_text", lambda token, text: replies.append(text))
+    monkeypatch.setattr(lb, "reply_text_with_commands", lambda token, text, commands: replies.append(text))
     lb.handle_location(_FakeLocationEvent(24.15, 120.68, "UlocUnknown"))
     assert "已更新您的位置" in replies[-1]
     db2 = SessionLocal()
