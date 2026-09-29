@@ -12,6 +12,11 @@
 .kit-card > summary::-webkit-details-marker { display: none; }
 .kit-card > summary .card-title::before { content: "▸ "; color: var(--muted); }
 .kit-card[open] > summary .card-title::before { content: "▾ "; }
+.status-row { display: grid; grid-template-columns: 64px 220px 1fr; gap: 14px; align-items: start; padding: 13px 18px; border-top: 1px solid var(--border); font-size: 14px; }
+.status-row .badge { justify-self: start; }
+.status-hint { margin-top: 4px; color: var(--muted); font-size: 13px; }
+.status-error .status-hint { color: var(--danger); }
+@media (max-width: 700px) { .status-row { grid-template-columns: 64px 1fr; } .status-row > div { grid-column: 2; } }
 </style>
 <style>
 /* ══════════════════════════════════════════════════════════
@@ -576,6 +581,9 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   <div class="nav-item" onclick="showPage('page-audit')" data-page="page-audit">
     <span class="icon">🧾</span> 操作紀錄
   </div>
+  <div class="nav-item" onclick="showPage('page-status')" data-page="page-status">
+    <span class="icon">🩺</span> 系統狀態
+  </div>
 
   <div class="nav-section">事件處置</div>
   <a class="nav-item" href="/workspace" style="text-decoration:none">
@@ -733,6 +741,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <tbody id="zones-tbody"></tbody>
           </table>
         </div>
+      </div>
+    </div>
+
+    <div class="page" id="page-status">
+      <div class="card">
+        <div class="card-header"><div class="card-title">系統狀態</div>
+          <div style="display:flex;gap:10px;align-items:center"><span class="muted" id="status-summary"></span>
+            <button class="btn btn-ghost btn-sm" onclick="loadStatus()">重新檢查</button></div></div>
+        <div id="status-list"><div class="empty"><div class="spinner"></div></div></div>
       </div>
     </div>
 
@@ -1359,6 +1376,7 @@ const PAGE_TITLE = {
   'page-kb':        '知識庫',
   'page-zones':     '分區',
   'page-audit':     '操作紀錄',
+  'page-status':    '系統狀態',
 };
 let allUsers = [];
 
@@ -1541,6 +1559,7 @@ function showPage(id) {
   if (id === 'page-kb')        loadKB();
   if (id === 'page-zones')     loadZones();
   if (id === 'page-audit')     loadAudit();
+  if (id === 'page-status')    loadStatus();
   if (id === 'page-volunteers') { loadVolunteerApplications(); loadKitTesters(); }
 }
 
@@ -3140,6 +3159,23 @@ async function deleteNeed(needId) {
   if (!res.ok) { toast('danger', '刪除失敗：' + esc(data.detail || res.status)); return; }
   toast('success', '已永久刪除');
   loadNeeds();
+}
+
+const STATUS_LEVEL = { error: ['需處理', 'badge-red', 0], warn: ['注意', 'badge-amber', 1], ok: ['正常', 'badge-green', 2] };
+async function loadStatus() {
+  const list = document.getElementById('status-list');
+  try {
+    const data = await fetch('/api/system/status').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+    document.getElementById('status-summary').textContent =
+      `需處理 ${data.error}・注意 ${data.warn}・正常 ${data.ok}　檢查於 ${new Date(data.checked_at).toLocaleTimeString('zh-TW')}`;
+    const items = [...data.items].sort((a, b) => STATUS_LEVEL[a.level][2] - STATUS_LEVEL[b.level][2]);
+    list.innerHTML = items.map(i => `<div class="status-row status-${esc(i.level)}">
+      <span class="badge ${STATUS_LEVEL[i.level][1]}">${STATUS_LEVEL[i.level][0]}</span>
+      <strong>${esc(i.label)}</strong>
+      <div><div>${esc(i.detail)}</div>${i.hint ? `<div class="status-hint">${esc(i.hint)}</div>` : ''}</div></div>`).join('');
+  } catch (e) {
+    list.innerHTML = '<div class="empty">讀取失敗，請重新檢查</div>';
+  }
 }
 
 async function loadAudit() {

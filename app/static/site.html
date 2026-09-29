@@ -34,6 +34,7 @@ button { font:inherit; }
 .nav.nav-primary svg { width:20px; height:20px; color:#fb923c; }
 .nav.nav-primary:hover { background:rgba(249,115,22,.22); color:#fff; }
 .nav.nav-primary.active { background:rgba(249,115,22,.28); color:#fff; border-color:#fb923c; }
+.nav-alert { background:#dc2626; }
 .nav-count { margin-left:auto; min-width:22px; padding:1px 7px; border-radius:11px; background:#ea580c; color:#fff; font:700 12px var(--mono); text-align:center; }
 .bottom { margin-top:auto; padding:12px; border-top:1px solid var(--border); }
 .mode-button { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; min-height:38px; padding:8px 10px; border-radius:4px; cursor:pointer;
@@ -109,6 +110,7 @@ button { font:inherit; }
     { id: 'volunteers', label: '志工 / 家屬', icon: '🙋', view: CONSOLE, page: 'page-volunteers' },
     { id: 'relations', label: '照護關係', icon: '🔗', view: CONSOLE, page: 'page-relations' },
     { id: 'audit', label: '操作紀錄', icon: '🧾', view: CONSOLE, page: 'page-audit' },
+    { id: 'status', label: '系統狀態', icon: '🩺', view: CONSOLE, page: 'page-status' },
     { sec: '知識' },
     { id: 'ai', label: 'AI 助手', icon: '🤖', view: DASH, page: 'ai-page' },
     { id: 'kb', label: '知識庫', icon: '🧠', view: CONSOLE, page: 'page-kb' }
@@ -116,7 +118,7 @@ button { font:inherit; }
   var frame = document.getElementById('view'), nav = document.getElementById('nav'), buttons = {}, frames = {}, currentId = null;
   var sidebar = document.getElementById('sidebar'), navToggle = document.getElementById('nav-toggle');
   var navScrim = document.getElementById('nav-scrim'), navClose = document.getElementById('nav-close');
-  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',workspace:'siren',ai:'messages-square',kb:'book-open'};
+  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',status:'activity',workspace:'siren',ai:'messages-square',kb:'book-open'};
 
   function setNav(open) {
     sidebar.classList.toggle('open', open);
@@ -139,6 +141,10 @@ button { font:inherit; }
     var icon = document.createElement('i'); icon.setAttribute('data-lucide',iconNames[item.id]);
     var label = document.createElement('span'); label.className = 'label'; label.textContent = item.label;
     b.appendChild(icon); b.appendChild(label);
+    if (item.id === 'status') {
+      var alertCount = document.createElement('span'); alertCount.className = 'nav-count nav-alert'; alertCount.id = 'status-count';
+      alertCount.hidden = true; alertCount.setAttribute('aria-hidden', 'true'); b.appendChild(alertCount);
+    }
     if (item.id === 'workspace') {
       var count = document.createElement('span'); count.className = 'nav-count'; count.id = 'workspace-count'; count.hidden = true;
       count.setAttribute('aria-hidden', 'true');
@@ -212,6 +218,17 @@ button { font:inherit; }
   mobilePill.addEventListener('click', toggleMode);
   loadMode();
   setInterval(loadMode, 60000);
+  // 系統狀態有「需處理」時在選單上亮紅色數字；LINE 檢查有快取，5 分鐘一次夠了。
+  function loadStatusBadge() {
+    fetch('/api/system/status').then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
+      var badge = document.getElementById('status-count');
+      if (!badge || !s) return;
+      badge.hidden = !s.error; badge.textContent = s.error || '';
+      var btn = badge.parentNode; if (btn) btn.title = '系統狀態' + (s.error ? '（' + s.error + ' 項需處理）' : '');
+    }).catch(function () { /* ignore */ });
+  }
+  loadStatusBadge();
+  setInterval(loadStatusBadge, 300000);
   setInterval(loadMode, 30000);
 
   go(location.hash.slice(1) || 'workspace');

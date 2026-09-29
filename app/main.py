@@ -245,6 +245,18 @@ def admin_logout():
     return response
 
 
+@app.get("/api/system/status", tags=["系統"])
+def system_status(_principal: dict | None = Depends(require_admin)):
+    """後台「系統狀態」：登入保護、LINE、AI、知識庫、通知送達等是否正常。"""
+    from app.database import SessionLocal
+    from app.services import system_status as status_svc
+    db = SessionLocal()
+    try:
+        return status_svc.summary(status_svc.checks(db))
+    finally:
+        db.close()
+
+
 @app.get("/api/system/security", tags=["系統"])
 def security_status():
     """Tell the console whether the deployment is publicly readable.
