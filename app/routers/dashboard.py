@@ -5,7 +5,7 @@ from sqlalchemy import func
 
 
 from app.errors import ApiError
-from app.validation import check_coords, check_name, check_roles
+from app.validation import check_coords, check_name, check_phone, check_roles
 from app.timeutil import now_utc, today_tw
 from app.database import get_db
 from app.models.user import User
@@ -268,6 +268,7 @@ def create_user(
     name = check_name(name)
     roles = check_roles(roles)
     check_coords(lat, lng)
+    phone = check_phone(phone) or None
     line_uid = (line_uid or "").strip() or None
     if line_uid and db.query(User).filter(User.line_uid == line_uid).first():
         raise ApiError(409, "這個 LINE User ID 已經綁定給另一位使用者。")
@@ -337,7 +338,7 @@ def update_user(
         if line_uid and db.query(User).filter(User.line_uid == line_uid, User.id != user.id).first():
             raise ApiError(409, "這個 LINE User ID 已經綁定給另一位使用者。")
     if name     is not None: user.name     = name
-    if phone    is not None: user.phone    = phone
+    if phone    is not None: user.phone    = check_phone(phone) or None
     if address  is not None: user.address  = address
     if line_uid is not None: user.line_uid = line_uid
     if lat      is not None: user.lat      = lat

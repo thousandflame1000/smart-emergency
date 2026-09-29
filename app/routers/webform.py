@@ -5,7 +5,6 @@
 表單送出時驗章確認是誰，然後走和聊天指令完全相同的建立邏輯。"""
 import logging
 import os
-import re
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -13,6 +12,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.validation import PHONE_PATTERN
 from app.config import settings
 from app.errors import ApiError
 from app.models.user import User
@@ -25,7 +25,6 @@ router = APIRouter()
 FORM_PAGE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "form.html")
 KINDS = {"need", "res", "apply", "report", "me", "profile"}
 NEED_CHOICES = {"water", "food", "first_aid", "shelter", "vehicle"}
-PHONE_RE = re.compile(r"^[0-9+\-()\s]{7,20}$")
 
 
 class _Base(BaseModel):
@@ -101,7 +100,7 @@ def _apply_profile(user: User, form: _Base) -> str | None:
         user.name = check_name(name)
     phone = _clean(form.phone)
     if phone:
-        if not PHONE_RE.match(phone):
+        if not PHONE_PATTERN.fullmatch(phone):
             raise ApiError(422, "電話格式不正確，只能有數字、加號、括號、橫線與空白。")
         user.phone = phone
     return _clean(form.address)

@@ -34,3 +34,16 @@ def test_create_user_missing_name_is_a_clean_422():
     client = make_client()
     r = client.post("/api/dashboard/users?roles=volunteer")
     assert r.status_code == 422
+
+
+def test_phone_numbers_are_validated_where_admins_type_them(db):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.validation import tel_uri
+    assert tel_uri("03-870-1234") == "tel:038701234" and tel_uri("問櫃台") is None and tel_uri("0912345678abc") is None
+    client = TestClient(app)
+    assert client.post("/api/dashboard/users", params={"name": "甲", "roles": ["volunteer"], "phone": "問櫃台"}).status_code == 422
+    uid = client.post("/api/dashboard/users", params={"name": "甲", "roles": ["volunteer"], "phone": "0912-345-678"}).json()["id"]
+    assert client.put(f"/api/dashboard/users/{uid}", params={"phone": "abc"}).status_code == 422
+    assert client.put(f"/api/dashboard/users/{uid}", params={"phone": ""}).status_code == 200
+    assert client.post("/api/resources/points", params={"name": "所", "point_type": "clinic", "phone": "x"}).status_code == 422

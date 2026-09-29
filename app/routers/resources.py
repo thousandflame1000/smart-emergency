@@ -6,7 +6,7 @@ import json
 
 from app.errors import ApiError, raise_if_error
 from app.validation import (
-    NEED_TYPES, RESOURCE_TYPES, check_choice, check_coords, check_name, check_urgency,
+    NEED_TYPES, RESOURCE_TYPES, check_choice, check_coords, check_name, check_phone, check_urgency,
 )
 from app.timeutil import now_utc
 from app.database import get_db
@@ -570,7 +570,7 @@ def create_resource_point(
     pt = ResourcePoint(
         name=name, point_type=point_type,
         address=address, lat=lat, lng=lng,
-        capacity=capacity, phone=phone,
+        capacity=capacity, phone=check_phone(phone) or None,
         operating_hours=operating_hours, note=note,
         source="manual",
     )
@@ -605,7 +605,7 @@ def update_resource_point(
     if lng              is not None: pt.lng              = lng
     if capacity         is not None: pt.capacity         = capacity
     if current_load     is not None: pt.current_load     = max(0, current_load)
-    if phone            is not None: pt.phone            = phone
+    if phone            is not None: pt.phone            = check_phone(phone) or None
     if operating_hours  is not None: pt.operating_hours  = operating_hours
     if note             is not None: pt.note             = note
     if is_active        is not None: pt.is_active        = is_active

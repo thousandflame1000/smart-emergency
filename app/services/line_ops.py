@@ -24,6 +24,7 @@ from app.models.user import User
 from app.services import dispatch
 from app.services.line_notify import reply_flex_message, reply_text
 from app.timeutil import now_utc, today_tw
+from app.validation import tel_uri
 
 logger = logging.getLogger(__name__)
 
@@ -353,8 +354,8 @@ def admin_sos_list(event, db: Session, user: User) -> None:
 
 def sos_bubble(need_id: str, name: str, address: str | None, phone: str | None) -> dict:
     buttons = [{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={need_id}", "color": "#c0392b"}]
-    if phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", phone):
-        buttons.insert(0, {"label": f"📞 撥打 {phone}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", phone)})
+    if tel_uri(phone):
+        buttons.insert(0, {"label": f"📞 撥打 {phone}"[:20], "uri": tel_uri(phone)})
     return bubble("🆘 緊急求助", "#c0392b", [f"當事人：{name}", f"地點：{address or '未知'}", "請立即聯繫，必要時通報 119"],
                   buttons)
 
@@ -668,8 +669,8 @@ def elder_status(event, db: Session, user: User) -> None:
                                                 DailyCheckin.date == today_tw()).first()
         status = CHECKIN_ZH.get(checkin.status, checkin.status) if checkin else "今天還沒有打卡紀錄"
         buttons = []
-        if elder.phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", elder.phone):
-            buttons.append({"label": f"📞 撥打 {elder.phone}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", elder.phone),
+        if tel_uri(elder.phone):
+            buttons.append({"label": f"📞 撥打 {elder.phone}"[:20], "uri": tel_uri(elder.phone),
                             "color": "#2471a3"})
         if checkin and checkin.status != "ok":
             buttons.append({"label": "✅ 我確認他平安", "data": f"action=confirm_safe&checkin_id={checkin.id}"})

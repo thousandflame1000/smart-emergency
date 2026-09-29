@@ -9,6 +9,7 @@ from app.models.alert import Alert
 from app.models.care_relation import CareRelation
 from app.services.line_notify import send_alert_message
 from app.services.outbox import OutboxService, finish_inline_delivery
+from app.validation import tel_uri
 
 logger = logging.getLogger(__name__)
 
@@ -82,11 +83,10 @@ def check_no_response() -> None:
 
 def _page_admins_nobody_told(db: Session, checkin: DailyCheckin) -> None:
     """沒有照護聯絡人（或全部送不到）的長者，三小時沒回應時不能沒人知道。"""
-    import re
     elder = checkin.elderly
     buttons = [{"label": "✅ 已確認安全", "data": f"action=confirm_safe&checkin_id={checkin.id}", "color": "#c0392b"}]
-    if elder.phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", elder.phone):
-        buttons.insert(0, {"label": f"📞 撥打 {elder.name}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", elder.phone),
+    if tel_uri(elder.phone):
+        buttons.insert(0, {"label": f"📞 撥打 {elder.name}"[:20], "uri": tel_uri(elder.phone),
                            "color": "#c0392b"})
     notify_admins(db, f"🚨 {elder.name} 已超過 3 小時未回應打卡，而且沒有任何家屬或志工收到通知。\n"
                       f"請直接聯繫或派人探視（{elder.address or '地址未填'}）。", buttons=buttons)

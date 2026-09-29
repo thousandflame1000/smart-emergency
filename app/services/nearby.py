@@ -4,12 +4,12 @@
 發給所有人。緊急模式時先列應變據點（庇護所、消防分隊、衛生所、醫院）。
 """
 import json
-import re
 
 from sqlalchemy.orm import Session
 
 from app.models.resource_point import EMERGENCY_POINT_TYPES, POINT_TYPES, ResourcePoint
 from app.services.geo import haversine_km
+from app.validation import tel_uri
 
 SUPPLY_ZH = {"water": "飲用水", "food": "食物", "first_aid": "急救用品", "shelter": "收容",
              "vehicle": "交通", "tool": "工具", "other": "其他"}
@@ -65,8 +65,8 @@ def nearby_cards(db: Session, user, emergency: bool) -> tuple[str, dict] | None:
         p = row["point"]
         color = EMERGENCY_COLOR if emergency and p.point_type in EMERGENCY_POINT_TYPES else SUPPLY_COLOR
         buttons = [{"label": "🧭 導航", "uri": f"https://www.google.com/maps/dir/?api=1&destination={p.lat},{p.lng}"}]
-        if p.phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", p.phone):
-            buttons.append({"label": f"📞 {p.phone}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", p.phone)})
+        if tel_uri(p.phone):
+            buttons.append({"label": f"📞 {p.phone}"[:20], "uri": tel_uri(p.phone)})
         cards.append(bubble(f"{i}. {p.name}", color, _details(p, row["km"]), buttons))
     alt = ("🚨 最近的應變據點：" if emergency else "📦 最近的物資據點：") + "、".join(r["point"].name for r in rows)
     return alt[:400], carousel(cards)

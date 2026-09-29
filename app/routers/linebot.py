@@ -29,6 +29,7 @@ from app.labels import NEED_TYPE_ZH as NEED_TYPE_ZH_SOURCE
 from app.rate_limit import limiter
 from app.services import webhook_inbox
 from app.timeutil import now_utc, today_tw
+from app.validation import tel_uri
 
 logger = logging.getLogger(__name__)
 
@@ -327,8 +328,8 @@ def _looks_like_question(text: str) -> bool:
 def _sos_admin_buttons(user, sos_need) -> list[dict]:
     """管理員收到求救時最先要做的是打電話，其次是知道人在哪。"""
     buttons = [{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={sos_need.id}", "color": "#c0392b"}]
-    if user.phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", user.phone):
-        buttons.insert(0, {"label": f"📞 撥打 {user.name}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", user.phone),
+    if tel_uri(user.phone):
+        buttons.insert(0, {"label": f"📞 撥打 {user.name}"[:20], "uri": tel_uri(user.phone),
                            "color": "#c0392b"})
     if sos_need.lat is not None and sos_need.lng is not None:
         buttons.append({"label": "🧭 導航", "uri": f"https://www.google.com/maps/dir/?api=1&destination={sos_need.lat},{sos_need.lng}"})

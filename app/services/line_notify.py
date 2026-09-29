@@ -4,6 +4,7 @@ from linebot.v3.messaging import (
     FlexContainer, FlexMessage, TextMessage,
 )
 from app.config import settings
+from app.validation import tel_uri
 
 def _flex(alt_text: str, contents, location_prompt: bool = False) -> FlexMessage:
     """Build a Flex message. A plain dict must go through FlexContainer.from_dict: handed to
@@ -293,12 +294,11 @@ def send_alert_message(
             ],
         },
     }
-    import re
     phone = getattr(elderly, "phone", None)
-    if phone and re.fullmatch(r"[0-9+\-()\s]{7,20}", phone):
+    if tel_uri(phone):
         flex["footer"]["contents"].insert(0, {
             "type": "button", "style": "secondary", "height": "sm",
-            "action": {"type": "uri", "label": f"📞 撥打 {elderly_name}"[:20], "uri": "tel:" + re.sub(r"[^0-9+]", "", phone)},
+            "action": {"type": "uri", "label": f"📞 撥打 {elderly_name}"[:20], "uri": tel_uri(phone)},
         })
     if alert_type in ("no_response_3h", "help_needed") and getattr(elderly, "lat", None) is not None:
         flex["footer"]["contents"].append({
@@ -355,12 +355,11 @@ def build_task_bubble(
         })
     # 接單後才給求助者電話：出發前先打一通確認，找不到人也能問路。
     if accepted and requester_phone:
-        import re
-        if re.fullmatch(r"[0-9+\-()\s]{7,20}", requester_phone):
+        if tel_uri(requester_phone):
             footer_contents.append({
                 "type": "button", "style": "link", "height": "sm",
                 "action": {"type": "uri", "label": "📞 撥打求助者",
-                           "uri": "tel:" + re.sub(r"[^0-9+]", "", requester_phone)},
+                           "uri": tel_uri(requester_phone)},
             })
     report_buttons = []
     if need_id:

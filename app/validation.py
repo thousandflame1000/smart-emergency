@@ -2,6 +2,7 @@
 """管理端 API 的輸入驗證。之前四個新增端點幾乎什麼都收：緊急度 99 或 -3、空的需求類型、
 座標 999、空姓名、角色 "hacker"、自己當自己的照護聯絡人，全都會寫進資料庫。"""
 import math
+import re
 
 from app.errors import ApiError
 
@@ -51,3 +52,23 @@ def check_urgency(urgency: int) -> int:
     if not 1 <= urgency <= 5:
         raise ApiError(422, "緊急度必須是 1 到 5。")
     return urgency
+
+
+PHONE_PATTERN = re.compile(r"[0-9+\-()\s]{7,20}")
+
+
+def tel_uri(phone: str | None) -> str | None:
+    """看起來像電話號碼才給 tel: 連結；「問櫃台」這種文字不給撥打按鈕。"""
+    if phone and PHONE_PATTERN.fullmatch(phone.strip()):
+        return "tel:" + re.sub(r"[^0-9+]", "", phone)
+    return None
+
+
+def check_phone(phone: str | None) -> str | None:
+    """None 代表不修改、空字串代表清除；其他值必須像電話號碼，否則撥打按鈕永遠出不來。"""
+    if phone is None:
+        return None
+    cleaned = phone.strip()
+    if cleaned and not PHONE_PATTERN.fullmatch(cleaned):
+        raise ApiError(422, "電話格式不正確：請填 7 到 20 碼數字，可含 - ( ) +。")
+    return cleaned
