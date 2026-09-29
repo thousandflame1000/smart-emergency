@@ -138,8 +138,20 @@ function renderOperationalSelection(item,isNode){
       loadOperationCandidates(item,proposeButton);
     }
     if(['suggested','matched'].includes(p.status)&&isAdmin())button('傳訊息給志工','message-square-text',()=>messageAssignee(item));
+    if(['open','suggested','matched'].includes(p.status)&&isAdmin())loadNeedContact(item);
     loadOperationEvents(item);
   }
+}
+// 電話只在管理員點開時讀取、只放在畫面上，不寫進工作區快照或匯出檔。
+async function loadNeedContact(node){
+  try{
+    const c=await resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/contact');
+    const digits=(c.phone||'').replace(/[^0-9+]/g,'');
+    if(state.selected?.id!==node.id||!$('operational-actions')||digits.length<7)return;
+    const a=document.createElement('a');a.className='icon-button';a.href='tel:'+digits;
+    a.innerHTML='<i data-lucide="phone"></i>';a.append(`撥打 ${c.name||'求助者'}（${c.phone}）`);
+    $('operational-actions').prepend(a);icons();
+  }catch(e){/* 沒有電話就不顯示按鈕 */}
 }
 const operationCandidates=new Map();
 async function loadOperationCandidates(node,proposeButton=null){

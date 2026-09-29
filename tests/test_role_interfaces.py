@@ -674,3 +674,14 @@ def test_console_needs_no_login_by_default_even_with_a_bound_admin(db, monkeypat
     assert webclient.get("/api/dashboard/users").status_code == 200
     assert webclient.get("/").status_code == 200
     demo_auth.reset_cache()
+
+
+def test_need_contact_returns_requester_phone(db, webclient):
+    vol, req, adm, res, need = world(db)
+    assert webclient.get(f"/api/resources/needs/{need.id}/contact").json() == {"name": "王奶奶", "phone": "0912345678"}
+    assert webclient.get("/api/resources/needs/nope/contact").status_code == 404
+
+
+def test_need_contact_needs_an_admin_login(db, enforced, webclient):
+    vol, req, adm, res, need = world(db)
+    assert webclient.get(f"/api/resources/needs/{need.id}/contact").status_code == 401

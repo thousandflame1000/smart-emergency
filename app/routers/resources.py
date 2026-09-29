@@ -422,6 +422,17 @@ def list_need_dispatch_events(
     return [_fmt_dispatch_event(e) for e in events]
 
 
+@router.get("/needs/{need_id}/contact")
+def need_contact(need_id: str, db: Session = Depends(get_db),
+                 _principal: dict | None = Depends(require_admin)):
+    """求助者的姓名與電話，只在管理員點開這筆需求時才讀，不放進工作區快照。"""
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if need is None:
+        raise HTTPException(404, "找不到這筆需求")
+    requester = need.requester
+    return {"name": requester.name if requester else None, "phone": requester.phone if requester else None}
+
+
 @router.post("/needs/{need_id}/resolve_sos")
 def resolve_sos_need(need_id: str, db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """管理員確認已聯繫、處理完一筆一鍵求助"""
