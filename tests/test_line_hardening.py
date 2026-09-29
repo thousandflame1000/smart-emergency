@@ -1288,7 +1288,7 @@ def test_unrecognised_message_offers_one_tap_commands_that_all_work(db, line_out
     mk(db, "王奶奶", ["elderly"], "U-fallback")
     say("U-fallback", "嗯嗯")
     message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
-    commands = [item.action.text for item in message.quick_reply.items]
+    commands = [item.action.data.removeprefix("cmd=") for item in message.quick_reply.items]
     assert commands == ["我很好", "查詢物資", "需要幫忙", "幫助"]
     for command in commands:
         line_outbox.sent.clear()
@@ -1304,3 +1304,14 @@ def test_admin_sos_push_lets_them_call_and_navigate(db, line_outbox):
     card = [m for kind, to, m in line_outbox.sent if kind == "push" and to == "U-sos-adm"][-1]
     text = _json.dumps(card.contents.to_dict(), ensure_ascii=False)
     assert "tel:0912345678" in text and "destination=23.67,121.42" in text and "admin_sos" in text
+
+
+def test_menu_buttons_are_silent_and_work_for_brand_new_users(db, line_outbox):
+    """選單按鈕不在聊天室代打字（postback），第一次就直接按選單的人也要被自動註冊並得到回應。"""
+    from app.services.rich_menu import MENUS, _request
+    for name in MENUS:
+        assert all(area.action.type == "postback" and area.action.data.startswith("cmd=")
+                   for area in _request(name).areas)
+    press("U-first-tap", "cmd=查詢物資")
+    assert db.query(User).filter(User.line_uid == "U-first-tap").first() is not None
+    assert any("請先分享位置" in t for t in replies(line_outbox))

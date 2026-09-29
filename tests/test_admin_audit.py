@@ -50,7 +50,7 @@ def test_emergency_broadcast_points_to_supply_lookup(db, line_outbox):
     assert broadcast_mode_change("emergency") == 1
     kind, to, message = line_outbox.sent[-1]
     assert to == "U-b1" and "查詢物資" in message.text
-    assert [i.action.text for i in message.quick_reply.items] == ["查詢物資", "需要幫忙"]
+    assert [i.action.data for i in message.quick_reply.items] == ["cmd=查詢物資", "cmd=需要幫忙"]
 
 
 def test_audit_log_speaks_chinese_and_skips_read_only_posts(db):

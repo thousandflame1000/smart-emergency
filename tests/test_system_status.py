@@ -102,7 +102,7 @@ def test_outdated_line_menu_is_spotted(monkeypatch):
 
     def menus(texts_by_name):
         return SimpleNamespace(richmenus=[
-            SimpleNamespace(name=name, areas=[SimpleNamespace(action=SimpleNamespace(text=t)) for t in texts])
+            SimpleNamespace(name=name, areas=[SimpleNamespace(action=SimpleNamespace(data=f"cmd={t}")) for t in texts])
             for name, texts in texts_by_name.items()])
 
     current = {name: [c[4] for row in spec["rows"] for c in row] for name, spec in rich_menu.MENUS.items()}

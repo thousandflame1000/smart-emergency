@@ -1194,7 +1194,11 @@ def _process_text(event, db, user, text) -> bool:
 
 @handler.add(MessageEvent, message=TextMessageContent)
 def handle_text(event: MessageEvent):
-    text     = event.message.text.strip()
+    _run_command(event, event.message.text.strip())
+
+
+def _run_command(event, text: str) -> None:
+    """打字與靜默按鈕（postback cmd=）共用同一條處理流程。"""
     line_uid = event.source.user_id
     db       = next(get_db())
 
@@ -1409,6 +1413,11 @@ def handle_postback(event: PostbackEvent):
             else:
                 message = "任務指令無效，請聯絡管理員。"
             reply_text(event.reply_token, message)
+        return
+
+    # 選單與卡片上的靜默按鈕：跟打字走同一條路，新用戶直接按選單也會自動註冊。
+    if data.get("cmd"):
+        _run_command(event, data["cmd"].strip())
         return
 
     user = db.query(User).filter(User.line_uid == line_uid).first()

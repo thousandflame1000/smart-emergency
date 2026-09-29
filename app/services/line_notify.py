@@ -487,19 +487,25 @@ def reply_text_with_location_prompt(reply_token: str, text: str) -> None:
     _get_api().reply_message(ReplyMessageRequest(reply_token=reply_token, messages=[message]))
 
 
+def command_action(label: str, command: str):
+    """按了不會在聊天室代打一句話的按鈕；機器人收到後照同一個指令處理。"""
+    from linebot.v3.messaging import PostbackAction
+    return PostbackAction(label=label, data=f"cmd={command}")
+
+
 def reply_text_with_commands(reply_token: str, text: str, commands: list[tuple[str, str]]) -> None:
     """Text reply with one-tap quick-reply buttons that send the given command text."""
-    from linebot.v3.messaging import MessageAction, QuickReply, QuickReplyItem
+    from linebot.v3.messaging import QuickReply, QuickReplyItem
     message = TextMessage(text=text, quick_reply=QuickReply(items=[
-        QuickReplyItem(action=MessageAction(label=label, text=command)) for label, command in commands]))
+        QuickReplyItem(action=command_action(label, command)) for label, command in commands]))
     _get_api().reply_message(ReplyMessageRequest(reply_token=reply_token, messages=[message]))
 
 
 def send_text_with_commands(line_uid: str, text: str, commands: list[tuple[str, str]]) -> None:
     """Push variant of reply_text_with_commands."""
-    from linebot.v3.messaging import MessageAction, QuickReply, QuickReplyItem
+    from linebot.v3.messaging import QuickReply, QuickReplyItem
     message = TextMessage(text=text, quick_reply=QuickReply(items=[
-        QuickReplyItem(action=MessageAction(label=label, text=command)) for label, command in commands]))
+        QuickReplyItem(action=command_action(label, command)) for label, command in commands]))
     _get_api().push_message(PushMessageRequest(to=line_uid, messages=[message]))
 
 

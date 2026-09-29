@@ -87,4 +87,4 @@ def test_sharing_location_offers_a_one_tap_supply_lookup(db, line_outbox):
     mk(db, "居民", ["elderly"], uid="U-tap")
     lb.handle_location(_Ev("U-tap", msg=_Msg(latitude=23.9, longitude=121.6)))
     message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
-    assert [item.action.text for item in message.quick_reply.items] == ["查詢物資"]
+    assert [item.action.data for item in message.quick_reply.items] == ["cmd=查詢物資"]

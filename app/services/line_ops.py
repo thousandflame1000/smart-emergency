@@ -55,7 +55,7 @@ def bubble(title: str, color: str, lines: list[str], buttons: list[dict] | None 
     footer = []
     for i, b in enumerate(buttons or []):
         action = ({"type": "uri", "label": b["label"][:20], "uri": b["uri"]} if "uri" in b else
-                  {"type": "message", "label": b["label"][:20], "text": b["text"]} if "text" in b else
+                  {"type": "postback", "label": b["label"][:20], "data": f"cmd={b['text']}"} if "text" in b else
                   {"type": "postback", "label": b["label"][:20], "data": b["data"]})
         footer.append({"type": "button", "height": "sm", "style": "primary" if i == 0 else "secondary",
                        **({"color": b.get("color", "#1b7a44")} if i == 0 else {}), "action": action})

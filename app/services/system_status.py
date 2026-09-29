@@ -58,9 +58,10 @@ def _menu_check() -> dict:
         return _item("richmenu", label, "warn", "讀不到 LINE 上的選單", "確認上方 LINE 官方帳號是綠燈。")
     stale = []
     for name, spec in MENUS.items():
-        expected = [cell[4] for row in spec["rows"] for cell in row]
+        expected = [f"cmd={cell[4]}" for row in spec["rows"] for cell in row]
         menu = live.get(name)
-        actual = [getattr(area.action, "text", None) for area in (menu.areas if menu else [])]
+        # 舊版是「代打一句話」的按鈕（沒有 data），也算舊版
+        actual = [getattr(area.action, "data", None) for area in (menu.areas if menu else [])]
         if sorted(actual) != sorted(expected):
             stale.append(name.split("-")[-1])
     return _item("richmenu", label, "ok" if not stale else "warn",

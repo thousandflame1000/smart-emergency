@@ -8,7 +8,7 @@ import logging
 import os
 
 from linebot.v3.messaging import (
-    ApiClient, Configuration, MessageAction, MessagingApi, MessagingApiBlob,
+    ApiClient, Configuration, MessagingApi, MessagingApiBlob, PostbackAction,
     RichMenuArea, RichMenuBounds, RichMenuBulkLinkRequest, RichMenuRequest, RichMenuSize,
 )
 
@@ -78,7 +78,8 @@ def _request(name: str) -> RichMenuRequest:
     areas = [
         RichMenuArea(
             bounds=RichMenuBounds(x=x, y=y, width=w, height=h),
-            action=MessageAction(label=cell[0], text=cell[4]),
+            # 靜默按鈕：按了不會在聊天室冒出一句「我很好」，直接出結果，像 App 而不是對話框。
+            action=PostbackAction(label=cell[0], data=f"cmd={cell[4]}"),
         )
         for x, y, w, h, cell in layout(spec["rows"])
     ]
