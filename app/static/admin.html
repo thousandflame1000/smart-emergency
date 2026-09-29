@@ -3181,7 +3181,7 @@ async function loadStatus() {
       <span class="badge ${STATUS_LEVEL[i.level][1]}">${STATUS_LEVEL[i.level][0]}</span>
       <strong>${esc(i.label)}</strong>
       <div><div>${esc(i.detail)}</div>${i.hint ? `<div class="status-hint">${esc(i.hint)}</div>` : ''}${
-        i.key === 'richmenu' && i.level !== 'ok' ? '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="installRichMenu(this)">重裝 LINE 選單</button>' : ''}</div></div>`).join('');
+        i.key === 'richmenu' ? `<button class="btn ${i.level === 'ok' ? 'btn-ghost' : 'btn-primary'} btn-sm" style="margin-top:8px" onclick="installRichMenu(this)">重裝 LINE 選單</button>` : ''}</div></div>`).join('');
   } catch (e) {
     list.innerHTML = '<div class="empty">讀取失敗，請重新檢查</div>';
   }
