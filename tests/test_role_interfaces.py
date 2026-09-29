@@ -685,3 +685,15 @@ def test_need_contact_returns_requester_phone(db, webclient):
 def test_need_contact_needs_an_admin_login(db, enforced, webclient):
     vol, req, adm, res, need = world(db)
     assert webclient.get(f"/api/resources/needs/{need.id}/contact").status_code == 401
+
+
+def test_decision_center_tells_admins_what_needs_fixing(db, line_outbox):
+    import json as _json
+    from app.services import system_status
+    system_status._line_cache.update(at=0.0, result=None)
+    mk(db, "管理員", ["admin"], "U-dc")
+    from tests.test_line_hardening import say
+    say("U-dc", "決策中心")
+    card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    text = _json.dumps(card.contents.to_dict(), ensure_ascii=False)
+    assert "系統需處理" in text and "知識庫" in text

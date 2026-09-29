@@ -233,7 +233,18 @@ def _admin_snapshot(db: Session) -> dict:
         "unanswered": unanswered,
         "helping": helping,
         "unwell": unwell,
+        "problems": _system_problems(db),
     }
+
+
+def _system_problems(db: Session) -> list[str]:
+    """系統狀態裡「需處理」的項目名稱；管理員在手機上也要知道哪裡沒設好。"""
+    try:
+        from app.services.system_status import checks
+        return [item["label"] for item in checks(db) if item["level"] == "error"]
+    except Exception:
+        logger.warning("system status check failed", exc_info=True)
+        return []
 
 
 def admin_overview(event, db: Session, user: User) -> None:
@@ -245,6 +256,7 @@ def admin_overview(event, db: Session, user: User) -> None:
         f"🚚 進行中任務：{stats['matched']}（志工已確認 {stats['accepted']}）",
         f"🙋 待審志工申請：{stats['apps']}",
         f"👴 今日長者：求助 {stats['helping']}、不舒服 {stats['unwell']}、未回覆 {stats['unanswered']}",
+        *([f"⚠️ 系統需處理：{'、'.join(stats['problems'])}（後台「系統狀態」有修正方式）"] if stats["problems"] else []),
         "",
         "指令：待派、待審、求救單、後台",
     ]))
@@ -257,7 +269,8 @@ def decision_center(event, db: Session, user: User) -> None:
             "決策中心", "#2471a3",
             [stats["mode"],
              f"緊急求救 {stats['sos']}｜待派 {stats['open']}｜建議{_status_label('suggested')} {stats['suggested']}",
-             f"進行中 {stats['matched']}｜志工待審 {stats['apps']}"],
+             f"進行中 {stats['matched']}｜志工待審 {stats['apps']}",
+             *([f"⚠️ 系統需處理：{'、'.join(stats['problems'])}"] if stats["problems"] else [])],
             [{"label": "緊急求救", "text": "求救單"},
              {"label": "待派需求", "text": "待派"},
              {"label": "完整總覽", "text": "總覽"}],
