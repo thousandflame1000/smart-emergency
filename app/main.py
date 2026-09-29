@@ -26,6 +26,12 @@ from app.routers import join_page, webform, linebot, dashboard, resources, rag, 
 import app.models.resource_point  # noqa: F401
 import app.models.dispatch_event  # noqa: F401
 
+# 沒設定時 info 全被丟掉、警告也沒有時間與來源，線上出事查不到。
+# 排程每 5 秒跑一次、httpx 每個外部請求都記一行，壓到 WARNING 免得洗版。
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+for _noisy in ("apscheduler", "httpx", "httpcore"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
