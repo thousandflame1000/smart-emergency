@@ -122,26 +122,52 @@ def ingest_document(content: str, source: str, category: str, version: str | Non
     return inserted
 
 
-def sync_builtin_documents() -> dict:
-    """Add the shipped documents that are missing from the database, and never delete or overwrite.
-
-    "Reload everything" wipes the table, which also throws away anything an admin edited in the
-    console. This only fills gaps, so it is safe to run at every startup and from the console."""
+def _builtin_documents() -> list[dict]:
     import importlib
     import os
     import sys
     root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     if root not in sys.path:
         sys.path.insert(0, root)
-    ingest_kb = importlib.reload(importlib.import_module("ingest_kb"))
+    return importlib.reload(importlib.import_module("ingest_kb")).DOCUMENTS
+
+
+def rebuild_builtin_documents() -> int:
+    """Replace the whole table with the shipped documents.
+
+    Every embedding is computed before anything is deleted, and the swap is one transaction:
+    if Gemini fails halfway the old knowledge base stays intact instead of ending up empty."""
+    from app.models.knowledge import KnowledgeChunk
+    rows = [KnowledgeChunk(content=chunk, embedding=json.dumps(_embed(chunk)), source=doc["source"],
+                           category=doc["category"], version=doc.get("version", "1.0"))
+            for doc in _builtin_documents() for chunk in _chunk_text(doc["content"])]
+    db = SessionLocal()
+    try:
+        db.query(KnowledgeChunk).delete()
+        db.add_all(rows)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+    return len(rows)
+
+
+def sync_builtin_documents() -> dict:
+    """Add the shipped documents that are missing from the database, and never delete or overwrite.
+
+    "Reload everything" wipes the table, which also throws away anything an admin edited in the
+    console. This only fills gaps, so it is safe to run at every startup and from the console."""
     added, failed = 0, 0
-    for doc in ingest_kb.DOCUMENTS:
+    documents = _builtin_documents()
+    for doc in documents:
         try:
             added += ingest_document(doc["content"], doc["source"], doc["category"],
                                      version=doc.get("version", "1.0"), skip_existing=True)
         except Exception:
             failed += 1
-    return {"added": added, "failed": failed, "documents": len(ingest_kb.DOCUMENTS)}
+    return {"added": added, "failed": failed, "documents": len(documents)}
 
 
 # ──────────────────────────────────────────────

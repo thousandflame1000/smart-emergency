@@ -1,6 +1,9 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
+from app.config import settings
 from app.services import rag as rag_svc
 from app.security import require_admin
 
@@ -68,31 +71,20 @@ def ingest_all():
 
     if _ingest_status["running"]:
         return {"message": "正在載入中，請稍後查詢 /api/rag/ingest_status"}
+    if not settings.EXTERNAL_AI_ENABLED:
+        # 沒有 AI 就產生不了向量；先清空再載入只會留下一個空的知識庫
+        raise HTTPException(409, "外部 AI 未啟用，無法重新產生向量；現有知識庫保持不變。")
 
     def _run():
-        import sys, os, importlib
         _ingest_status["running"] = True
         _ingest_status["done"]    = False
         _ingest_status["error"]   = None
         try:
-            from app.database import SessionLocal
-            from app.models.knowledge import KnowledgeChunk
-            db = SessionLocal()
-            db.query(KnowledgeChunk).delete()
-            db.commit()
-            db.close()
-
-            root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-            if root not in sys.path:
-                sys.path.insert(0, root)
-
-            ingest_kb = importlib.import_module("ingest_kb")
-            importlib.reload(ingest_kb)
-            total = ingest_kb.run()
-            _ingest_status["chunks"] = total
+            _ingest_status["chunks"] = rag_svc.rebuild_builtin_documents()
             _ingest_status["done"]   = True
         except Exception as e:
-            _ingest_status["error"] = str(e)
+            logging.getLogger(__name__).exception("knowledge base rebuild failed; old content kept")
+            _ingest_status["error"] = f"{e}（現有知識庫保持不變）"
         finally:
             _ingest_status["running"] = False
 

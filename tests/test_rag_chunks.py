@@ -93,3 +93,39 @@ def test_delete_chunk(db, client):
 def test_get_missing_chunk_404(client):
     r = client.get("/api/rag/chunks/does-not-exist")
     assert r.status_code == 404
+
+
+def test_reload_all_refuses_without_ai_and_keeps_the_knowledge_base(db, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.config import settings
+    from app.main import app
+    from app.models.knowledge import KnowledgeChunk
+    db.add(KnowledgeChunk(content="CPR 步驟", source="AHA", category="first_aid", embedding="[1.0]")); db.commit()
+    monkeypatch.setattr(settings, "EXTERNAL_AI_ENABLED", False)
+    r = TestClient(app).post("/api/rag/ingest_all")
+    assert r.status_code == 409 and "保持不變" in r.json()["detail"]
+    assert db.query(KnowledgeChunk).count() == 1
+
+
+def test_rebuild_failing_halfway_keeps_old_content(db, monkeypatch):
+    import pytest
+    from app.models.knowledge import KnowledgeChunk
+    from app.services import rag
+    db.add(KnowledgeChunk(content="舊內容", source="舊", category="first_aid", embedding="[1.0]")); db.commit()
+    calls = {"n": 0}
+
+    def flaky_embed(text):
+        calls["n"] += 1
+        if calls["n"] > 3:
+            raise RuntimeError("quota")
+        return [0.1]
+    monkeypatch.setattr(rag, "_embed", flaky_embed)
+    with pytest.raises(RuntimeError):
+        rag.rebuild_builtin_documents()
+    db.expire_all()
+    assert [c.content for c in db.query(KnowledgeChunk).all()] == ["舊內容"]
+
+    monkeypatch.setattr(rag, "_embed", lambda text: [0.1])
+    assert rag.rebuild_builtin_documents() > 1
+    db.expire_all()
+    assert "舊內容" not in {c.content for c in db.query(KnowledgeChunk).all()}

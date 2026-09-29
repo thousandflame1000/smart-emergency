@@ -2538,12 +2538,17 @@ async function syncKB() {
 }
 
 async function ingestAll() {
-  if (!await askConfirm('重新載入知識庫', '<p><strong>現有知識庫內容會被清空</strong>，再重新載入所有預設文件。</p><p class="form-hint" style="margin-top:6px">約需 1-2 分鐘，期間 AI 助手查不到資料。你自己新增的文件也會一併消失。</p>', '清空並重新載入', 'btn-danger')) return;
+  if (!await askConfirm('重新載入知識庫', '<p>用預設文件<strong>取代</strong>現有知識庫，你自己新增或修改的內容會消失。</p><p class="form-hint" style="margin-top:6px">約需 1-2 分鐘；新內容全部準備好才替換，中途失敗會保留原本的知識庫。</p>', '清空並重新載入', 'btn-danger')) return;
   document.getElementById('ingest-btn').disabled = true;
   showNotice('ingest-notice', 'info', '⏳ 已送出請求，正在重新載入…');
   try {
     const res  = await fetch('/api/rag/ingest_all', { method: 'POST' });
     const data = await res.json();
+    if (!res.ok) {
+      showNotice('ingest-notice', 'danger', data.detail || data.error || '無法重新載入');
+      document.getElementById('ingest-btn').disabled = false;
+      return;
+    }
     showNotice('ingest-notice', 'info', data.message || '正在載入…');
     setTimeout(() => {
       loadKB();
