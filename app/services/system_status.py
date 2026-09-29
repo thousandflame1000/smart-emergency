@@ -84,7 +84,7 @@ def _coverage(db: Session) -> list[dict]:
     if not distances:
         return []
     km = median(distances)
-    return [_item("coverage", "長者到最近應變據點", "ok" if km <= 20 else "warn", f"中位數約 {km:.0f} 公里",
+    return [_item("coverage", "長者到最近應變據點", "ok" if km <= 20 else "warn", f"中位數約 {km:.1f} 公里" if km < 10 else f"中位數約 {km:.0f} 公里",
                   "應變據點離長者太遠：補上長者所在鄉鎮的避難所、消防分隊與衛生所。")]
 
 

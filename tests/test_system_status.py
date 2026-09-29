@@ -94,7 +94,8 @@ def test_shelters_far_from_every_elder_are_flagged(db):
     item = _by_key(db)["coverage"]
     assert item["level"] == "warn" and "公里" in item["detail"] and item["hint"]
     db.add(ResourcePoint(name="玉里國小", point_type="shelter", lat=23.336, lng=121.314)); db.commit()
-    assert _by_key(db)["coverage"]["level"] == "ok"
+    item = _by_key(db)["coverage"]
+    assert item["level"] == "ok" and item["detail"] == "中位數約 0.5 公里"
 
 
 def test_outdated_line_menu_is_spotted(monkeypatch):
