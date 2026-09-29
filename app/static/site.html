@@ -28,6 +28,13 @@ button { font:inherit; }
 .nav:hover { background:rgba(255,255,255,.03); color:var(--text); }
 .nav.active { background:rgba(34,211,238,.08); color:var(--primary); border-left-color:var(--primary); }
 .nav svg { width:17px; height:17px; flex-shrink:0; }
+/* 事件處置是主要工作入口，和一般頁面分開、一眼看得到 */
+.nav.nav-primary { margin:8px 12px 4px; width:calc(100% - 24px); min-height:46px; padding:8px 12px; border:1px solid rgba(249,115,22,.55); border-radius:6px;
+       background:rgba(249,115,22,.14); color:#fed7aa; font-weight:750; font-size:14px; }
+.nav.nav-primary svg { width:20px; height:20px; color:#fb923c; }
+.nav.nav-primary:hover { background:rgba(249,115,22,.22); color:#fff; }
+.nav.nav-primary.active { background:rgba(249,115,22,.28); color:#fff; border-color:#fb923c; }
+.nav-count { margin-left:auto; min-width:22px; padding:1px 7px; border-radius:11px; background:#ea580c; color:#fff; font:700 12px var(--mono); text-align:center; }
 .bottom { margin-top:auto; padding:12px; border-top:1px solid var(--border); }
 .mode-button { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; min-height:38px; padding:8px 10px; border-radius:4px; cursor:pointer;
         font:700 12px var(--sans); background:rgba(45,212,167,.08); color:var(--success); border:1px solid rgba(45,212,167,.3); }
@@ -110,7 +117,7 @@ button { font:inherit; }
   var frame = document.getElementById('view'), nav = document.getElementById('nav'), buttons = {}, frames = {}, currentId = null;
   var sidebar = document.getElementById('sidebar'), navToggle = document.getElementById('nav-toggle');
   var navScrim = document.getElementById('nav-scrim'), navClose = document.getElementById('nav-close');
-  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',workspace:'network',ai:'messages-square',kb:'book-open'};
+  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',workspace:'siren',ai:'messages-square',kb:'book-open'};
 
   function setNav(open) {
     sidebar.classList.toggle('open', open);
@@ -129,10 +136,14 @@ button { font:inherit; }
       var s = document.createElement('div'); s.className = 'sec'; s.textContent = item.sec; nav.appendChild(s); return;
     }
     var b = document.createElement('button');
-    b.type = 'button'; b.className = 'nav'; b.title = item.label;
+    b.type = 'button'; b.className = item.id === 'workspace' ? 'nav nav-primary' : 'nav'; b.title = item.label;
     var icon = document.createElement('i'); icon.setAttribute('data-lucide',iconNames[item.id]);
     var label = document.createElement('span'); label.className = 'label'; label.textContent = item.label;
     b.appendChild(icon); b.appendChild(label);
+    if (item.id === 'workspace') {
+      var count = document.createElement('span'); count.className = 'nav-count'; count.id = 'workspace-count'; count.hidden = true;
+      b.appendChild(count);
+    }
     b.addEventListener('click', function () { go(item.id); setNav(false); });
     buttons[item.id] = { el: b, item: item };
     nav.appendChild(b);
@@ -172,6 +183,8 @@ button { font:inherit; }
       pill.classList.toggle('emergency', emergency);
       mobilePill.classList.toggle('emergency', emergency);
       document.getElementById('emergency-banner').hidden = !emergency;
+      var count = document.getElementById('workspace-count');
+      if (count) { count.hidden = !s.open_needs; count.textContent = s.open_needs || ''; count.title = '待處理需求 ' + (s.open_needs || 0) + ' 筆'; }
       document.getElementById('mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       document.getElementById('mobile-mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       pill.setAttribute('aria-label', emergency ? '目前為緊急模式，按下可解除' : '目前為日常模式，按下可啟動緊急模式');
