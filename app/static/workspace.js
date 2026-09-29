@@ -218,6 +218,7 @@ function nodeOptions(value='', placeholder='選擇物件') { return `<option val
 function nodeById(id) { return state.graph.nodes.find(n=>n.id===id); }
 function visible(n) { return !state.hidden.has(n.kind); }
 function render() {
+  document.body.classList.toggle('live-mode',!!state.live);
   const counts={};state.graph.nodes.forEach(n=>counts[n.kind]=(counts[n.kind]||0)+1);
   const liveNeeds=state.graph.nodes.filter(n=>n.properties.db==='need');
   const sosCount=liveNeeds.filter(n=>n.properties.status==='open'&&n.properties.need_type==='sos').length;

@@ -23,6 +23,9 @@ h2 { margin: 0 0 12px; font-size: 14px; font-weight: 700; }
 .workspace-picker { display:flex; align-items:center; gap:8px; min-width:0; flex:1; }
 .workspace-picker select { width:190px; } #workspace-name { width:190px; } #workspace-folder { width:140px; }
 .header-actions { display: flex; gap: 6px; margin-left: auto; }
+.picker-field { display:inline-flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; white-space:nowrap; min-width:0; }
+/* 即時營運現況的名稱與資料夾是固定的，沒東西可改就不佔位置 */
+.live-mode .picker-field { display:none; }
 .toolbar { position:relative; display: flex; align-items: center; gap: 6px; padding: 9px 18px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .advanced-tools { display:none; flex:1 0 100%; align-items:center; gap:6px; padding-top:8px; border-top:1px solid var(--line); }
 .toolbar.expanded .advanced-tools { display:flex; }
@@ -184,7 +187,9 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
   .workspace-heading h1 { font-size:16px; white-space:nowrap; }
   .workspace-picker { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:6px; }
   #workspace-list { grid-column:1 / -1; width:100%; }
-  #workspace-name, #workspace-folder { width:100%; }
+  #workspace-name, #workspace-folder { width:100%; min-width:0; }
+  .picker-field { display:grid; gap:2px; }
+  .live-mode .picker-field { display:none; }
   .header-actions { margin-left:0; gap:4px; }
   .header-actions button { padding:5px 7px; }
   .toolbar { gap:5px; }
