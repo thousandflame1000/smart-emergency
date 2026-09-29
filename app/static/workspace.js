@@ -13,7 +13,27 @@ const ICON_PATHS = {
   facility: '<path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"></path><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"></path><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"></path><path d="M10 6h4"></path><path d="M10 10h4"></path><path d="M10 14h4"></path><path d="M10 18h4"></path>',
   custom: '<path d="M8.3 10a.7.7 0 0 1-.626-1.079L11.4 3a.7.7 0 0 1 1.198-.043L16.3 8.9a.7.7 0 0 1-.572 1.1Z"></path><rect x="3" y="14" width="7" height="7" rx="1"></rect><circle cx="17.5" cy="17.5" r="3.5"></circle>',
 };
-function iconSvg(kind) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${ICON_PATHS[kind]||''}</svg>`; }
+function iconSvg(kind) { return svgIcon(ICON_PATHS[kind]); }
+function svgIcon(paths) { return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">${paths||''}</svg>`; }
+// 人員依角色區分：志工與居民在地圖上一眼要分得出來，不必點開看「角色」。
+// 同時是居民與志工的人算志工（他是能出門送物資的人）。
+const ROLE_LOOK = {
+  volunteer: {label:'志工', color:'#2f855a', shape:'round-rectangle',
+              icon:'<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><polyline points="16 11 18 13 22 9"></polyline>'},
+  resident:  {label:'居民', color:'#237caf', shape:'ellipse', icon:ICON_PATHS.person},
+  family:    {label:'家屬', color:'#64748b', shape:'ellipse', icon:ICON_PATHS.person},
+};
+function personRole(n) {
+  if (n.kind !== 'person') return null;
+  const roles = n.properties?.roles || [];
+  if (roles.includes('volunteer') || roles.includes('field_staff')) return 'volunteer';
+  if (roles.includes('elderly')) return 'resident';
+  if (roles.includes('family')) return 'family';
+  return null;
+}
+function nodeColor(n) { return ROLE_LOOK[personRole(n)]?.color || COLORS[n.kind]; }
+function nodeIcon(n) { const look = ROLE_LOOK[personRole(n)]; return look ? svgIcon(look.icon) : iconSvg(n.kind); }
+function nodeTypeLabel(n) { return ROLE_LOOK[personRole(n)]?.label || TYPES[n.kind]; }
 const STATUS = {active:'啟用', inactive:'停用'};
 const LIVE_WORKSPACE_ID='__live__';
 const state = {id:null, live:false, zone:'', revision:0, graph:{nodes:[],edges:[]}, selected:null, view:'map', dirty:false,
@@ -214,16 +234,22 @@ async function selectZone(){
   message(zone?`分區：${zone.name}`:'全部分區');
 }
 function options(items, value) { return Object.entries(items).map(([k,v])=>`<option value="${escapeHtml(k)}" ${k===value?'selected':''}>${escapeHtml(v)}</option>`).join(''); }
-function nodeOptions(value='', placeholder='選擇物件') { return `<option value="">${placeholder}</option>`+state.graph.nodes.map(n=>`<option value="${escapeHtml(n.id)}" ${n.id===value?'selected':''}>${escapeHtml(n.label)} (${TYPES[n.kind]})</option>`).join(''); }
+function nodeOptions(value='', placeholder='選擇物件') { return `<option value="">${placeholder}</option>`+state.graph.nodes.map(n=>`<option value="${escapeHtml(n.id)}" ${n.id===value?'selected':''}>${escapeHtml(n.label)} (${nodeTypeLabel(n)})</option>`).join(''); }
 function nodeById(id) { return state.graph.nodes.find(n=>n.id===id); }
 function visible(n) { return !state.hidden.has(n.kind); }
+function personLegend() {
+  const tally = {};
+  state.graph.nodes.forEach(n => { const r = personRole(n); if (r) tally[r] = (tally[r] || 0) + 1; });
+  return `<div class="role-legend">${Object.entries(ROLE_LOOK).map(([r, look]) =>
+    `<span><i class="swatch" style="background:${look.color}"></i>${look.label} ${tally[r] || 0}</span>`).join('')}</div>`;
+}
 function render() {
   document.body.classList.toggle('live-mode',!!state.live);
   const counts={};state.graph.nodes.forEach(n=>counts[n.kind]=(counts[n.kind]||0)+1);
   const liveNeeds=state.graph.nodes.filter(n=>n.properties.db==='need');
   const sosCount=liveNeeds.filter(n=>n.properties.status==='open'&&n.properties.need_type==='sos').length;
   const supplyCount=state.graph.nodes.filter(n=>n.properties.db==='resource').length;
-  $('layers').innerHTML=Object.entries(TYPES).map(([kind,label])=>`<div class="layer-row"><label class="layer"><input type="checkbox" data-kind="${kind}" ${state.hidden.has(kind)?'':'checked'}><span class="swatch" style="background:${COLORS[kind]}"></span>${label}<small>${counts[kind]||0}</small></label><button class="layer-add" data-layer-add="${kind}" title="匯入${label}" aria-label="匯入${label}"><i data-lucide="upload"></i></button></div>`).join('');
+  $('layers').innerHTML=Object.entries(TYPES).map(([kind,label])=>`<div class="layer-row"><label class="layer"><input type="checkbox" data-kind="${kind}" ${state.hidden.has(kind)?'':'checked'}><span class="swatch" style="background:${COLORS[kind]}"></span>${label}<small>${counts[kind]||0}</small></label><button class="layer-add" data-layer-add="${kind}" title="匯入${label}" aria-label="匯入${label}"><i data-lucide="upload"></i></button></div>${kind==='person'?personLegend():''}`).join('');
   $('layers').querySelectorAll('[data-layer-add]').forEach(button=>button.onclick=()=>openImport(button.dataset.layerAdd));
   $('layers').querySelectorAll('input').forEach(input=>input.onchange=()=>{input.checked?state.hidden.delete(input.dataset.kind):state.hidden.add(input.dataset.kind);render();});
   const m=state.report?.metrics||{};
@@ -237,7 +263,7 @@ function render() {
 function renderObjects() {
   const query=$('search').value.toLowerCase();const nodes=state.graph.nodes.filter(n=>visible(n)&&(n.label.toLowerCase().includes(query)||n.id.toLowerCase().includes(query)));
   $('object-count').textContent=`${nodes.length} 筆`;
-  $('objects').innerHTML=nodes.slice(0,150).map(n=>`<button data-node="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''}" title="${escapeHtml(n.label)}"><span class="swatch" style="background:${COLORS[n.kind]}"></span><span class="object-label">${escapeHtml(n.label)}</span>${n.lat===null?'<small>無座標</small>':''}</button>`).join('')+(nodes.length>150?'<div class="muted">顯示前 150 筆</div>':'');
+  $('objects').innerHTML=nodes.slice(0,150).map(n=>`<button data-node="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''}" title="${escapeHtml(n.label)}"><span class="swatch" style="background:${nodeColor(n)}"></span><span class="object-label">${escapeHtml(n.label)}</span>${n.lat===null?'<small>無座標</small>':''}</button>`).join('')+(nodes.length>150?'<div class="muted">顯示前 150 筆</div>':'');
   $('objects').querySelectorAll('[data-node]').forEach(btn=>btn.onclick=()=>{select('node',btn.dataset.node);const n=nodeById(btn.dataset.node);if(n.lat!==null)map.panTo([n.lat,n.lng]);if(cy){const el=cy.getElementById('node:'+n.id);cy.center(el);}});
   renderOperationTasks();renderOperationResources();
 }
@@ -297,8 +323,8 @@ function renderCanvas() {
     for(const n of nodes.values()){if(n.lat===null)continue;// 24px 是 WCAG 2.5.8 的觸控目標下限。群集打開時看不出差別，但 zoom 到底、
 // 群集停用後每個標記都是獨立的點——那正是調度者要用手指點它的時候。
 const size=n.kind==='incident'?28:24;
-      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${COLORS[n.kind]}">${iconSvg(n.kind)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
-      marker.bindTooltip(document.createTextNode(`${n.label} · ${TYPES[n.kind]}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
+      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${nodeColor(n)}">${nodeIcon(n)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
+      marker.bindTooltip(document.createTextNode(`${n.label} · ${nodeTypeLabel(n)}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});
       markers.push(marker);
     }
@@ -308,10 +334,10 @@ const size=n.kind==='incident'?28:24;
 function renderGraph(nodes,critical) {
   const initial=!cy;
   const positions=new Map(cy?cy.nodes().map(n=>[n.data('nodeId'),n.position()]):[]);
-  const elements=[...nodes.values()].map((n,i)=>({data:{id:'node:'+n.id,nodeId:n.id,label:n.label,color:COLORS[n.kind],size:n.kind==='incident'?32:27,kind:n.kind},position:n.properties._layout||positions.get(n.id)||(n.lat!==null?{x:n.lng*10000,y:-n.lat*10000}:{x:(i%10)*100,y:Math.floor(i/10)*100})}));
+  const elements=[...nodes.values()].map((n,i)=>({data:{id:'node:'+n.id,nodeId:n.id,label:n.label,color:nodeColor(n),shape:ROLE_LOOK[personRole(n)]?.shape||'ellipse',size:n.kind==='incident'?32:27,kind:n.kind},position:n.properties._layout||positions.get(n.id)||(n.lat!==null?{x:n.lng*10000,y:-n.lat*10000}:{x:(i%10)*100,y:Math.floor(i/10)*100})}));
   state.graph.edges.forEach(e=>{if(nodes.has(e.source)&&nodes.has(e.target))elements.push({data:{id:'edge:'+e.id,edgeId:e.id,source:'node:'+e.source,target:'node:'+e.target,label:e.label,color:e.status==='inactive'?'#9ca9a0':critical.has(e.id)?'#9a5b9e':'#6b7f73',directed:e.directed?'triangle':'none',style:e.status==='inactive'?'dashed':'solid'}});});
   if(!cy){cy=cytoscape({container:$('graph'),elements:[],minZoom:.001,maxZoom:2,style:[
-    {selector:'node',style:{'background-color':'data(color)',label:'data(label)','font-size':12,color:'#36483d','text-valign':'bottom','text-margin-y':6,'text-wrap':'ellipsis','text-max-width':130,width:'data(size)',height:'data(size)'}},
+    {selector:'node',style:{'background-color':'data(color)',shape:'data(shape)',label:'data(label)','font-size':12,color:'#36483d','text-valign':'bottom','text-margin-y':6,'text-wrap':'ellipsis','text-max-width':130,width:'data(size)',height:'data(size)'}},
     {selector:'edge',style:{width:2,'line-color':'data(color)','target-arrow-color':'data(color)','target-arrow-shape':'data(directed)','line-style':'data(style)','curve-style':'bezier'}},
     {selector:'node:selected',style:{'border-width':3,'border-color':'#e9a126'}},
     {selector:'edge:selected',style:{'line-color':'#e9a126',width:5}},

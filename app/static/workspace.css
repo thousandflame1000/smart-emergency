@@ -227,3 +227,7 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 .region-results button { display: flex; justify-content: space-between; gap: 10px; width: 100%; text-align: left; }
 .region-results button small { color: var(--muted, #5f6c65); white-space: nowrap; }
 .region-results button.selected { outline: 2px solid #189b87; }
+
+.role-legend { display:flex; flex-wrap:wrap; gap:4px 12px; margin:2px 0 6px 26px; font-size:12px; color:var(--muted); }
+.role-legend span { display:inline-flex; align-items:center; gap:5px; }
+.role-legend .swatch { display:inline-block; width:10px; height:10px; border-radius:50%; }

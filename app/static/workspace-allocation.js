@@ -35,7 +35,7 @@ function openAllocationPicker(context){allocationPicker=context;$('allocation-no
 function renderAllocationPicker(){
   const query=$('allocation-node-query').value.toLowerCase();
   const nodes=state.graph.nodes.filter(n=>(n.label+' '+n.id).toLowerCase().includes(query)).slice(0,50);
-  $('allocation-node-results').innerHTML=nodes.map(n=>`<button data-allocation-node="${escapeHtml(n.id)}"><span class="swatch" style="background:${COLORS[n.kind]}"></span><span>${escapeHtml(n.label)}<small class="muted"> ${TYPES[n.kind]} · ${escapeHtml(n.id)}</small></span></button>`).join('')||'<p class="muted">沒有符合的物件</p>';
+  $('allocation-node-results').innerHTML=nodes.map(n=>`<button data-allocation-node="${escapeHtml(n.id)}"><span class="swatch" style="background:${nodeColor(n)}"></span><span>${escapeHtml(n.label)}<small class="muted"> ${nodeTypeLabel(n)} · ${escapeHtml(n.id)}</small></span></button>`).join('')||'<p class="muted">沒有符合的物件</p>';
   $('allocation-node-results').querySelectorAll('button').forEach(button=>button.onclick=()=>{
     const node=nodeById(button.dataset.allocationNode);if((node.logistics||[]).length>=30||(!allocationPicker.id&&logisticsRows().length>=2000)){$('allocation-node-results').insertAdjacentHTML('afterbegin','<p role="alert">物資紀錄上限：每個物件 30 筆、工作區共 2,000 筆。</p>');return;}
     const context=allocationPicker;
