@@ -17,6 +17,8 @@
 .status-hint { margin-top: 4px; color: var(--muted); font-size: 13px; }
 .status-error .status-hint { color: var(--danger); }
 @media (max-width: 700px) { .status-row { grid-template-columns: 64px 1fr; } .status-row > div { grid-column: 2; } }
+.role-checks { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 6px 0; }
+.role-checks label { display: inline-flex; align-items: center; gap: 5px; font-size: 14px; cursor: pointer; }
 </style>
 <style>
 /* ══════════════════════════════════════════════════════════
@@ -1121,15 +1123,15 @@ textarea.form-control { resize: vertical; min-height: 80px; }
           <input type="text" class="form-control" id="user-name">
         </div>
         <div class="form-group">
-          <label class="form-label" for="user-role">角色 <span class="req">*</span></label>
-          <select class="form-select" id="user-role">
-            <option value="elderly">長者</option>
-            <option value="volunteer">志工</option>
-            <option value="family">家屬</option>
-            <option value="field_staff">基層員工</option>
-            <option value="admin">管理員</option>
-          </select>
-          <span class="form-hint">基層員工：只能編輯物資與資源點</span>
+          <span class="form-label" id="user-roles-label">角色 <span class="req">*</span></span>
+          <div class="role-checks" id="user-roles" role="group" aria-labelledby="user-roles-label">
+            <label><input type="checkbox" value="elderly">長者</label>
+            <label><input type="checkbox" value="volunteer">志工</label>
+            <label><input type="checkbox" value="family">家屬</label>
+            <label><input type="checkbox" value="field_staff">基層員工</label>
+            <label><input type="checkbox" value="admin">管理員</label>
+          </div>
+          <span class="form-hint">可複選。基層員工只能編輯物資與資源點</span>
         </div>
       </div>
       <div class="form-row col-2">
@@ -1961,7 +1963,9 @@ function openUserModal(role, user = null) {
   document.getElementById('user-modal-title').textContent =
     user ? '編輯使用者' : `新增${ROLE_LABEL[role] || role}`;
   document.getElementById('user-id').value      = user?.id || '';
-  document.getElementById('user-role').value    = role;
+  // 一個人常同時是長者與志工、或志工兼管理員；全部勾出來，儲存時才不會把其他角色洗掉。
+  const current = user?.roles?.length ? user.roles : [role];
+  document.querySelectorAll('#user-roles input').forEach(box => { box.checked = current.includes(box.value); });
   document.getElementById('user-name').value    = user?.name || '';
   document.getElementById('user-phone').value   = user?.phone || '';
   document.getElementById('user-address').value = user?.address || '';
@@ -2029,16 +2033,17 @@ async function unlinkLine() {
   } catch (e) { toast('danger', e.message); }
 }
 
-function editUser(u) { openUserModal(u.roles[0] || 'elderly', u); }
+function editUser(u) { openUserModal(u.roles[0] || 'elderly', u); }  // 預設角色只用於新增，編輯時勾出全部角色
 
 async function saveUser() {
   const id      = document.getElementById('user-id').value;
-  const role    = document.getElementById('user-role').value;
+  const roles   = [...document.querySelectorAll('#user-roles input:checked')].map(box => box.value);
   const name    = document.getElementById('user-name').value.trim();
   const phone   = document.getElementById('user-phone').value.trim();
   const address = document.getElementById('user-address').value.trim();
 
   if (!name) { notify('請輸入姓名'); return; }
+  if (!roles.length) { notify('請至少勾選一個角色'); return; }
   if (address && !await geocodeNow('user')) { notify('地址尚未成功定位，請修正地址後再儲存。'); return; }
   const lat = document.getElementById('user-lat').value;
   const lng = document.getElementById('user-lng').value;
@@ -2049,7 +2054,7 @@ async function saveUser() {
   if (lat)     p.set('lat', lat);
   if (lng)     p.set('lng', lng);
 
-  p.append('roles', role);
+  roles.forEach(r => p.append('roles', r));
   if (id) {
     const res = await fetch(`/api/dashboard/users/${id}?${p}`, { method: 'PUT' });
     if (!res.ok) { const d = await res.json().catch(() => ({})); notify('儲存失敗：' + (d.detail || d.error || res.status)); return; }
