@@ -129,3 +129,45 @@ def test_rebuild_failing_halfway_keeps_old_content(db, monkeypatch):
     assert rag.rebuild_builtin_documents() > 1
     db.expire_all()
     assert "舊內容" not in {c.content for c in db.query(KnowledgeChunk).all()}
+
+
+def _seed_kb(db):
+    from app.models.knowledge import KnowledgeChunk
+    db.add_all([
+        KnowledgeChunk(content="【中風辨識（FAST 法則）】\nF – Face（臉）：請患者微笑，一側臉歪斜。", source="急救指引", category="first_aid"),
+        KnowledgeChunk(content="【長者跌倒預防與跌倒後處置】\n先不要急著扶起，確認意識與疼痛部位。", source="長照指引", category="eldercare"),
+        KnowledgeChunk(content="【長者日常打卡與關懷流程】\n長者回覆「我很好」即完成打卡。", source="照護 SOP", category="eldercare"),
+    ])
+    db.commit()
+
+
+def test_sop_lookup_works_without_external_ai(db, monkeypatch):
+    from app.config import settings
+    from app.services import rag
+    _seed_kb(db)
+    monkeypatch.setattr(settings, "EXTERNAL_AI_ENABLED", False)
+    stroke = rag.query("中風怎麼辦")
+    assert stroke["has_answer"] and stroke["mode"] == "keyword" and "FAST" in stroke["answer"]
+    assert "跌倒" in rag.query("阿嬤跌倒了怎麼辦")["answer"]
+    assert rag.query("我很無聊")["has_answer"] is False, "一個常見詞不該撈出打卡 SOP"
+
+
+def test_embedding_failure_falls_back_to_keyword_search(db, monkeypatch):
+    from app.config import settings
+    from app.services import rag
+    _seed_kb(db)
+    monkeypatch.setattr(settings, "EXTERNAL_AI_ENABLED", True)
+    monkeypatch.setattr(rag, "_embed", lambda text: (_ for _ in ()).throw(RuntimeError("quota")))
+    result = rag.query("中風怎麼辦")
+    assert result["has_answer"] and result["mode"] == "keyword"
+
+
+def test_line_labels_keyword_answers_as_knowledge_base(db, line_outbox, monkeypatch):
+    from app.config import settings
+    from tests.test_line_hardening import mk, replies, say
+    _seed_kb(db)
+    monkeypatch.setattr(settings, "EXTERNAL_AI_ENABLED", False)
+    mk(db, "志工", ["volunteer"], "U-kb")
+    say("U-kb", "中風怎麼辦？")
+    reply = replies(line_outbox)[-1]
+    assert reply.startswith("📚 知識庫") and "FAST" in reply

@@ -6,6 +6,8 @@ Supabase 環境：之後可換成 pgvector
 """
 import json
 import logging
+import math
+import re
 
 import numpy as np
 from google import genai
@@ -35,15 +37,68 @@ def _client():
 # ──────────────────────────────────────────────
 # 主要查詢
 # ──────────────────────────────────────────────
+# ──────────────────────────────────────────────
+# 不靠外部 AI 的關鍵字檢索：AI 未啟用、額度用完或斷線時，志工仍查得到 SOP
+# ──────────────────────────────────────────────
+_QUESTION_WORDS = ("怎麼辦", "怎麼做", "怎麼", "如何", "什麼", "請問", "應該", "可以", "需要", "要不要", "是不是")
+
+
+def _bigrams(text: str) -> set[str]:
+    text = re.sub(r"[\s\W_]+", "", text.lower())
+    return {text[i:i + 2] for i in range(len(text) - 1)}
+
+
+def _keyword_search(question: str, top_k: int = TOP_K) -> list[dict]:
+    """中文沒有空白斷詞，用兩字詞重疊計分，並依稀有度加權（越少段落出現的詞越有鑑別力）。"""
+    for word in _QUESTION_WORDS:
+        question = question.replace(word, " ")
+    wanted = _bigrams(question)
+    if not wanted:
+        return []
+    db = SessionLocal()
+    try:
+        from app.models.knowledge import KnowledgeChunk
+        rows = db.query(KnowledgeChunk.content, KnowledgeChunk.source).all()
+    finally:
+        db.close()
+    grams = [_bigrams(content) for content, _ in rows]
+    # 只拿知識庫裡出現過的詞計分；「阿嬤」這種口語詞不在任何段落，算進分母只會稀釋掉「跌倒」。
+    df = {g: sum(g in doc for doc in grams) for g in wanted}
+    known = {g for g, n in df.items() if n}
+    if not known:
+        return []
+    weight = {g: math.log((len(rows) + 1) / (1 + df[g])) + 1 for g in known}
+    total = sum(weight.values())
+    scored = []
+    for (content, source), doc in zip(rows, grams):
+        hits = known & doc
+        in_title = bool(hits & _bigrams(content.strip().split("\n", 1)[0]))
+        # 標題命中（通常就是在講這件事）或至少三個詞重疊才算；「我很無聊」不該撈到打卡 SOP。
+        if hits and (in_title or len(hits) >= 3):
+            score = sum(weight[g] for g in hits) / total + (0.2 if in_title else 0)
+            scored.append((score, content, source))
+    scored.sort(key=lambda row: row[0], reverse=True)
+    return [{"content": c, "source": src, "score": round(sc, 3)} for sc, c, src in scored[:top_k] if sc >= 0.35]
+
+
+def _keyword_answer(question: str) -> dict:
+    results = _keyword_search(question)
+    if not results:
+        return {"answer": "❌ 系統內無相關資料，請聯繫專業人員或撥打 1966。", "sources": [], "has_answer": False}
+    return {"answer": "以下為知識庫最相關段落（未經 AI 整理）：\n\n" + results[0]["content"][:600],
+            "sources": list(dict.fromkeys(r["source"] for r in results)), "has_answer": True,
+            "chunks_used": len(results), "mode": "keyword"}
+
+
 def query(question: str) -> dict:
     if not settings.EXTERNAL_AI_ENABLED:
-        return {
-            "answer": "外部 AI 功能尚未由營運單位啟用。請直接查閱知識庫或聯繫專業人員。",
-            "sources": [],
-            "has_answer": False,
-        }
-    embedding = _embed(question)
-    results   = _search(embedding)
+        return _keyword_answer(question)
+    try:
+        embedding = _embed(question)
+    except Exception:
+        log.exception("Gemini embedding failed; falling back to keyword search")
+        return _keyword_answer(question)
+    results = _search(embedding)
 
     if not results:
         return {

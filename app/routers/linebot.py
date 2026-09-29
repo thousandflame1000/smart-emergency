@@ -961,7 +961,8 @@ def _handle_question(event, text) -> bool:
     if result.get("has_answer"):
         sources = result.get("sources", [])
         src_line = f"\n\n📚 來源：{' | '.join(sources[:2])}" if sources else ""
-        _say(event, f"🤖 AI 助手回答：\n\n{result['answer'][:1000]}{src_line}")
+        title = "📚 知識庫" if result.get("mode") == "keyword" else "🤖 AI 助手回答"
+        _say(event, f"{title}：\n\n{result['answer'][:1000]}{src_line}")
         return True
     _say(event, "🤖 知識庫裡目前沒有這個問題的資料，抱歉。\n" + EMERGENCY_TIP)
     return True
