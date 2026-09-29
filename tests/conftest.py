@@ -8,7 +8,8 @@ import tempfile
 
 # 必須在任何 app.* 被 import 之前設定好環境變數，
 # 因為 app.config.Settings() 是在模組載入當下就讀取 .env / 環境變數。
-_TEST_DB = os.path.join(tempfile.gettempdir(), "smart_emergency_pytest.db")
+# 每個 pytest 行程用自己的檔案：同時跑兩組測試（例如 CI 與本機）時才不會互相清表。
+_TEST_DB = os.path.join(tempfile.gettempdir(), f"smart_emergency_pytest_{os.getpid()}.db")
 os.environ["DATABASE_URL"] = f"sqlite:///{_TEST_DB}"
 os.environ.setdefault("LINE_CHANNEL_SECRET", "dummy_secret")
 os.environ.setdefault("LINE_CHANNEL_ACCESS_TOKEN", "dummy_token")
@@ -18,6 +19,15 @@ import pytest
 
 from app.database import engine, Base, SessionLocal
 import app.models.resource_point  # noqa: F401 確保所有 model 都被註冊
+
+
+def pytest_sessionfinish(session, exitstatus):
+    engine.dispose()
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        try:
+            os.remove(_TEST_DB + suffix)
+        except OSError:
+            pass
 
 
 @pytest.fixture(autouse=True)
