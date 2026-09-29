@@ -1030,12 +1030,14 @@ HELP_BASE = (
 
 
 NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所")
+APP_WORDS = ("打開 App", "打開App", "開啟 App", "App", "app")
+ASK_WORDS = ("急救問答", "問答")
 FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "回報平安",
                   "狀態", "status", "幫助", "help", "?", "？", "操作說明",
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
                   "申請物資", "物資申請", "需要物資", "申請表單", "申請需求",
-                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS)
+                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS) | set(APP_WORDS) | set(ASK_WORDS)
 UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
 # 長輩不會照指令打字：「今天頭好暈」「有點發燒」也是在說身體不適，要讓家人知道。
 UNWELL_HINTS = ("不舒服", "不太舒服", "頭暈", "頭很暈", "頭好暈", "暈眩", "發燒", "頭痛", "頭好痛", "肚子痛", "胃痛",
@@ -1127,6 +1129,23 @@ def _process_text(event, db, user, text) -> bool:
 
     if not intent["sos"] and (text in UNWELL_WORDS or _sounds_unwell(user, text)):
         _say(event, _report_unwell(user, db))
+        return True
+
+    if text in APP_WORDS:
+        from app.services.line_ops import bubble
+        from app.services.line_notify import reply_flex_message
+        from app.services.rich_menu import liff_url
+        if liff_url():
+            reply_flex_message(event.reply_token, "打開鄰里守望 App", bubble(
+                "📱 鄰里守望 App", "#13795b", ["申請物資、查看進度、找避難所、急救問答，都在這裡。"],
+                [{"label": "打開 App", "uri": liff_url()}]))
+            return True
+
+    if text in ASK_WORDS:
+        reply_text_with_commands(
+            event.reply_token, "直接把問題傳給我就好，例如「有人中風怎麼辦？」。\n有生命危險請直接撥 119。",
+            [("中風怎麼辦", "有人中風怎麼辦？"), ("CPR 步驟", "CPR 怎麼做？"), ("長者跌倒", "長者跌倒了怎麼辦？"),
+             ("低血糖", "低血糖怎麼辦？")])
         return True
 
     if text in NEARBY_WORDS:
@@ -1412,6 +1431,10 @@ def handle_postback(event: PostbackEvent):
             else:
                 message = "任務指令無效，請聯絡管理員。"
             reply_text(event.reply_token, message)
+        return
+
+    # 選單分頁切換：LINE 已經換好選單，機器人不用回任何話。
+    if "switch" in data:
         return
 
     # 選單與卡片上的靜默按鈕：跟打字走同一條路，新用戶直接按選單也會自動註冊。

@@ -684,6 +684,14 @@ class _FakeMenuApi:
     def link_rich_menu_id_to_users(self, request):
         self.calls.append(("bulk_link", tuple(request.user_ids), request.rich_menu_id))
     def unlink_rich_menu_id_from_user(self, uid): self.calls.append(("unlink", uid))
+    aliases: dict = {}
+    def update_rich_menu_alias(self, alias, req):
+        if alias not in self.aliases:
+            raise RuntimeError("alias not found")
+        self.aliases[alias] = req.rich_menu_id; self.calls.append(("alias_update", alias, req.rich_menu_id))
+    def create_rich_menu_alias(self, req):
+        self.aliases[req.rich_menu_alias_id] = req.rich_menu_id
+        self.calls.append(("alias_create", req.rich_menu_alias_id, req.rich_menu_id))
 
 
 class _FakeBlob:
@@ -694,13 +702,18 @@ class _FakeBlob:
 def test_rich_menu_layout_covers_canvas_and_uses_known_commands():
     from app.routers.linebot import APPLY_PREFIXES, FIXED_COMMANDS, parse_intent
     from app.services import rich_menu as rm
-    assert set(rm.MENUS) == {rm.RESIDENT_NAME, rm.ADMIN_NAME}
+    assert {rm.RESIDENT_NAME, rm.ADMIN_NAME} <= set(rm.MENUS)
+    aliases = {spec["alias"] for spec in rm.MENUS.values()}
     for name, spec in rm.MENUS.items():
-        cells = rm.layout(spec["rows"])
-        assert len(cells) == 6, "每個角色入口只保留六個第一步"
+        cells = rm.layout(spec["rows"], spec.get("heights"))
+        body = [c for *_, c in cells if not c[4].startswith("tab:")]
+        assert len(body) <= 6, "每一頁最多六個按鈕"
         assert sum(w * h for _, _, w, h, _ in cells) == rm.W * rm.H
         for *_, cell in cells:
             text = cell[4]
+            if text.startswith("tab:"):
+                assert text[4:] in aliases, (name, text)  # 分頁要指到存在的選單
+                continue
             assert (text in FIXED_COMMANDS or parse_intent(text)["needs"] or parse_intent(text)["sos"]
                     or any(text.startswith(p) for p in APPLY_PREFIXES)), (name, text)
     assert rm.menu_name_for(["family"]) is None, "家屬使用居民主選單中的情境照護入口"
@@ -718,8 +731,9 @@ def test_install_menus_creates_member_and_admin_menus(db, monkeypatch):
                 User(name="長者", roles=["elderly"], line_uid="U-eld", is_active=True)])
     db.commit()
     result = rm.install_menus(db)
-    assert len([c for c in api.calls if c[0] == "create"]) == 2
-    assert len(blob.images) == 2 and all(size > 1000 for _, size, _ in blob.images)
+    assert len([c for c in api.calls if c[0] == "create"]) == len(rm.MENUS)
+    assert len(blob.images) == len(rm.MENUS) and all(size > 1000 for _, size, _ in blob.images)
+    assert set(api.aliases) == {spec["alias"] for spec in rm.MENUS.values()}, "每一頁都要有分頁別名"
     assert ("default", result["menus"][rm.RESIDENT_NAME]) in api.calls
     assert ("bulk_link", ("U-adm",), result["menus"][rm.ADMIN_NAME]) in api.calls, "管理員同時是志工時看管理員選單"
     linked_users = {uid for c in api.calls if c[0] == "bulk_link" for uid in c[1]}
@@ -1311,9 +1325,17 @@ def test_menu_buttons_are_silent_and_work_for_brand_new_users(db, line_outbox):
     from app.services.rich_menu import MENUS, _request
     for name in MENUS:
         for area in _request(name).areas:
-            assert (area.action.type == "postback" and area.action.data.startswith("cmd=")) or                    (area.action.type == "uri" and area.action.uri.startswith("https://liff.line.me/"))
-    resident = {a.action.label: a.action for a in _request("鄰里守望-成員").areas}
-    assert resident["緊急求助"].type == "postback" and resident["回報平安"].type == "postback", "救命與打卡不能依賴網頁"
+            assert (area.action.type == "postback" and area.action.data.startswith("cmd=")) or                    (area.action.type == "uri" and area.action.uri.startswith("https://liff.line.me/")) or                    area.action.type == "richmenuswitch"
+    resident = {a.action.label: a.action for a in _request("鄰里守望-首頁").areas}
+    assert resident["需要幫忙"].type == "postback" and resident["我很好"].type == "postback", "救命與打卡不能依賴網頁"
     press("U-first-tap", "cmd=查詢物資")
     assert db.query(User).filter(User.line_uid == "U-first-tap").first() is not None
     assert any("請先分享位置" in t for t in replies(line_outbox))
+
+
+def test_switching_menu_tabs_gets_no_reply(db, line_outbox):
+    """點選單上方的分頁只是換選單，機器人不能每點一次就回一句話。"""
+    mk(db, "居民", ["elderly"], "U-tab")
+    press("U-tab", "switch=linri-services")
+    press("U-tab", "switch=linri-home")
+    assert not line_outbox.sent

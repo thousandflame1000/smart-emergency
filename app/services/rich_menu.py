@@ -1,4 +1,5 @@
-"""LINE Rich Menu：一般成員共用一張，決策者使用管理選單。
+"""LINE Rich Menu：上方有分頁列（像 App 的 nav bar），點分頁直接換成另一張選單，不送訊息。
+居民：首頁｜服務。管理員：管理｜首頁｜服務（單帳號示範時不用切帳號就能展示居民功能）。
 
 版面資料是單一來源，`make_rich_menus.py` 拿同一份資料畫圖，這裡拿去建選單，
 按鈕文字一定對得上機器人聽得懂的指令。圖檔事先畫好放在 static/richmenu，
@@ -8,8 +9,9 @@ import logging
 import os
 
 from linebot.v3.messaging import (
-    ApiClient, Configuration, MessagingApi, MessagingApiBlob, PostbackAction, URIAction,
-    RichMenuArea, RichMenuBounds, RichMenuBulkLinkRequest, RichMenuRequest, RichMenuSize,
+    ApiClient, Configuration, CreateRichMenuAliasRequest, MessagingApi, MessagingApiBlob, PostbackAction,
+    RichMenuArea, RichMenuBounds, RichMenuBulkLinkRequest, RichMenuRequest, RichMenuSize, RichMenuSwitchAction,
+    UpdateRichMenuAliasRequest, URIAction,
 )
 
 from app.config import settings
@@ -18,43 +20,69 @@ log = logging.getLogger(__name__)
 
 W, H = 2500, 1686
 MENU_NAME_PREFIX = "鄰里守望"
-# 成為志工後仍保留同一張成員選單，避免入口位置整張重排。
-RESIDENT_NAME = "鄰里守望-成員"
+# 成為志工後仍保留同一套居民選單，避免入口位置整張重排。
+RESIDENT_NAME = "鄰里守望-首頁"
 # 舊版匯入相容；安裝流程會把這張舊選單淘汰。
 STAFF_NAME = "鄰里守望-志工"
-ADMIN_NAME = "鄰里守望-管理員"
+ADMIN_NAME = "鄰里守望-管理"
 IMAGE_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "richmenu")
 
-GREEN, RED, BLUE, ORANGE, GREY, TEAL = "#27ae60", "#e74c3c", "#2471a3", "#e67e22", "#7f8c8d", "#148f77"
+GREEN, RED, BLUE, ORANGE, GREY, TEAL = "#13795b", "#c9364b", "#2471a3", "#c26a12", "#5f6c65", "#0f766e"
 
-# 每格：(標籤, 副標, 底色, 圖示, 送出的文字)。一列一個 list，格子平分該列寬度。
-# 主選單只放角色在當下最常做的第一步；延伸資訊在「中心」卡片中依情境展開。
-# 家屬是居民照護關係的一種，不再維護第四張固定選單，避免分流與重複操作。
-RESIDENT_ROWS = [
-    [("緊急求助", "危險時先選這裡", RED, "🆘", "需要幫忙"),
-     ("申請需求", "一次填好所需項目", ORANGE, "📝", "申請物資"),
-     ("查看進度", "追蹤目前處理狀況", BLUE, "📋", "我的需求")],
-    [("回報平安", "今天狀況良好", GREEN, "✅", "我很好"),
-     ("查詢物資", "附近物資與避難所", TEAL, "🧭", "查詢物資"),
-     ("我的中心", "居民、家屬、志工", GREY, "📁", "我的中心")],
+# 每格：(標籤, 副標, 主色, 圖示, 指令)。圖示是 make_rich_menus.py 畫的向量圖名稱；
+# 指令以 "tab:" 開頭的是分頁列，點了換成那個別名的選單。
+# 首頁＝計畫書寫的三顆按鈕（我很好、需要幫忙、查詢物資），上方整條是 App 入口。
+HOME_BODY = [
+    [("打開 App", "申請物資・查看進度・急救問答・我的紀錄", GREEN, "app", "打開 App")],
+    [("我很好", "回報今天平安", GREEN, "check", "我很好"),
+     ("需要幫忙", "緊急時按這裡", RED, "sos", "需要幫忙"),
+     ("查詢物資", "附近避難所與物資", TEAL, "compass", "查詢物資")],
+]
+SERVICES_BODY = [
+    [("申請物資", "水、食物、藥品", BLUE, "form", "申請物資"),
+     ("查看進度", "需求處理到哪裡", TEAL, "list", "我的需求"),
+     ("急救問答", "中風、CPR、跌倒", RED, "chat", "急救問答")],
+    [("邀請家人", "有狀況家人會知道", GREEN, "family", "邀請家人"),
+     ("我的資料", "電話與地址", GREY, "user", "我的資料"),
+     ("我的中心", "志工與家屬功能", ORANGE, "grid", "我的中心")],
 ]
 ADMIN_ROWS = [
-    [("決策中心", "全局與待處理量", BLUE, "📊", "決策中心"),
-     ("緊急求救", "立即聯繫與處理", RED, "🆘", "求救單"),
-     ("待派需求", "媒合志工與物資", ORANGE, "📦", "待派")],
-    [("待審志工", "核准或婉拒申請", TEAL, "🙋", "待審"),
-     ("開啟後台", "查看完整營運資料", GREY, "🔐", "後台"),
-     ("查詢物資", "附近物資與避難所", TEAL, "🧭", "查詢物資")],
+    [("決策中心", "全局與待處理量", BLUE, "chart", "決策中心"),
+     ("緊急求救", "立即聯繫與處理", RED, "sos", "求救單"),
+     ("待派需求", "媒合志工與物資", ORANGE, "box", "待派")],
+    [("待審志工", "核准或婉拒申請", TEAL, "userplus", "待審"),
+     ("開啟後台", "完整營運資料", GREY, "monitor", "後台"),
+     ("查詢物資", "附近避難所與物資", TEAL, "compass", "查詢物資")],
 ]
+RESIDENT_ROWS = HOME_BODY + SERVICES_BODY  # 相容：測試與舊程式用它列出居民會看到的所有按鈕
+
+RESIDENT_TABS = [("首頁", "linri-home"), ("服務", "linri-services")]
+ADMIN_TABS = [("管理", "linri-admin"), ("首頁", "linri-admin-home"), ("服務", "linri-admin-services")]
+NAV_HEIGHT = 0.13
+
+
+def _nav(tabs):
+    return [(label, "", GREEN, "tab", f"tab:{alias}") for label, alias in tabs]
+
+
+def _page(alias, tabs, body, image, chat_bar, body_heights):
+    return {"alias": alias, "rows": [_nav(tabs)] + body, "heights": [NAV_HEIGHT] + body_heights,
+            "image": image, "chat_bar": chat_bar}
+
+
+_HOME_H, _GRID_H = [0.33, 0.54], [0.435, 0.435]
 MENUS = {
-    RESIDENT_NAME: {"rows": RESIDENT_ROWS, "image": "resident.png", "chat_bar": "居民與志工服務"},
-    ADMIN_NAME: {"rows": ADMIN_ROWS, "image": "admin.png", "chat_bar": "決策中心"},
+    RESIDENT_NAME: _page("linri-home", RESIDENT_TABS, HOME_BODY, "resident.png", "鄰里守望", _HOME_H),
+    "鄰里守望-服務": _page("linri-services", RESIDENT_TABS, SERVICES_BODY, "resident-services.png", "鄰里守望", _GRID_H),
+    ADMIN_NAME: _page("linri-admin", ADMIN_TABS, ADMIN_ROWS, "admin.png", "決策中心", _GRID_H),
+    "鄰里守望-管理員首頁": _page("linri-admin-home", ADMIN_TABS, HOME_BODY, "admin-home.png", "決策中心", _HOME_H),
+    "鄰里守望-管理員服務": _page("linri-admin-services", ADMIN_TABS, SERVICES_BODY, "admin-services.png", "決策中心", _GRID_H),
 }
 
 
 # 這些按鈕直接打開 LINE 裡的全螢幕 App（LIFF）對應分頁；其餘是靜默按鈕。
 # 「緊急求助」「回報平安」刻意不走網頁：救命與打卡要一按就完成，不能等頁面載入。
-LIFF_TABS = {"查詢物資": "nearby", "申請物資": "need", "我的需求": "me"}
+LIFF_TABS = {"打開 App": "home", "查詢物資": "nearby", "申請物資": "need", "我的需求": "me", "急救問答": "ask"}
 
 
 def liff_url(tab: str = "home") -> str | None:
@@ -62,6 +90,10 @@ def liff_url(tab: str = "home") -> str | None:
 
 
 def menu_action(label: str, command: str):
+    if command.startswith("tab:"):
+        alias = command[4:]
+        # 分頁：直接換選單，LINE 會送一個 postback（switch=）過來，機器人不回話。
+        return RichMenuSwitchAction(label=label, rich_menu_alias_id=alias, data=f"switch={alias}")
     url = liff_url(LIFF_TABS[command]) if command in LIFF_TABS else None
     if url:
         return URIAction(label=label, uri=url)
@@ -69,16 +101,17 @@ def menu_action(label: str, command: str):
     return PostbackAction(label=label, data=f"cmd={command}")
 
 
-def layout(rows):
-    """回傳 [(x, y, w, h, cell)]，每列高度平分、列內寬度平分。"""
-    out = []
-    row_h = H // len(rows)
+def layout(rows, heights=None):
+    """回傳 [(x, y, w, h, cell)]。heights 是各列佔的比例（預設平分），列內寬度平分；最後一列補滿，不留縫。"""
+    heights = heights or [1 / len(rows)] * len(rows)
+    out, y = [], 0
     for r, cells in enumerate(rows):
-        h = row_h if r < len(rows) - 1 else H - row_h * r
+        h = round(H * heights[r]) if r < len(rows) - 1 else H - y
         col_w = W // len(cells)
         for c, cell in enumerate(cells):
             w = col_w if c < len(cells) - 1 else W - col_w * c
-            out.append((c * col_w, r * row_h, w, h, cell))
+            out.append((c * col_w, y, w, h, cell))
+        y += h
     return out
 
 
@@ -97,7 +130,7 @@ def _request(name: str) -> RichMenuRequest:
             bounds=RichMenuBounds(x=x, y=y, width=w, height=h),
             action=menu_action(cell[0], cell[4]),
         )
-        for x, y, w, h, cell in layout(spec["rows"])
+        for x, y, w, h, cell in layout(spec["rows"], spec.get("heights"))
     ]
     return RichMenuRequest(
         size=RichMenuSize(width=W, height=H), selected=True, name=name,
@@ -140,6 +173,13 @@ def install_menus(db) -> dict:
             blob.set_rich_menu_image(menu_id, body=bytearray(f.read()),
                                      _headers={"Content-Type": "image/png"})
         ids[name] = menu_id
+    # 分頁靠別名切換：別名改指到新選單，舊選單之後才刪，切換過程中分頁不會失效。
+    for name, spec in MENUS.items():
+        alias = spec["alias"]
+        try:
+            api.update_rich_menu_alias(alias, UpdateRichMenuAliasRequest(rich_menu_id=ids[name]))
+        except Exception:
+            api.create_rich_menu_alias(CreateRichMenuAliasRequest(rich_menu_alias_id=alias, rich_menu_id=ids[name]))
     api.set_default_rich_menu(ids[RESIDENT_NAME])
 
     users_by_menu = {ADMIN_NAME: []}
