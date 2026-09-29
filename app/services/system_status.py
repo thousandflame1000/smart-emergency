@@ -73,15 +73,17 @@ def _menu_check() -> dict:
 def _coverage(db: Session) -> list[dict]:
     """應變據點有沒有落在長者附近：據點全在別的縣市時，數量再多，查詢物資也只會列出幾十公里外的地方。"""
     from statistics import median
-    from app.services.geo import haversine_km
+    from app.services.nearby import nearest_shelter_km
     shelters = [(p.lat, p.lng) for p in db.query(ResourcePoint).filter(
         ResourcePoint.is_active.is_(True), ResourcePoint.lat.isnot(None),
         ResourcePoint.point_type.in_(EMERGENCY_POINT_TYPES)).all()]
     homes = [(u.lat, u.lng) for u in db.query(User).filter(
         User.role_filter("elderly"), User.is_active.is_(True), User.lat.isnot(None)).all()]
-    if not shelters or not homes:
+    # 內政部公告的收容所也算：長者住在服務區外時，查詢物資仍會列出這些
+    distances = [km for km in (nearest_shelter_km(h[0], h[1], shelters) for h in homes) if km is not None]
+    if not distances:
         return []
-    km = median(min(haversine_km(h[0], h[1], s[0], s[1]) for s in shelters) for h in homes)
+    km = median(distances)
     return [_item("coverage", "長者到最近應變據點", "ok" if km <= 20 else "warn", f"中位數約 {km:.0f} 公里",
                   "應變據點離長者太遠：補上長者所在鄉鎮的避難所、消防分隊與衛生所。")]
 

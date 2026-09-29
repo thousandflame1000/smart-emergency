@@ -158,7 +158,7 @@ def location(body: LocationRequest, request: Request, db: Session = Depends(get_
 def nearby(request: Request, db: Session = Depends(get_db)):
     from app.models.resource_point import EMERGENCY_POINT_TYPES, POINT_TYPES
     from app.routers.linebot import _get_mode
-    from app.services.nearby import _supplies, nearest_points
+    from app.services.nearby import OpenShelter, _supplies, capacity_text, nearest_points
     from app.validation import tel_uri
     user = _user(db, request)
     if user.lat is None:
@@ -170,7 +170,8 @@ def nearby(request: Request, db: Session = Depends(get_db)):
         points.append({
             "name": p.name, "type": POINT_TYPES.get(p.point_type, p.point_type), "km": round(row["km"], 1),
             "emergency": p.point_type in EMERGENCY_POINT_TYPES, "supplies": _supplies(p),
-            "capacity": p.capacity, "load": p.current_load or 0, "hours": p.operating_hours,
+            "capacity": capacity_text(p), "hours": p.operating_hours,
+            "official": p.area + "・內政部公告" if isinstance(p, OpenShelter) else None,
             "tel": tel_uri(p.phone), "phone": p.phone if tel_uri(p.phone) else None,
             "navigate": f"https://www.google.com/maps/dir/?api=1&destination={p.lat},{p.lng}",
         })

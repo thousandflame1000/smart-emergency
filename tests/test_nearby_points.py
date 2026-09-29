@@ -4,6 +4,7 @@ from app.models.resource import CommunityResource
 from app.models.resource_point import ResourcePoint
 import json
 
+from app.services.nearby import open_shelters as real_open_shelters  # 收集測試時抓，conftest 會在每個測試換掉它
 from tests.test_line_hardening import mk, replies, say
 
 
@@ -88,3 +89,39 @@ def test_sharing_location_offers_a_one_tap_supply_lookup(db, line_outbox):
     lb.handle_location(_Ev("U-tap", msg=_Msg(latitude=23.9, longitude=121.6)))
     message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
     assert [item.action.data for item in message.quick_reply.items] == ["cmd=查詢物資"]
+
+
+def test_open_shelter_file_covers_every_county_without_personal_phones():
+    shelters = real_open_shelters()
+    assert len(shelters) > 5000
+    assert all(21.5 < s.lat < 26.5 and 118 < s.lng < 122.5 for s in shelters)
+    assert not [s for s in shelters if s.phone and s.phone.startswith("09")], "管理人手機是個資，不能發給所有人"
+    counties = {s.area[:3] for s in shelters}
+    assert {"臺北市", "新北市", "新竹市", "花蓮縣", "臺東縣", "金門縣", "連江縣"} <= counties
+
+
+def test_outside_the_service_area_lists_the_nearest_official_shelter(db, line_outbox, monkeypatch):
+    """人不在自己登記據點的區域（例如台北）時，不能只列出上百公里外的台中據點。"""
+    from app.services import nearby
+    monkeypatch.setattr(nearby, "open_shelters", real_open_shelters)
+    db.add(ResourcePoint(name="台中體育館", point_type="shelter", lat=24.1641, lng=120.6877)); db.commit()
+    mk(db, "居民", ["elderly"], uid="U-tpe", lat=25.0330, lng=121.5654)  # 台北 101
+    say("U-tpe", "查詢物資")
+    text = last_card_text(line_outbox)
+    assert "台中體育館" not in text and "內政部公告" in text
+    rows = nearby.nearest_points(db, 25.0330, 121.5654, emergency=True)
+    assert rows[0]["km"] < 3
+
+
+def test_own_point_wins_over_the_same_official_shelter(db, monkeypatch):
+    """自己登記的有即時收容人數，同一處不要列兩次。"""
+    from app.services import nearby
+    official = nearby.OpenShelter("育才國小", "臺中市北區", 24.1575, 120.6819, 300, "04-22222222", True)
+    far = nearby.OpenShelter("遠方活動中心", "臺中市北區", 24.2, 120.7, 50, None, False)
+    monkeypatch.setattr(nearby, "open_shelters", lambda: (official, far))
+    db.add(ResourcePoint(name="育才國小（北區避難所）", point_type="shelter", lat=24.1576, lng=120.682,
+                         capacity=200, current_load=30)); db.commit()
+    rows = nearby.nearest_points(db, 24.1576, 120.682, emergency=True)
+    assert [r["point"].name for r in rows] == ["育才國小（北區避難所）", "遠方活動中心"]
+    assert nearby.capacity_text(official) == "可收容 300 人・可安置長者與身障者"
+    assert nearby.capacity_text(rows[0]["point"]) == "收容 30/200 人"

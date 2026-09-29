@@ -190,13 +190,14 @@ dialog h2{font-size:21px;margin-bottom:8px}
     var list = $('nearby-list'); list.innerHTML = '';
     if (!d.has_location) { $('nearby-hint').textContent = '按下方按鈕用手機定位，找最近的避難所、衛生所與物資點'; return; }
     $('nearby-hint').textContent = d.emergency ? '緊急模式：先列出避難所、消防分隊與衛生所' : '依距離由近到遠';
-    if (!d.points.length) { list.appendChild(el('div', '附近還沒有登記的據點。緊急時請撥 119。', 'card muted')); return; }
+    if (!d.points.length) { list.appendChild(el('div', '附近找不到據點。緊急時請撥 119。', 'card muted')); return; }
     d.points.forEach(function (p) {
       var c = el('div', null, 'card place' + (p.emergency ? ' emg' : ''));
       c.appendChild(el('div', p.name, 'name'));
       c.appendChild(el('div', p.type + '・約 ' + p.km + ' 公里', 'meta'));
+      if (p.official) c.appendChild(el('div', p.official, 'meta'));
       if (p.supplies) c.appendChild(el('div', p.supplies, 'meta'));
-      if (p.capacity) c.appendChild(el('div', '收容 ' + p.load + '/' + p.capacity + ' 人', 'meta'));
+      if (p.capacity) c.appendChild(el('div', p.capacity, 'meta'));
       if (p.hours) c.appendChild(el('div', '開放 ' + p.hours, 'meta'));
       var row = el('div', null, 'row-actions');
       var nav = el('a', '🧭 導航', 'btn primary'); nav.href = p.navigate; nav.target = '_blank'; nav.rel = 'noopener'; row.appendChild(nav);

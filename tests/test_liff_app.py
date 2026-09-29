@@ -85,3 +85,14 @@ def test_saying_fine_before_the_morning_prompt_still_counts(db, client, line_out
     say("U-early-line", "我很好")
     user = db.query(User).filter(User.line_uid == "U-early-line").one()
     assert db.query(DailyCheckin).filter(DailyCheckin.elderly_id == user.id).one().status == "ok"
+
+
+def test_nearby_marks_official_shelters(db, client, monkeypatch):
+    from app.services import nearby
+    shelter = nearby.OpenShelter("大安國小", "臺北市大安區", 25.03, 121.54, 200, "02-27000000", True)
+    monkeypatch.setattr(nearby, "open_shelters", lambda: (shelter,))
+    db.add(User(name="居民", roles=["elderly"], line_uid="U-app-open", lat=25.031, lng=121.541)); db.commit()
+    _open(client, "U-app-open")
+    point = client.get("/app/api/nearby").json()["points"][0]
+    assert point["official"] == "臺北市大安區・內政部公告" and point["capacity"] == "可收容 200 人・可安置長者與身障者"
+    assert point["emergency"] and point["tel"] == "tel:0227000000"
