@@ -14,6 +14,7 @@
 
 ## 部署後確認
 
+- 先開後台「系統狀態」：紅色「需處理」逐項照提示修正，黃色「注意」確認是否可接受。以下各項是它背後檢查的內容。
 - Railway 由 `master` 自動部署。`GET /health` 回傳的 `commit` 應與剛推送的 commit 前 7 碼相同；不同代表部署失敗或尚未完成。
 - `GET /api/system/security` 的 `auth_mode` 不可為 `open`；`open` 代表後台與所有 API 對外公開，必須設 `DEMO_PASSWORD` 或綁定 LINE 管理員。
 - `/privacy` 會顯示外部 AI 是否啟用。未啟用時 LINE 問答改以本機關鍵字檢索回覆知識庫原文，功能不中斷。
