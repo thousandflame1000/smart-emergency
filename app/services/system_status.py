@@ -47,6 +47,27 @@ def _line_check() -> dict:
                      "檢查 Railway 的 LINE_CHANNEL_ACCESS_TOKEN 是否正確、未過期。")
 
 
+def _menu_check() -> dict:
+    """LINE 上的圖文選單是不是目前這一版；舊版時居民看不到新按鈕（例如「查詢物資」）。"""
+    from app.services.rich_menu import MENUS, _apis
+    label = "LINE 圖文選單"
+    try:
+        api, _ = _apis()
+        live = {m.name: m for m in api.get_rich_menu_list().richmenus or []}
+    except Exception:
+        return _item("richmenu", label, "warn", "讀不到 LINE 上的選單", "確認上方 LINE 官方帳號是綠燈。")
+    stale = []
+    for name, spec in MENUS.items():
+        expected = [cell[4] for row in spec["rows"] for cell in row]
+        menu = live.get(name)
+        actual = [getattr(area.action, "text", None) for area in (menu.areas if menu else [])]
+        if sorted(actual) != sorted(expected):
+            stale.append(name.split("-")[-1])
+    return _item("richmenu", label, "ok" if not stale else "warn",
+                 "已是最新版" if not stale else f"{'、'.join(stale)}選單是舊版",
+                 "按下方「重裝 LINE 選單」，約 10 秒完成。")
+
+
 def _coverage(db: Session) -> list[dict]:
     """應變據點有沒有落在長者附近：據點全在別的縣市時，數量再多，查詢物資也只會列出幾十公里外的地方。"""
     from statistics import median
@@ -81,7 +102,10 @@ def checks(db: Session) -> list[dict]:
     out.append(_item("auth", "後台登入保護", "ok" if mode != "open" else ("error" if production else "warn"), auth_detail,
                      "在 Railway 設 DEMO_PASSWORD，或讓管理員在 LINE 傳「後台」完成綁定。"))
 
-    out.append(_line_check())
+    line = _line_check()
+    out.append(line)
+    if line["level"] == "ok":
+        out.append(_menu_check())
 
     admins = db.query(User).filter(User.role_filter("admin"), User.line_uid.isnot(None), User.is_active.is_(True)).count()
     out.append(_item("admins", "綁定 LINE 的管理員", "ok" if admins else "error", f"{admins} 位",

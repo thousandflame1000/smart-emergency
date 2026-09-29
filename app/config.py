@@ -52,8 +52,9 @@ class Settings(BaseSettings):
     # 官方帳號的 Basic ID（例如 @571hpppb）。留空會用 LINE API 自動查；掃碼加入要靠它組出連結。
     LINE_BOT_BASIC_ID: str = ""
 
-    # Rich Menu 重建會刪除、建立並上傳所有選單圖片。預設關閉，僅在受控維運時暫時開啟。
-    RICH_MENU_REBUILD_ENABLED: bool = False
+    # Rich Menu 重建會建立新選單、切換完成後才刪舊的。只有管理員能按（後台「系統狀態」），
+    # 以前還要到 Railway 暫時打開這個開關，太繞；需要鎖住時設 false。
+    RICH_MENU_REBUILD_ENABLED: bool = True
 
     # 機器人發給使用者的網頁表單連結要用的對外網址。
     PUBLIC_BASE_URL: str = "https://smart-emergency-production-d744.up.railway.app"

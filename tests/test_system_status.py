@@ -95,3 +95,19 @@ def test_shelters_far_from_every_elder_are_flagged(db):
     assert item["level"] == "warn" and "公里" in item["detail"] and item["hint"]
     db.add(ResourcePoint(name="玉里國小", point_type="shelter", lat=23.336, lng=121.314)); db.commit()
     assert _by_key(db)["coverage"]["level"] == "ok"
+
+
+def test_outdated_line_menu_is_spotted(monkeypatch):
+    from app.services import rich_menu
+
+    def menus(texts_by_name):
+        return SimpleNamespace(richmenus=[
+            SimpleNamespace(name=name, areas=[SimpleNamespace(action=SimpleNamespace(text=t)) for t in texts])
+            for name, texts in texts_by_name.items()])
+
+    current = {name: [c[4] for row in spec["rows"] for c in row] for name, spec in rich_menu.MENUS.items()}
+    old = {name: [t for t in texts if t != "查詢物資"] + ["分享位置"] for name, texts in current.items()}
+    for live, level in ((old, "warn"), (current, "ok")):
+        api = SimpleNamespace(get_rich_menu_list=lambda live=live: menus(live))
+        monkeypatch.setattr(rich_menu, "_apis", lambda api=api: (api, None))
+        assert system_status._menu_check()["level"] == level

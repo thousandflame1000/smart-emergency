@@ -369,7 +369,7 @@ def test_admin_cannot_rebuild_menus_from_line(db, line_outbox):
     assert any("僅限管理員" in t for t in replies(line_outbox))
 
 
-def test_rich_menu_rebuild_endpoint_is_disabled_by_default(webclient, monkeypatch):
+def test_rich_menu_rebuild_endpoint_can_be_switched_off(webclient, monkeypatch):
     monkeypatch.setattr(settings, "RICH_MENU_REBUILD_ENABLED", False)
     response = webclient.post("/api/system/rich-menu/install")
     assert response.status_code == 403

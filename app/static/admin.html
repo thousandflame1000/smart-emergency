@@ -3180,9 +3180,25 @@ async function loadStatus() {
     list.innerHTML = items.map(i => `<div class="status-row status-${esc(i.level)}">
       <span class="badge ${STATUS_LEVEL[i.level][1]}">${STATUS_LEVEL[i.level][0]}</span>
       <strong>${esc(i.label)}</strong>
-      <div><div>${esc(i.detail)}</div>${i.hint ? `<div class="status-hint">${esc(i.hint)}</div>` : ''}</div></div>`).join('');
+      <div><div>${esc(i.detail)}</div>${i.hint ? `<div class="status-hint">${esc(i.hint)}</div>` : ''}${
+        i.key === 'richmenu' && i.level !== 'ok' ? '<button class="btn btn-primary btn-sm" style="margin-top:8px" onclick="installRichMenu(this)">重裝 LINE 選單</button>' : ''}</div></div>`).join('');
   } catch (e) {
     list.innerHTML = '<div class="empty">讀取失敗，請重新檢查</div>';
+  }
+}
+
+async function installRichMenu(btn) {
+  if (!await askConfirm('重裝 LINE 選單', '<p>建立新版選單、切換完成後才移除舊的；居民重新打開聊天室就會看到。</p>', '重裝')) return;
+  btn.disabled = true; btn.textContent = '重裝中…';
+  try {
+    const res = await fetch('/api/system/rich-menu/install', { method: 'POST' });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.cutover_complete === false) throw new Error(data.detail || data.error || '部分管理員沒有切換成功，請再按一次');
+    notify('LINE 選單已更新');
+    loadStatus();
+  } catch (e) {
+    notify('重裝失敗：' + e.message);
+    btn.disabled = false; btn.textContent = '重裝 LINE 選單';
   }
 }
 
