@@ -965,6 +965,14 @@ def _handle_form_postback(event, db, user, data: dict) -> None:
 # ──────────────────────────────────────────────
 # AI 助手
 # ──────────────────────────────────────────────
+def _clip(text: str, limit: int = 1800) -> str:
+    """LINE 單則上限 5000 字；太長時在換行處截斷，不要切在句子中間。"""
+    if len(text) <= limit:
+        return text
+    cut = text.rfind("\n", 0, limit)
+    return text[:cut if cut > limit // 2 else limit].rstrip() + "\n…（內容較長，完整步驟請詢問專業人員或撥 119）"
+
+
 def _handle_question(event, text) -> bool:
     if not _looks_like_question(text):
         return False
@@ -979,7 +987,7 @@ def _handle_question(event, text) -> bool:
         sources = result.get("sources", [])
         src_line = f"\n\n📚 來源：{' | '.join(sources[:2])}" if sources else ""
         title = "📚 知識庫" if result.get("mode") == "keyword" else "🤖 AI 助手回答"
-        _say(event, f"{title}：\n\n{result['answer'][:1000]}{src_line}")
+        _say(event, f"{title}：\n\n{_clip(result['answer'])}{src_line}")
         return True
     _say(event, "🤖 知識庫裡目前沒有這個問題的資料，抱歉。\n" + EMERGENCY_TIP)
     return True

@@ -171,3 +171,30 @@ def test_line_labels_keyword_answers_as_knowledge_base(db, line_outbox, monkeypa
     say("U-kb", "中風怎麼辦？")
     reply = replies(line_outbox)[-1]
     assert reply.startswith("📚 知識庫") and "FAST" in reply
+
+
+def test_residents_family_and_volunteers_can_all_ask_on_line(db, line_outbox, monkeypatch):
+    from app.config import settings
+    from tests.test_line_hardening import mk, replies, say
+    _seed_kb(db)
+    monkeypatch.setattr(settings, "EXTERNAL_AI_ENABLED", False)
+    for i, roles in enumerate((["elderly"], ["family"], ["volunteer"], [])):
+        uid = f"U-ask-{i}"
+        mk(db, f"提問者{i}", roles, uid)
+        line_outbox.sent.clear()
+        say(uid, "有人中風怎麼辦？")
+        assert "FAST" in replies(line_outbox)[-1], roles
+
+
+def test_ai_answers_are_plain_text_for_line():
+    from app.services.rag import plain_text
+    raw = "1.  **立刻撥打 119。**\n*   **位置**：胸骨下半段\n- 深度 5 公分\n## 注意\n\n\n\n結束"
+    assert plain_text(raw) == "1. 立刻撥打 119。\n・位置：胸骨下半段\n・深度 5 公分\n注意\n\n結束"
+
+
+def test_long_answers_are_cut_at_a_line_break():
+    from app.routers.linebot import _clip
+    text = "\n".join(f"{i}. 步驟說明" + "字" * 40 for i in range(1, 60))
+    clipped = _clip(text)
+    assert len(clipped) < 1900 and clipped.split("\n")[-2].endswith("字") and "專業人員" in clipped
+    assert _clip("短答") == "短答"

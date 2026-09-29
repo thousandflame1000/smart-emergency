@@ -43,6 +43,15 @@ def _client():
 _QUESTION_WORDS = ("怎麼辦", "怎麼做", "怎麼", "如何", "什麼", "請問", "應該", "可以", "需要", "要不要", "是不是")
 
 
+def plain_text(text: str) -> str:
+    """LINE 不顯示 Markdown；模型偶爾還是會輸出 **粗體** 或 * 條列，轉成純文字。"""
+    text = re.sub(r"\*\*(.+?)\*\*|__(.+?)__", lambda m: m.group(1) or m.group(2), text)
+    text = re.sub(r"(?m)^\s*#{1,6}\s*", "", text)
+    text = re.sub(r"(?m)^(\s*)[*\-•]\s+", r"\1・", text)
+    text = re.sub(r"(?m)^(\s*\d+\.)\s{2,}", r"\1 ", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 def _bigrams(text: str) -> set[str]:
     text = re.sub(r"[\s\W_]+", "", text.lower())
     return {text[i:i + 2] for i in range(len(text) - 1)}
@@ -109,9 +118,10 @@ def query(question: str) -> dict:
 
     context = "\n\n---\n\n".join(r["content"] for r in results)
 
-    prompt = f"""你是志工的照護與急救助手。
+    prompt = f"""你是社區居民與志工的照護與急救助手。
 只能根據以下提供的資料回答，不可超出範圍、不可自行推測。
-回答要簡短、具體、實用，適合在緊急情況下快速閱讀。
+回答要簡短、具體、實用，適合在緊急情況下用手機快速閱讀，控制在 300 字以內。
+回答會顯示在 LINE，不支援 Markdown：不要用 **、#、* 這類符號，用純文字與 1. 2. 3. 條列。
 若資料不足，請如實說明並建議撥打 1966 或 119。
 
 參考資料：
@@ -124,7 +134,7 @@ def query(question: str) -> dict:
             model=GENERATE_MODEL,
             contents=prompt,
         )
-        answer   = response.text
+        answer   = plain_text(response.text or "")
     except Exception:
         # 任何錯誤都 fallback 回傳最相關 chunk，但要留下原因，否則線上壞了查不到
         log.exception("Gemini generate_content failed; falling back to top chunk")
