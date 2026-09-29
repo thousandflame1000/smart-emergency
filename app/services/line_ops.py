@@ -609,14 +609,26 @@ def create_invite(db: Session, elder: User) -> str:
     return code
 
 
+def family_share_url(link: str) -> str:
+    """LINE 官方「分享」網址：長輩按一下就跳出好友清單，選家人送出，不用複製貼上。"""
+    from urllib.parse import quote
+    text = f"我在用「鄰里守望」社區關懷。點這個連結、按送出，我沒回報平安或需要幫忙時你會收到通知：\n{link}"
+    return "https://line.me/R/share?text=" + quote(text)
+
+
 def invite_family(event, db: Session, user: User) -> None:
     from app.services.line_notify import oa_message_link
     code = create_invite(db, user)
     link = oa_message_link(f"綁定 {code}")
-    how = (f"把下面這個連結傳給家人，他點開就會跳到機器人聊天室，按送出就綁定好了：\n{link}\n\n"
-           f"（連結不能用時，請家人加入官方帳號後傳這句話：綁定 {code}）" if link else
-           f"請家人先加入本官方帳號，然後傳這句話給機器人：\n\n綁定 {code}")
-    _say(event, f"👨‍👩‍👧 {how}\n\n24 小時內有效，只能用一次。綁定後，您如果沒回報平安或按了求助，家人會收到通知。")
+    if not link:
+        _say(event, f"👨‍👩‍👧 請家人先加入本官方帳號，然後傳這句話給機器人：\n\n綁定 {code}\n\n24 小時內有效，只能用一次。")
+        return
+    # 長輩只要按一顆按鈕、選家人；家人點連結、按送出。整個過程沒有人要輸入號碼。
+    _flex(event, "邀請家人", bubble(
+        "👨‍👩‍👧 邀請家人", "#148f77",
+        ["按下面的按鈕，選要通知的家人傳出去。", "家人點開連結、按送出就完成，不用輸入任何號碼。",
+         f"24 小時內有效。（備用：請家人傳「綁定 {code}」）"],
+        [{"label": "📤 傳給家人", "uri": family_share_url(link)}]))
 
 
 def bind_family(event, db: Session, user: User, code: str) -> None:

@@ -627,14 +627,20 @@ def test_join_code_still_works_without_a_qr_when_the_bot_id_is_unknown(db, conso
 def test_family_invite_gives_a_tap_to_bind_link(db, line_outbox, bot_id):
     vol, req, adm, res, need = world(db)
     say("U-req", "邀請家人")
-    text = [t for t in replies(line_outbox) if "綁定" in t][-1]
-    assert "https://line.me/R/oaMessage/@571hpppb/?" in text and "24 小時內有效" in text
+    import json as _json
+    from urllib.parse import unquote
+    card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    text = _json.dumps(card.contents.to_dict(), ensure_ascii=False)
+    share = next(u for u in __import__("re").findall(r'"uri": "([^"]+)"', text) if u.startswith("https://line.me/R/share?text="))
+    # 長輩按「傳給家人」→ 選好友送出；家人收到的訊息裡有一鍵綁定連結，不用輸入號碼
+    assert "https://line.me/R/oaMessage/@571hpppb/?" in unquote(share) and "24 小時內有效" in text
 
 
 def test_me_page_invite_returns_the_link(db, webclient, bot_id):
     vol, req, adm, res, need = world(db)
     out = webclient.post("/f/api/invite", json={"t": form_token.make_token("U-req")}).json()
     assert out["link"].startswith("https://line.me/R/oaMessage/@571hpppb/?") and len(out["code"]) == 6
+    assert out["share"].startswith("https://line.me/R/share?text="), "網頁按鈕要開好友清單，不能直接連到綁定連結"
 
 
 # ═══════════════ 公開的掃碼加入頁 ═══════════════

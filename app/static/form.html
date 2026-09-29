@@ -280,22 +280,23 @@
           s1.appendChild(r);
         });
         var s2 = section('我的家人');
-        if (!d.family.length) s2.appendChild(el('div', '還沒有綁定家人。產生綁定碼後，請家人傳「綁定 碼」給機器人。', 'me-empty'));
+        if (!d.family.length) s2.appendChild(el('div', '還沒有綁定家人。按下方按鈕把邀請傳給家人。', 'me-empty'));
         d.family.forEach(function (f) {
           var r = el('div', null, 'me-row'); r.appendChild(el('strong', f.name));
           action(r, '解除綁定', '/f/api/unbind', { target_id: f.id }, true, '確定解除與 ' + f.name + ' 的綁定？');
           s2.appendChild(r);
         });
-        var inv = el('button', '產生家人綁定碼', 'me-btn'); inv.type = 'button';
+        var inv = el('button', '邀請家人', 'me-btn'); inv.type = 'button';
         inv.addEventListener('click', function () {
           post('/f/api/invite').then(function (res2) {
             if (!res2.ok) { showError(res2.d.detail || '產生失敗'); return; }
-            var c = el('div', res2.d.code, 'code'); s2.appendChild(c);
-            s2.appendChild(el('div', '請家人傳「綁定 ' + res2.d.code + '」給機器人，24 小時內有效。', 'meta'));
-            if (res2.d.link) {
-              var a = el('a', '把這個連結傳給家人，點開就會綁定', 'me-btn'); a.href = res2.d.link;
+            // 按鈕打開 LINE 的好友清單讓長輩選家人；以前直接連到綁定連結，長輩一按就變成綁自己。
+            if (res2.d.share) {
+              var a = el('a', '📤 傳給家人', 'me-btn'); a.href = res2.d.share;
               a.style.display = 'inline-block'; a.style.textDecoration = 'none'; s2.appendChild(a);
+              s2.appendChild(el('div', '選要通知的家人傳出去；家人點開連結、按送出就完成。24 小時內有效。', 'meta'));
             }
+            s2.appendChild(el('div', '備用：請家人傳「綁定 ' + res2.d.code + '」給機器人', 'meta'));
             inv.disabled = true;
           });
         });

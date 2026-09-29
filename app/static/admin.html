@@ -1155,7 +1155,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
         </div>
         <div id="user-bind-note" class="form-hint is-hidden"></div>
         <div style="display:flex;gap:8px;margin-top:6px">
-          <button type="button" class="btn btn-ghost btn-sm is-hidden" id="user-bind-btn" onclick="makeJoinCode()">產生綁定碼</button>
+          <button type="button" class="btn btn-ghost btn-sm is-hidden" id="user-bind-btn" onclick="makeJoinCode()">產生綁定 QR Code</button>
           <button type="button" class="btn btn-ghost-danger btn-sm is-hidden" id="user-unbind-btn" onclick="unlinkLine()">解除綁定</button>
         </div>
       </div>
@@ -1987,12 +1987,12 @@ function renderBindState(user) {
   bindBtn.classList.add('is-hidden');
   unbindBtn.classList.add('is-hidden');
   if (!user) {
-    status.textContent = '儲存後會自動產生綁定碼，請對方在 LINE 傳「加入 綁定碼」。';
+    status.textContent = '儲存後會出現 QR Code，請對方用手機 LINE 掃描、按送出即完成綁定。';
   } else if (user.line_uid) {
     status.textContent = '✅ 已綁定 LINE，可以收到推播通知。';
     unbindBtn.classList.remove('is-hidden');
   } else {
-    status.textContent = '尚未綁定 LINE，收不到通知。產生綁定碼後，請對方在 LINE 傳「加入 綁定碼」。';
+    status.textContent = '尚未綁定 LINE，收不到通知。按「產生綁定 QR Code」，請對方用手機 LINE 掃描、按送出。';
     bindBtn.classList.remove('is-hidden');
   }
 }
@@ -2013,7 +2013,9 @@ async function makeJoinCode(userId) {
     qrBox.classList.add('is-hidden');
   }
   const note = document.getElementById('user-bind-note');
-  note.textContent = `請對方把上面這句話傳給官方帳號，${data.expires_minutes >= 60 ? Math.round(data.expires_minutes / 60 / 24) + ' 天' : data.expires_minutes + ' 分鐘'}內有效，只能用一次。`;
+  note.textContent = data.qr
+    ? `請對方用手機 LINE 掃描 QR Code、按送出就完成（不用打字）；掃不了再傳上面那句話。${data.expires_minutes >= 60 ? Math.round(data.expires_minutes / 60 / 24) + ' 天' : data.expires_minutes + ' 分鐘'}內有效。`
+    : `請對方把上面這句話傳給官方帳號，${data.expires_minutes >= 60 ? Math.round(data.expires_minutes / 60 / 24) + ' 天' : data.expires_minutes + ' 分鐘'}內有效，只能用一次。`;
   note.classList.remove('is-hidden');
   document.getElementById('user-bind-btn').classList.add('is-hidden');
 }
