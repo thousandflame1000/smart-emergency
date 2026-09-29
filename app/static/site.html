@@ -168,7 +168,7 @@ button { font:inherit; }
     Object.keys(frames).forEach(function(key){frames[key].hidden=key!==item.view;});
     frame=frames[item.view];currentId=item.id;activate(frame,item);
     try { history.replaceState(null, '', '#' + item.id); } catch (e) { /* ignore */ }
-    document.title = item.label + ' · 鄰里守望';
+    document.title = item.label + '｜鄰里守望';
     document.getElementById('mobile-title').textContent = item.label;
   }
   function activate(target,item){if(target.contentWindow)target.contentWindow.postMessage(item.page?{navigate:item.page}:{workspaceVisible:true},location.origin);}

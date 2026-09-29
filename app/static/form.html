@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>鄰里守望 表單</title>
+<title>表單｜鄰里守望</title>
 <style>
   :root { --bg:#f3f6f3; --card:#fff; --text:#1c2b25; --muted:#5f6c65; --line:#ccd8d1;
           --accent:#13795b; --ok:#18765a; --danger:#b52e42; }
@@ -189,7 +189,7 @@
   var m = META[KIND] || META.need;
   var $ = function (id) { return document.getElementById(id); };
 
-  document.title = m.title;
+  document.title = m.title.replace(/^\S+\s/, '') + '｜鄰里守望';
   $('title').textContent = m.title;
   $('subtitle').textContent = m.sub;
   $('submit').textContent = m.btn;
