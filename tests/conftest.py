@@ -95,3 +95,11 @@ def no_real_geocoding(monkeypatch):
     Individual tests can override with monkeypatch.setattr(places, "search_places", ...)."""
     from app.services import places
     monkeypatch.setattr(places, "search_places", lambda query, **kw: [])
+
+
+@pytest.fixture(autouse=True)
+def reset_question_limit():
+    """AI 提問限流是模組層級的狀態，測試之間不能互相影響。"""
+    from app.routers import linebot
+    linebot._recent_questions.clear()
+    yield

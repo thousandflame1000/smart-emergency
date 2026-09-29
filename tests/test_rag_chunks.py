@@ -198,3 +198,19 @@ def test_long_answers_are_cut_at_a_line_break():
     clipped = _clip(text)
     assert len(clipped) < 1900 and clipped.split("\n")[-2].endswith("字") and "專業人員" in clipped
     assert _clip("短答") == "短答"
+
+
+def test_ai_questions_are_rate_limited_per_person(db, line_outbox, monkeypatch):
+    """洗版不能把 AI 額度用光；換一個人照樣能問。"""
+    from app.routers import linebot as lb
+    from app.services import rag
+    from tests.test_line_hardening import mk, replies, say
+    asked = []
+    monkeypatch.setattr(rag, "query", lambda q: asked.append(q) or {"has_answer": True, "answer": "答", "sources": []})
+    monkeypatch.setattr(lb, "_recent_questions", {})
+    mk(db, "甲", ["volunteer"], "U-spam"); mk(db, "乙", ["volunteer"], "U-calm")
+    for _ in range(lb.QUESTION_LIMIT + 2):
+        say("U-spam", "中風怎麼辦？")
+    assert len(asked) == lb.QUESTION_LIMIT and "請稍等一分鐘" in replies(line_outbox)[-1]
+    say("U-calm", "中風怎麼辦？")
+    assert len(asked) == lb.QUESTION_LIMIT + 1

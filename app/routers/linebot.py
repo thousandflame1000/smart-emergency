@@ -974,9 +974,28 @@ def _clip(text: str, limit: int = 1800) -> str:
     return text[:cut if cut > limit // 2 else limit].rstrip() + "\n…（內容較長，完整步驟請詢問專業人員或撥 119）"
 
 
+# 每人每分鐘最多問幾次 AI：避免洗版把 Gemini 額度用光，決賽當天 AI 就不能用了。
+QUESTION_LIMIT, QUESTION_WINDOW = 5, 60
+_recent_questions: dict[str, list[float]] = {}
+
+
+def _question_allowed(uid: str) -> bool:
+    import time
+    now = time.monotonic()
+    recent = [t for t in _recent_questions.get(uid, []) if now - t < QUESTION_WINDOW]
+    if len(recent) >= QUESTION_LIMIT:
+        _recent_questions[uid] = recent
+        return False
+    _recent_questions[uid] = recent + [now]
+    return True
+
+
 def _handle_question(event, text) -> bool:
     if not _looks_like_question(text):
         return False
+    if not _question_allowed(event.source.user_id):
+        _say(event, "問題有點多，請稍等一分鐘再問。\n" + EMERGENCY_TIP)
+        return True
     try:
         from app.services import rag as rag_svc
         result = rag_svc.query(text)
