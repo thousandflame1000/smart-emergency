@@ -47,6 +47,22 @@ def _line_check() -> dict:
                      "檢查 Railway 的 LINE_CHANNEL_ACCESS_TOKEN 是否正確、未過期。")
 
 
+def _coverage(db: Session) -> list[dict]:
+    """應變據點有沒有落在長者附近：據點全在別的縣市時，數量再多，查詢物資也只會列出幾十公里外的地方。"""
+    from statistics import median
+    from app.services.geo import haversine_km
+    shelters = [(p.lat, p.lng) for p in db.query(ResourcePoint).filter(
+        ResourcePoint.is_active.is_(True), ResourcePoint.lat.isnot(None),
+        ResourcePoint.point_type.in_(EMERGENCY_POINT_TYPES)).all()]
+    homes = [(u.lat, u.lng) for u in db.query(User).filter(
+        User.role_filter("elderly"), User.is_active.is_(True), User.lat.isnot(None)).all()]
+    if not shelters or not homes:
+        return []
+    km = median(min(haversine_km(h[0], h[1], s[0], s[1]) for s in shelters) for h in homes)
+    return [_item("coverage", "長者到最近應變據點", "ok" if km <= 20 else "warn", f"中位數約 {km:.0f} 公里",
+                  "應變據點離長者太遠：補上長者所在鄉鎮的避難所、消防分隊與衛生所。")]
+
+
 def checks(db: Session) -> list[dict]:
     from app.demo_auth import auth_mode
     from app.scheduler import scheduler_running
@@ -88,6 +104,7 @@ def checks(db: Session) -> list[dict]:
     out.append(_item("points", "資源點（查詢物資、緊急圖層）", "ok" if emergency else "warn",
                      f"{located} 個有座標，其中應變據點 {emergency} 個",
                      "在事件處置工作區新增設施，或匯入縣市避難所與消防、衛生所資料。"))
+    out.extend(_coverage(db))
 
     since = now_utc() - timedelta(hours=24)
     failed = (db.query(OutboxMessage).filter(OutboxMessage.status.in_(("FAILED", "DEAD")),
