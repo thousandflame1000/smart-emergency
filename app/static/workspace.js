@@ -202,6 +202,8 @@ async function loadZoneOptions(){
   try{zoneList=await fetch('/api/zones').then(r=>r.ok?r.json():[]);}catch(e){zoneList=[];}
   $('zone-select').innerHTML='<option value="">全部分區</option>'+zoneList.map(z=>`<option value="${escapeHtml(z.id)}">${escapeHtml(z.name)}</option>`).join('');
   $('zone-select').value=zoneList.some(z=>z.id===state.zone)?state.zone:'';
+  // 只有預設分區時選單沒有意義，收起來。
+  $('zone-select').closest('.zone-picker').hidden=zoneList.length<=1&&!state.zone;
 }
 async function selectZone(){
   state.zone=$('zone-select').value;
