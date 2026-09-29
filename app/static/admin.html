@@ -1876,7 +1876,7 @@ function renderVolunteers(data) {
   const count = role => all.filter(u => u.roles.includes(role)).length;
 
   document.getElementById('volunteers-chips').innerHTML =
-    [['', '全部', all.length], ...['volunteer','family','field_staff'].map(r => [r, ROLE_LABEL[r] || r, count(r)])]
+    [['', '全部', all.length], ...['volunteer','family','field_staff','admin'].map(r => [r, ROLE_LABEL[r] || r, count(r)])]
       .map(([k, label, n]) => `<button type="button" class="fchip ${volunteerFilter===k?'on':''}" data-vchip="${k}">${esc(label)}<b>${n}</b></button>`).join('');
   document.getElementById('volunteers-chips').querySelectorAll('[data-vchip]').forEach(b =>
     b.onclick = () => { volunteerFilter = b.dataset.vchip; renderVolunteers(); });
@@ -1895,7 +1895,8 @@ function renderVolunteers(data) {
   }
   // 依角色分欄；同時具備多個角色的人會出現在每一欄，因為每一欄問的是
   //「這個角色現在有誰」，不是「把人分到互斥的格子裡」。
-  const cols = ['volunteer', 'family', 'field_staff'].filter(r => !volunteerFilter || r === volunteerFilter);
+  // 管理員也列出來：誰能核准派遣、誰會收到求救升級，要一眼看得到。
+  const cols = ['volunteer', 'family', 'field_staff', 'admin'].filter(r => !volunteerFilter || r === volunteerFilter);
   const other = rows.filter(u => !cols.some(r => u.roles.includes(r)));
   board.innerHTML = cols.map(role => {
     const list = rows.filter(u => u.roles.includes(role));
