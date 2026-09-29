@@ -264,13 +264,16 @@ NEED_KEYWORDS = {
 # 命中這些詞代表可能是人身安全事件：先跳確認卡，不直接建立需求。
 SOS_WORDS = ["需要幫忙", "救命", "緊急", "昏倒", "胸痛", "無法呼吸", "呼吸困難", "失去意識",
              "流血不止", "大量出血", "起火", "火災", "著火"]
+# 長輩自己傳「我跌倒了」是求救，不是問問題；帶疑問詞的（跌倒了怎麼辦？）才交給知識庫。
+FALL_WORDS = ["跌倒", "摔倒", "跌跤", "摔跤", "爬不起來", "站不起來"]
 NEGATORS = ("不", "沒", "別", "免", "無需", "已經有", "已有")
 URGENCY_BY_TYPE = {"first_aid": 4}
 CANCEL_NEED_WORDS = ("取消需求", "取消求助", "我不需要了", "不需要了", "已經收到了", "已收到物資")
 CHECKIN_OK_WORDS = ("我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "回報平安")
 KNOWN_TOPICS = ("CPR", "cpr", "AED", "aed", "止血", "心肺復甦", "燒燙傷", "骨折", "中暑", "溺水",
                 "哽塞", "哈姆立克", "地震", "颱風", "淹水", "電線", "停電", "壓瘡", "褥瘡", "失智",
-                "癲癇", "抽搐", "過敏", "一氧化碳", "土石流", "跌倒預防", "低血糖", "失溫")
+                "癲癇", "抽搐", "過敏", "一氧化碳", "土石流", "跌倒", "低血糖", "失溫",
+                "中風", "燙傷", "心肌梗塞", "噎到", "嗆到", "脫水", "走失", "蜂螫", "出血", "中毒", "扭傷")
 QUESTION_HINTS = ("怎麼", "如何", "怎樣", "什麼", "該怎", "要怎", "能不能", "可以嗎", "嗎", "呢", "？", "?", "教我")
 
 
@@ -299,7 +302,9 @@ def parse_intent(text: str) -> dict:
         elif neg:
             saw_negated = True
     sos_pos, sos_neg = _find_positive(text, SOS_WORDS)
-    return {"needs": needs, "sos": sos_pos, "negated": saw_negated or sos_neg}
+    fall_pos, fall_neg = _find_positive(text, FALL_WORDS)
+    asking = any(h in text for h in QUESTION_HINTS)
+    return {"needs": needs, "sos": sos_pos or (fall_pos and not asking), "negated": saw_negated or sos_neg or fall_neg}
 
 
 MAX_QUESTION_LENGTH = 200

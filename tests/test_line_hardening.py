@@ -1226,3 +1226,23 @@ def test_requester_phone_is_offered_only_after_the_volunteer_accepts(db, line_ou
     assert "tel:" not in tasks_card()
     press("U-cv", f"action=task_accept&need_id={need.id}")
     assert "tel:0912345678" in tasks_card()
+
+
+def test_fall_reports_ask_for_rescue_but_fall_questions_get_the_sop(db, line_outbox, monkeypatch):
+    """長輩傳「我跌倒了」要先跳求救確認；帶疑問詞的才是問問題。"""
+    from app.services import rag
+    asked = []
+    monkeypatch.setattr(rag, "query", lambda q: asked.append(q) or {"has_answer": True, "answer": "先別急著扶起", "sources": []})
+    mk(db, "王奶奶", ["elderly"], "U-fall")
+    for text in ("我跌倒了", "爬不起來"):
+        line_outbox.sent.clear()
+        say("U-fall", text)
+        assert replies(line_outbox)[-1] == "緊急求助確認", text
+    for text in ("阿嬤跌倒了怎麼辦", "中風"):
+        line_outbox.sent.clear()
+        say("U-fall", text)
+        assert "先別急著扶起" in replies(line_outbox)[-1], text
+    line_outbox.sent.clear()
+    say("U-fall", "我沒有跌倒")
+    assert replies(line_outbox)[-1] != "緊急求助確認"
+    assert asked == ["阿嬤跌倒了怎麼辦", "中風"]
