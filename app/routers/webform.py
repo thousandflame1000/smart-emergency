@@ -169,7 +169,8 @@ def submit_report_form(form: ReportForm, request: Request, db: Session = Depends
     _record_privacy_acknowledgement(db, user, form.privacy_acknowledged, "task_report")
     result = report_task(str(need.id), db, outcome=form.outcome, note=form.note,
                          actor_id=str(user.id), actor_label="volunteer:web")
-    if result.get("error") == "invalid task state":
+    from app.services.dispatch import INVALID_TASK_STATE
+    if result.get("error") == INVALID_TASK_STATE:
         raise ApiError(409, "這筆任務目前的狀態已經不能回報了（可能已完成、已取消，或已退回重新派遣）。")
     if result.get("error"):
         raise ApiError(422 if "請" in str(result["error"]) else 409, str(result["error"]))

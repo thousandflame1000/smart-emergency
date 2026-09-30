@@ -122,6 +122,9 @@ WAIT_PTS_PER_HOUR = 1.0
 WAIT_PTS_CAP = 15.0
 
 
+# 任務已經不在可操作的狀態（已完成、已取消、已退回）；網頁回報用它判斷要回 409
+INVALID_TASK_STATE = "任務狀態已經變了，請重新整理"
+
 def _utcnow_naive() -> datetime:
     """Current UTC time as a naive datetime.
 
@@ -856,7 +859,7 @@ def manual_dispatch(need_id: str, resource_id: str, db: Session, *,
     resource = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
 
     if not need or not resource:
-        return {"error": "need or resource not found"}
+        return {"error": "找不到這筆需求或物資"}
     if need.status not in ("open", "suggested"):
         return {"error": f"需求目前狀態為「{need_status(need.status)}」，"
                          f"只有{need_status('open')}或{need_status('suggested')}的需求可以手動指派。"}
@@ -1113,11 +1116,11 @@ def resolve_sos(need_id: str, db: Session, *, actor_label: str = "manager") -> d
     分不出來，當事人也不會收到任何後續。"""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        return {"error": "need not found"}
+        return {"error": "找不到這筆需求"}
     if need.need_type != "sos":
         return {"error": "只有一鍵求助可以用「已聯繫處理」關閉，一般物資需求請走媒合流程。"}
     if need.status == "fulfilled":
-        return {"message": "already resolved", "need_id": need_id, "already_resolved": True}
+        return {"message": "這筆求救已經結案了", "need_id": need_id, "already_resolved": True}
     if need.status != "open":
         return {"error": f"求助單目前狀態為「{need_status(need.status)}」，不能標成已處理。"}
     previous_status = need.status
@@ -1133,21 +1136,21 @@ def resolve_sos(need_id: str, db: Session, *, actor_label: str = "manager") -> d
         "✅ 您的緊急求助已確認處理完成。如果您仍然需要協助，請再傳「需要幫忙」；"
         "生命危險請直接撥打 119。",
     )
-    return {"message": "sos resolved", "need_id": need_id}
+    return {"message": "已結案，當事人已收到通知", "need_id": need_id}
 
 
 def cancel_need(need_id: str, db: Session) -> dict:
     """Cancel a request and release any active resource reservation."""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        return {"error": "need not found"}
+        return {"error": "找不到這筆需求"}
 
     previous_status = need.status
     previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
 
     if previous_status == "cancelled":
         return {
-            "message": "need already cancelled",
+            "message": "這筆需求已經取消了",
             "need_id": need_id,
             "already_cancelled": True,
         }
@@ -1201,7 +1204,7 @@ def cancel_need(need_id: str, db: Session) -> dict:
         )
 
     return {
-        "message": "need cancelled",
+        "message": "已取消需求",
         "need_id": need_id,
         "released_resource_id": previous_resource_id,
         "resource_released": resource_released,
@@ -1221,14 +1224,14 @@ def mark_task_delivered(
     """Mark a matched task as fulfilled and keep an audit event."""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        return {"error": "need not found"}
+        return {"error": "找不到這筆需求"}
 
     previous_status = need.status
     previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
 
     if previous_status == "fulfilled":
         return {
-            "message": "task already fulfilled",
+            "message": "這筆任務已經完成了",
             "need_id": need_id,
             "already_fulfilled": True,
         }
@@ -1237,7 +1240,7 @@ def mark_task_delivered(
         # 變成「已完成」——之前需求退回 open 之後志工再按「已送達」，會在
         # 沒有任何指派的狀況下直接完成。
         return {
-            "error": "invalid task state",
+            "error": INVALID_TASK_STATE,
             "need_id": need_id,
             "need_status": previous_status,
         }
@@ -1249,7 +1252,7 @@ def mark_task_delivered(
             CommunityResource.id == need.matched_resource_id
         ).first()
     if resource is None:
-        return {"error": "matched resource not found"}
+        return {"error": "找不到派出的物資"}
     try:
         movement = consume_for_need(
             db,
@@ -1288,7 +1291,7 @@ def mark_task_delivered(
     )
 
     return {
-        "message": "task marked fulfilled",
+        "message": "已標記送達",
         "need_id": need_id,
         "resource_id": previous_resource_id,
     }
@@ -1352,7 +1355,7 @@ def claim_need(need_id: str, user, db: Session) -> dict:
         )
     except Exception:
         _log.warning("notification side effect failed", exc_info=True)
-    return {"message": "claimed", "need_id": need_id, "resource_name": resource.name}
+    return {"message": "接單成功", "need_id": need_id, "resource_name": resource.name}
 
 
 def propose_manual(need_id: str, resource_id: str, db: Session, *, actor_id: str | None = None,
@@ -1381,7 +1384,7 @@ def propose_manual(need_id: str, resource_id: str, db: Session, *, actor_id: str
         details={"source": "workspace_allocation", "resource_name": resource.name},
     )
     db.commit()
-    return {"message": "suggested", "need_id": need_id, "resource_id": resource_id}
+    return {"message": "已建立派遣建議，待管理員核准", "need_id": need_id, "resource_id": resource_id}
 
 
 def propose_on_arrival(need_ids: list[str], db: Session) -> list[dict]:
@@ -1455,11 +1458,11 @@ def accept_task(need_id: str, db: Session, *, actor_id: str | None = None,
     """Volunteer confirms they are going. Requester is told; admin sees the task as confirmed."""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        return {"error": "need not found"}
+        return {"error": "找不到這筆需求"}
     if need.status != "matched":
-        return {"error": "invalid task state", "need_id": need_id, "need_status": need.status}
+        return {"error": INVALID_TASK_STATE, "need_id": need_id, "need_status": need.status}
     if str(need.id) in accepted_need_ids(db, [need.id]):
-        return {"message": "already accepted", "need_id": need_id, "already_accepted": True}
+        return {"message": "已經接過這一單了", "need_id": need_id, "already_accepted": True}
     _log_dispatch_event(
         db, "task_accept", need=need, resource_id=str(need.matched_resource_id) if need.matched_resource_id else None,
         actor_id=actor_id, actor_label=actor_label, previous_status="matched", new_status="matched",
@@ -1470,7 +1473,7 @@ def accept_task(need_id: str, db: Session, *, actor_id: str | None = None,
         need,
         f"🚚 志工已確認接下您的「{NEED_TYPE_ZH.get(need.need_type, need.need_type)}」需求，正在準備前往。",
     )
-    return {"message": "accepted", "need_id": need_id}
+    return {"message": "已接單", "need_id": need_id}
 
 
 REPORT_OUTCOMES = {"delivered", "cannot_go", "issue"}
@@ -1492,14 +1495,14 @@ def report_task(
     "nobody answered the door" or "address doesn't exist", so the admin only ever saw a status
     flip. The note is stored on the audit trail and pushed to the admins."""
     if outcome not in REPORT_OUTCOMES:
-        return {"error": "invalid outcome"}
+        return {"error": "回報結果不正確"}
     note = (note or "").strip() or None
     if outcome == "issue" and not note:
         return {"error": "回報現場狀況時，請寫下發生了什麼事。"}
 
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        return {"error": "need not found"}
+        return {"error": "找不到這筆需求"}
     resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
     need_status = need.status
 
@@ -1509,8 +1512,8 @@ def report_task(
         result = decline_task_assignment(need_id, db, actor_id=actor_id, actor_label=actor_label)
     else:
         if need_status != "matched":
-            return {"error": "invalid task state", "need_id": need_id, "need_status": need_status}
-        result = {"message": "issue recorded", "need_id": need_id}
+            return {"error": INVALID_TASK_STATE, "need_id": need_id, "need_status": need_status}
+        result = {"message": "已記錄現場狀況", "need_id": need_id}
     if "error" in result:
         return result
 
@@ -1549,21 +1552,21 @@ def decline_task_assignment(
     """Let a volunteer decline a task, reopening the need and releasing the resource."""
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        return {"error": "need not found"}
+        return {"error": "找不到這筆需求"}
 
     previous_status = need.status
     previous_resource_id = str(need.matched_resource_id) if need.matched_resource_id else None
 
     if previous_status == "open" and previous_resource_id is None:
         return {
-            "message": "task already open",
+            "message": "這筆任務已經退回待派遣了",
             "need_id": need_id,
             "already_open": True,
         }
     if previous_status != "matched":
         # 已完成或已取消的需求不能被舊的「無法前往」按鈕復活回 open。
         return {
-            "error": "invalid task state",
+            "error": INVALID_TASK_STATE,
             "need_id": need_id,
             "need_status": previous_status,
         }
@@ -1612,7 +1615,7 @@ def decline_task_assignment(
     )
 
     return {
-        "message": "task declined",
+        "message": "已婉拒，需求退回待派遣",
         "need_id": need_id,
         "released_resource_id": previous_resource_id,
         "resource_released": resource_released,
