@@ -66,6 +66,7 @@ dialog h2{font-size:21px;margin-bottom:8px}
   <div id="loading" class="center muted">載入中…</div>
 
   <section class="view" id="view-home" hidden>
+    <div id="sos-tasks"></div>
     <div class="card"><div class="status" id="today"><span class="dot"></span><div><strong id="today-title">今天還沒回報</strong><div class="muted" id="today-sub">每天早上按一下「我很好」就可以</div></div></div></div>
     <div class="grid">
       <button class="big b-green" id="btn-ok"><span class="ic">✅</span><span><b id="ok-title">我很好</b><small id="ok-sub">回報今天平安</small></span></button>
@@ -193,6 +194,32 @@ dialog h2{font-size:21px;margin-bottom:8px}
     $('hello').textContent = me.name ? me.name + '，你好' : '鄰里守望';
     $('emergency').hidden = !me.emergency;
     $('volunteer-card').hidden = !me.is_volunteer;
+    renderSosTasks(me.sos_tasks || []);
+  }
+  // 我受理的求救：放在首頁最上面，撥號、導航、已到場、處理完成都在這裡
+  function renderSosTasks(tasks) {
+    var box = $('sos-tasks'); box.innerHTML = '';
+    tasks.forEach(function (t) {
+      var c = el('div', null, 'card place emg');
+      c.appendChild(el('div', '🆘 由你處理：' + t.name, 'name'));
+      c.appendChild(el('div', (t.address || '地址未填') + (t.arrived ? '・已到場' : '・還在路上'), 'meta'));
+      if (t.note) c.appendChild(el('div', t.note, 'meta'));
+      var row = el('div', null, 'row-actions');
+      if (t.tel) { var call = el('a', '📞 ' + t.phone, 'btn primary'); call.href = t.tel; row.appendChild(call); }
+      if (t.navigate) { var nav = el('a', '🧭 導航', 'btn'); nav.href = t.navigate; nav.target = '_blank'; nav.rel = 'noopener'; row.appendChild(nav); }
+      if (!t.arrived) row.appendChild(sosButton('📍 已到場', t.id, 'arrived'));
+      row.appendChild(sosButton('✅ 處理完成', t.id, 'done'));
+      c.appendChild(row); box.appendChild(c);
+    });
+  }
+  function sosButton(label, id, step) {
+    var b = el('button', label, 'btn'); b.type = 'button';
+    b.addEventListener('click', function () {
+      b.disabled = true;
+      api('/app/api/sos/' + encodeURIComponent(id) + '/' + step, {}).then(function (d) { toast(d.message); return refreshMe(); })
+        .catch(function (e) { toast(e.message); b.disabled = false; });
+    });
+    return b;
   }
   function refreshMe() { return api('/app/api/me').then(function (d) { me = d; renderHome(); }); }
   $('btn-ok').addEventListener('click', function () {

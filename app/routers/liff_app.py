@@ -132,7 +132,45 @@ def me(request: Request, db: Session = Depends(get_db)):
         "open_needs": db.query(CommunityNeed).filter(
             CommunityNeed.requester_id == user.id,
             CommunityNeed.status.in_(("open", "suggested", "matched"))).count(),
+        "sos_tasks": _sos_tasks(db, user),
     }
+
+
+def _sos_tasks(db: Session, user) -> list[dict]:
+    """我受理、還沒結案的求救：App 首頁也要能撥號、導航、回報到場與處理完成，跟 LINE 卡片一樣。"""
+    from app.models.dispatch_event import DispatchEvent
+    from app.models.need import CommunityNeed
+    from app.services.sos import spot
+    from app.validation import tel_uri
+    rows = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.status == "open",
+                                          CommunityNeed.responder_id == str(user.id)).order_by(CommunityNeed.created_at).all()
+    arrived = {str(e.need_id) for e in db.query(DispatchEvent).filter(
+        DispatchEvent.action == "sos_on_scene", DispatchEvent.need_id.in_([str(n.id) for n in rows])).all()} if rows else set()
+    out = []
+    for n in rows:
+        where = spot(n)
+        phone = n.requester.phone if n.requester else None
+        out.append({"id": str(n.id), "name": n.requester.name if n.requester else "", "address": n.address or "",
+                    "note": n.description or "", "tel": tel_uri(phone), "phone": phone if tel_uri(phone) else None,
+                    "navigate": f"https://www.google.com/maps/dir/?api=1&destination={where[0]},{where[1]}" if where else None,
+                    "arrived": str(n.id) in arrived})
+    return out
+
+
+@router.post("/app/api/sos/{need_id}/{step}")
+def sos_step(need_id: str, step: str, request: Request, db: Session = Depends(get_db)):
+    """處理人在 App 上回報「已到場」「處理完成」，跟 LINE 卡片的按鈕走同一段邏輯。"""
+    from app.services import sos
+    user = _user(db, request)
+    if step == "arrived":
+        result = sos.arrive(db, need_id, user)
+    elif step == "done":
+        result = sos.finish(db, need_id, user)
+    else:
+        raise ApiError(404, "不認得的動作")
+    if result.get("error"):
+        raise ApiError(409, result["error"])
+    return {"message": "已回報到場，管理員知道您到了。" if step == "arrived" else "已結案，當事人與管理員都已收到通知。謝謝您！"}
 
 
 @router.post("/app/api/checkin")

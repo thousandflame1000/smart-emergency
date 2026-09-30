@@ -123,3 +123,36 @@ def test_nearby_tab_lists_the_nearest_aed_first(db, client, monkeypatch):
     data = client.get("/app/api/nearby").json()
     assert data["aeds"][0]["name"] == "活動中心" and data["aeds"][0]["open"] is True
     assert "destination=25.031,121.541" in data["aeds"][0]["navigate"]
+
+
+def test_responder_handles_the_sos_from_the_app(db, client, line_outbox):
+    from app.models.need import CommunityNeed
+    from app.routers import linebot as lb
+    from app.services import sos
+    elder = User(name="阿公", roles=["elderly"], line_uid="U-app-elder", phone="0911222333", lat=23.665, lng=121.418)
+    helper = User(name="志工", roles=["volunteer"], line_uid="U-app-helper", lat=23.666, lng=121.418)
+    db.add_all([elder, helper]); db.commit()
+    lb._trigger_sos(elder, db)
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    _open(client, "U-app-helper")
+    assert client.get("/app/api/me").json()["sos_tasks"] == []
+    sos.take(db, str(need.id), helper, via="測試")
+    task = client.get("/app/api/me").json()["sos_tasks"][0]
+    assert task["name"] == "阿公" and task["tel"] == "tel:0911222333" and task["arrived"] is False
+    assert client.post(f"/app/api/sos/{need.id}/arrived", json={}).status_code == 200
+    assert client.get("/app/api/me").json()["sos_tasks"][0]["arrived"] is True
+    assert client.post(f"/app/api/sos/{need.id}/done", json={}).status_code == 200
+    assert client.get("/app/api/me").json()["sos_tasks"] == []
+    assert client.post(f"/app/api/sos/{need.id}/done", json={}).status_code == 200, "重複按不出錯"
+
+
+def test_only_the_responder_can_act_on_the_sos_in_the_app(db, client, line_outbox):
+    from app.models.need import CommunityNeed
+    from app.routers import linebot as lb
+    elder = User(name="阿公", roles=["elderly"], line_uid="U-app-e2", lat=23.665, lng=121.418)
+    other = User(name="別人", roles=["volunteer"], line_uid="U-app-other")
+    db.add_all([elder, other]); db.commit()
+    lb._trigger_sos(elder, db)
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    _open(client, "U-app-other")
+    assert client.post(f"/app/api/sos/{need.id}/done", json={}).status_code == 409
