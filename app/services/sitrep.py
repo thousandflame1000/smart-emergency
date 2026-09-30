@@ -41,6 +41,7 @@ EVENT_LABEL = {
     "cancel_need": "取消需求", "admin_message": "管理員傳訊息給志工",
 }
 TIMELINE_LIMIT = 60
+RECENT_EMERGENCY = timedelta(hours=24)  # 日常模式時，這麼久內啟動過的緊急模式仍從它算起
 
 
 def actor_name(label: str | None) -> str:
@@ -105,8 +106,14 @@ def period(db: Session) -> tuple[datetime, str]:
     if round_id:
         start = _naive(datetime.fromisoformat(round_id))
         return start, f"緊急模式啟動（{_local(start)}）至今"
-    local_midnight = (_naive(now_utc()) + TAIPEI).replace(hour=0, minute=0, second=0, microsecond=0)
-    return local_midnight - TAIPEI, "今日 00:00 至今"
+    midnight = (_naive(now_utc()) + TAIPEI).replace(hour=0, minute=0, second=0, microsecond=0) - TAIPEI
+    last = rollcall.last_round(db)
+    if last:
+        start = _naive(datetime.fromisoformat(last))
+        # 災後檢討常在隔天早上：昨晚的緊急模式不能因為過了午夜就從報告消失
+        if midnight > start >= _naive(now_utc()) - RECENT_EMERGENCY:
+            return start, f"上次緊急模式（{_local(start)} 啟動）至今"
+    return midnight, "今日 00:00 至今"
 
 
 def build(db: Session) -> dict:

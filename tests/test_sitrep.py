@@ -192,3 +192,24 @@ def test_csv_exports_do_not_let_typed_text_run_as_excel_formulas(db):
     assert person[0].startswith("'=HYPERLINK") and person[4] == "'+1 巷"
     note = [r for r in rows("/api/dashboard/sitrep/timeline.csv") if r[1] == "值班紀事"][0]
     assert note[2] == "'=cmd|' /C calc'!A0"
+
+
+def test_next_morning_report_still_covers_last_nights_emergency(db, monkeypatch):
+    """昨晚 20:00 啟動、23:00 解除的緊急模式，隔天早上 9 點開報告仍要從昨晚算起；三天前的就不算。"""
+    from datetime import datetime, timezone
+    from app.models.config import SystemConfig
+    from app.models.duty_log import DutyLog
+    morning = datetime(2026, 10, 2, 1, 0, tzinfo=timezone.utc)                  # 台灣 10/2 09:00
+    monkeypatch.setattr(sitrep, "now_utc", lambda: morning)
+    db.add_all([SystemConfig(key="mode", value="normal"),
+                SystemConfig(key=rollcall.ROUND_KEY, value="2026-10-01T12:00:00+00:00"),  # 台灣 10/1 20:00
+                DutyLog(text="台9線坍方", author="後台", created_at=datetime(2026, 10, 1, 13, 0))])
+    db.commit()
+    since, label = sitrep.period(db)
+    assert since == datetime(2026, 10, 1, 12, 0) and label == "上次緊急模式（10/01 20:00 啟動）至今"
+    report = sitrep.build(db)
+    assert report["rollcall"]["ended"] is True and [t["what"] for t in report["timeline"]] == ["台9線坍方"]
+
+    db.query(SystemConfig).filter(SystemConfig.key == rollcall.ROUND_KEY).update({"value": "2026-09-29T12:00:00+00:00"})
+    db.commit()
+    assert sitrep.period(db)[1] == "今日 00:00 至今"
