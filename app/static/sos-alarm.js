@@ -74,12 +74,26 @@
     sub.textContent = [first.address, '通報 ' + since(first.reported_at)].filter(Boolean).join(' · ');
     txt.appendChild(sub);
     var view = document.createElement('button'); view.type = 'button'; view.className = 'view'; view.textContent = '查看';
-    view.onclick = function () { hide(); onView(first); };
+    view.onclick = function () { askPermission(); hide(); onView(first); };
     var dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.className = 'dismiss'; dismiss.textContent = '知道了';
-    dismiss.onclick = hide;
+    dismiss.onclick = function () { askPermission(); hide(); };
     banner.append(txt, view, dismiss);
     if (before) before.parentNode.insertBefore(banner, before); else document.body.appendChild(banner);
-    if (fresh) { beep(); flash(true); }
+    if (fresh) { beep(); flash(true); desktop(items, first, onView); }
+  }
+
+  // 後台分頁在背景（調度者在用別的程式）時，瀏覽器會延後計時器，紅條也看不到：跳桌面通知。
+  // 瀏覽器規定要使用者按過東西才能問權限，所以在第一次按「查看／知道了」時順便問。
+  function askPermission() {
+    try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* 不支援就算了 */ }
+  }
+  function desktop(items, first, onView) {
+    try {
+      if (!document.hidden || !('Notification' in window) || Notification.permission !== 'granted') return;
+      var n = new Notification('🚨 新的緊急求救：' + items.map(function (i) { return i.name; }).join('、'),
+        { body: [first.address, '通報 ' + since(first.reported_at)].filter(Boolean).join(' · '), tag: 'sos', requireInteraction: true });
+      n.onclick = function () { window.focus(); hide(); onView(first); n.close(); };
+    } catch (e) { /* 手機瀏覽器等不支援時，紅條與聲音照常 */ }
   }
 
   window.sosAlarm = {
