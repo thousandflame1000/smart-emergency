@@ -192,3 +192,19 @@ def test_saved_workspace_can_be_deleted_but_built_in_scenarios_are_kept(db):
     assert db.get(TopologyWorkspace, wid) is None
     assert c.delete(f"/api/workspaces/{wid}").status_code == 404
     assert c.delete(f"/api/workspaces/{GUANGFU_WORKSPACE_ID}").status_code == 409
+
+
+def test_cleanup_closes_the_stand_in_sos_so_the_console_stops_ringing(db, line_outbox):
+    me = mk(db, "測試者", ["volunteer", "admin"], "U-me", lat=23.66, lng=121.42)
+    c = client()
+    assert c.post(f"/api/dashboard/rehearsal/family-alert?tester_id={me.id}&status=help_needed").status_code == 200
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    press("U-me", f"action=sos_go&need_id={need.id}")               # 演練到一半：已受理、還沒結案
+    assert c.get("/api/dashboard/summary").json()["open_sos"]
+
+    r = c.post("/api/dashboard/rehearsal/cleanup")
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.status == "open").count() == 0
+    assert c.get("/api/dashboard/summary").json()["open_sos"] == [], "清掉演練後後台不能再響"
+    assert not db.query(User).filter(User.name.like(rehearsal_kit.MARK + "%"), User.is_active == True).count()  # noqa: E712
