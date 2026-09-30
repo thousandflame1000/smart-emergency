@@ -418,13 +418,22 @@ function renderOverviewMap(rows,points,emergency){
   const emgCount=located.filter(p=>p.emergency).length;
   $('overview-map-foot').innerHTML=`<span><i style="background:#18765a"></i>長者</span><span><i style="background:#8a6d3b;border-radius:2px"></i>物資據點 ${located.length-emgCount}</span><span><i style="background:#c9364b;border-radius:2px"></i>應變據點 ${emgCount}（消防、庇護所、衛生所、醫院）</span>`;
 }
+// 緊急模式時，上面三格改看「這次災害的點名」：早上的打卡在災害發生後已經不代表平安
+const DAILY_LABELS={'m-ok':['今日平安','已完成打卡'],'m-risk':['需要關注','未回應或求助'],'m-pending':['等待回覆','今日尚未回覆']};
+const ROLLCALL_LABELS={'m-ok':['點名平安','這次災害已回報'],'m-risk':['需要協助','求助或不舒服'],'m-pending':['還沒回報','可派志工上門確認']};
+function setMetric(id,[label,hint],value){const box=$(id).closest('.metric');box.querySelector('span').textContent=label;box.querySelector('small').textContent=hint;$(id).textContent=value;}
+async function showRollcall(emergency,cs){
+  if(emergency){try{const r=await fetch('/api/rollcall').then(x=>x.json());if(r.active){const c=r.counts;
+    setMetric('m-ok',ROLLCALL_LABELS['m-ok'],c.ok);setMetric('m-risk',ROLLCALL_LABELS['m-risk'],c.help+c.unwell);setMetric('m-pending',ROLLCALL_LABELS['m-pending'],c.pending);return;}}catch(e){}}
+  setMetric('m-ok',DAILY_LABELS['m-ok'],cs.ok||0);setMetric('m-risk',DAILY_LABELS['m-risk'],(cs.no_response||0)+(cs.help_needed||0));setMetric('m-pending',DAILY_LABELS['m-pending'],cs.pending||0);
+}
 async function loadOverviewMap(emergency){
   try{const points=await fetch('/api/resources/points').then(r=>r.ok?r.json():[]);renderOverviewMap(elders,Array.isArray(points)?points:[],emergency);}
   catch(error){renderOverviewMap(elders,[],emergency);}
 }
 async function loadAll(){
   if(!elders.length){$('overview-elderly').innerHTML=skeletonRows(5,4);$('elderly-list-panel').innerHTML=Array.from({length:6},()=>'<article class="pcard"><span class="skel" style="width:60%"></span><span class="skel" style="margin-top:12px"></span></article>').join('');$('alerts').innerHTML='<div style="padding:14px 16px">'+Array.from({length:3},()=>'<span class="skel" style="margin-bottom:14px"></span>').join('')+'</div>';}
-  try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();renderOverviewList();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';loadOverviewMap(emergency);$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
+  try{const [summary,elderRows,alerts]=await Promise.all([fetch('/api/dashboard/summary').then(r=>r.json()),fetch('/api/dashboard/elderly').then(r=>r.json()),fetch('/api/dashboard/alerts').then(r=>r.json())]);const cs=summary.checkin_summary||{};$('m-ok').textContent=cs.ok||0;$('m-risk').textContent=(cs.no_response||0)+(cs.help_needed||0);$('m-pending').textContent=cs.pending||0;$('m-alerts').textContent=summary.active_alerts||0;$('m-needs').textContent=summary.open_needs||0;$('m-resources').textContent=summary.available_resources||0;elders=elderRows;relationsCache=null;$('elderly-count').textContent=elders.length+' 位';renderElderChips();renderOverviewList();applyElderFilters();renderAlerts(alerts);const emergency=summary.mode==='emergency';showRollcall(emergency,cs);loadOverviewMap(emergency);$('mode').classList.toggle('emergency',emergency);$('mode-text').textContent=emergency?'緊急模式':'日常模式';$('stamp').textContent='更新 '+new Date().toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'});}catch(error){$('stamp').textContent='讀取失敗';}}
 const SERIES=[{key:'checkin_ok',label:'平安',color:'#18765a'},{key:'checkin_no_response',label:'未回應',color:'#c9364b'},{key:'checkin_help_needed',label:'求助',color:'#d9822b'},{key:'alerts',label:'警報',color:'#8f52a8'},{key:'needs',label:'需求',color:'#2c7fad'}];
 let trendDays=14;
 // 手畫 SVG 折線圖，不引進圖表函式庫：外部 CDN 被擋掉時整張圖就沒了，這頁的重點就是那張圖。
