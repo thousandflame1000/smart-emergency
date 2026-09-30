@@ -34,7 +34,7 @@ def _minutes(values: list[float]) -> float | None:
 
 EVENT_LABEL = {
     "sos_acknowledged": "受理求救", "sos_on_scene": "處理人到場", "sos_resolved": "求救結案", "sos_escalated": "求救逾時沒人受理，再通知管理員",
-    "sos_reported_119": "轉報 119", "welfare_check_requested": "家屬請人探視",
+    "sos_reported_119": "轉報 119", "sos_arrival_overdue": "受理後逾時未到場，提醒管理員", "welfare_check_requested": "家屬請人探視",
     "propose_dispatch": "建立派遣建議", "confirm_dispatch": "核准派遣", "manual_dispatch": "派遣",
     "auto_match_facility": "自動媒合資源點", "decline_suggestion": "退回派遣建議", "task_accept": "志工接單",
     "task_decline": "志工婉拒", "task_delivered": "物資送達", "task_report": "現場回報",

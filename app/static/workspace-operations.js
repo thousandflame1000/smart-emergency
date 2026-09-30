@@ -14,7 +14,11 @@ const isSos=n=>n.properties.need_type==='sos';
 function minutesSince(iso){return iso?(Date.now()-new Date(iso))/60000:0;}
 function sinceText(iso){return iso&&window.sosAlarm?sosAlarm.since(iso):'';}
 function reportedText(iso){if(!iso)return'未知';const d=new Date(iso);return(minutesSince(iso)>=1440?d.toLocaleDateString('zh-TW')+' ':'')+d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})+'（'+sinceText(iso)+'）';}
-function ageClass(n){if(!isSos(n)||n.properties.status!=='open'||n.properties.responder)return'';const m=minutesSince(n.properties.reported_at);return m>=SOS_OVERDUE_MIN?'overdue':m>=SOS_LATE_MIN?'late':'';}
+// 沒人受理：5 分鐘黃、10 分鐘紅；有人受理但 20 分鐘還沒到場：黃
+const SOS_ARRIVAL_MIN=20;
+function ageClass(n){const p=n.properties;if(!isSos(n)||p.status!=='open')return'';
+  if(p.responder)return !p.on_scene_at&&minutesSince(p.acknowledged_at)>=SOS_ARRIVAL_MIN?'late':'';
+  const m=minutesSince(p.reported_at);return m>=SOS_OVERDUE_MIN?'overdue':m>=SOS_LATE_MIN?'late':'';}
 function openSos(){return operationalNodes().filter(n=>isSos(n)&&n.properties.status==='open');}
 function showSos(id){operationStage='sos';setCatalog('tasks');renderOperations();focusOperational(id);}
 const inventoryDrafts=new Map(), operationEvents=new Map();
@@ -307,7 +311,7 @@ async function loadOperationEvents(node){
     if(!operationEvents.has(key))operationEvents.set(key,resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/events'));
     const events=await operationEvents.get(key);
     if(state.selected?.id!==node.id||nodeById(node.id)?.properties.observed_at!==node.properties.observed_at||!$('operation-events'))return;
-    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',sos_reported_119:'已轉報 119',sos_on_scene:'處理人到場',welfare_check_requested:'家屬請人探視',cancel_need:'取消需求',admin_message:'管理員指示'};
+    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',sos_reported_119:'已轉報 119',sos_on_scene:'處理人到場',sos_arrival_overdue:'受理後逾時未到場，已提醒管理員',welfare_check_requested:'家屬請人探視',cancel_need:'取消需求',admin_message:'管理員指示'};
     // 求救事件不走物資狀態（受理後仍是 open，顯示「待媒合」會誤導）；時間轉成台灣時間
     const when=t=>{const d=new Date(String(t||'').replace(' ','T')+(/[zZ]|[+-]\d\d:?\d\d$/.test(t||'')?'':'Z'));return isNaN(d)?(t||''):d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});};
     $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${e.action.startsWith('sos_')?'':escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(actorName(e.actor_label))} · ${escapeHtml(when(e.created_at))}</small></div>`).join(''):'尚無處理紀錄';

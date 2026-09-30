@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 NEARBY_KM = 2.0     # 鄉下住得散，800 公尺常常一個人都沒有；2 公里騎車也是幾分鐘
 NEARBY_MAX = 5      # 叫太多人反而亂，先叫最近的幾位
 ESCALATE_MINUTES = 10  # 求救這麼久還沒人受理，再叫管理員一次
+ARRIVAL_MINUTES = 20   # 受理這麼久還沒回報到場，提醒管理員（可能被耽擱，要改派或打電話問）
 
 
 def spot(need: CommunityNeed) -> tuple[float, float] | None:
@@ -177,10 +178,46 @@ def escalate_unacknowledged(db: Session | None = None) -> int:
                                 details={"minutes": ESCALATE_MINUTES})
             db.commit()
             sent += 1
+        sent += _remind_overdue_arrivals(db)
         return sent
     finally:
         if own:
             db.close()
+
+
+def _remind_overdue_arrivals(db: Session) -> int:
+    """受理超過 ARRIVAL_MINUTES 還沒回報到場的求救，提醒管理員一次。"""
+    from datetime import timedelta
+    from app.models.dispatch_event import DispatchEvent
+    from app.services.alert import notify_admins
+    from app.services.dispatch import _log_dispatch_event
+    cutoff = now_utc().replace(tzinfo=None) - timedelta(minutes=ARRIVAL_MINUTES)
+    taken = db.query(CommunityNeed).filter(
+        CommunityNeed.need_type == "sos", CommunityNeed.status == "open",
+        CommunityNeed.responder_id.isnot(None), CommunityNeed.acknowledged_at <= cutoff).all()
+    if not taken:
+        return 0
+    seen = {(str(e.need_id), e.action) for e in db.query(DispatchEvent).filter(
+        DispatchEvent.action.in_(("sos_on_scene", "sos_arrival_overdue")),
+        DispatchEvent.need_id.in_([str(n.id) for n in taken])).all()}
+    sent = 0
+    for need in taken:
+        if (str(need.id), "sos_on_scene") in seen or (str(need.id), "sos_arrival_overdue") in seen:
+            continue
+        elder = need.requester.name if need.requester else "居民"
+        who = need.responder.name if need.responder else "處理人"
+        buttons = []
+        if need.responder and tel_uri(need.responder.phone):
+            buttons.append({"label": f"📞 撥打 {who}"[:20], "uri": tel_uri(need.responder.phone), "color": "#c26a12"})
+        if need.requester and tel_uri(need.requester.phone):
+            buttons.append({"label": f"📞 撥打 {elder}"[:20], "uri": tel_uri(need.requester.phone)})
+        notify_admins(db, f"⏱️ {who} 受理 {elder} 的求救已超過 {ARRIVAL_MINUTES} 分鐘，還沒回報到場。\n"
+                          "請確認是否被耽擱，需要時改派其他人。", buttons=buttons or None)
+        _log_dispatch_event(db, "sos_arrival_overdue", need=need, actor_label="系統", previous_status="open",
+                            new_status="open", outcome="reminded", details={"minutes": ARRIVAL_MINUTES})
+        db.commit()
+        sent += 1
+    return sent
 
 
 def welfare_check(db: Session, elder: User, family: User, *, on_site: bool = False) -> dict:

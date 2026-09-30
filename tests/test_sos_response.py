@@ -254,3 +254,25 @@ def test_workspace_knows_when_the_responder_is_on_scene(db, line_outbox):
     press("U-mid", f"action=sos_arrived&need_id={need.id}")
     db.expire_all()
     assert node()["properties"]["on_scene_at"].endswith("+00:00")
+
+
+def test_admins_are_reminded_when_a_taken_sos_has_no_arrival(db, line_outbox):
+    need, *_ = _world(db)
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    db.expire_all()
+    assert sos.escalate_unacknowledged(db) == 0, "剛受理的不提醒"
+    need.acknowledged_at = now_utc().replace(tzinfo=None) - timedelta(minutes=sos.ARRIVAL_MINUTES + 1)
+    db.commit()
+    assert sos.escalate_unacknowledged(db) == 1
+    assert any("中志工 受理 陳阿公 的求救已超過 20 分鐘" in t for t in sent_to(line_outbox, "U-admin"))
+    assert sos.escalate_unacknowledged(db) == 0, "每筆只提醒一次"
+
+
+def test_no_arrival_reminder_once_the_responder_is_there(db, line_outbox):
+    need, *_ = _world(db)
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    press("U-mid", f"action=sos_arrived&need_id={need.id}")
+    db.expire_all()
+    need.acknowledged_at = now_utc().replace(tzinfo=None) - timedelta(minutes=60)
+    db.commit()
+    assert sos.escalate_unacknowledged(db) == 0
