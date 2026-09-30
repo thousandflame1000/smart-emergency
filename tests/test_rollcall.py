@@ -49,7 +49,7 @@ def test_every_way_of_answering_counts(db, line_outbox):
     say("U-unwell", "不舒服")
     assert _status(db) == {"按平安": "ok", "打字平安": "ok", "求救": "help", "不舒服": "unwell", "沒回": "pending"}
     board = rollcall.board(db)
-    assert board["counts"] == {"ok": 2, "unwell": 1, "help": 1, "pending": 1} and board["total"] == 5
+    assert board["counts"] == {"ok": 2, "unwell": 1, "help": 1, "helped": 0, "pending": 1} and board["total"] == 5
     assert [p["name"] for p in board["people"]][:2] == ["求救", "沒回"], "需要協助的最前面，接著是還沒回的"
 
 
@@ -315,3 +315,45 @@ def test_console_marking_help_opens_an_sos(db, line_outbox):
     assert "已經有求救單" in again and db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").count() == 1
     person = next(p for p in client.get("/api/rollcall").json()["people"] if p["name"] == "電話確認的阿公")
     assert person["status"] == "help"
+
+
+def test_elder_whose_sos_was_closed_shows_as_helped_not_still_needing_help(db, line_outbox):
+    """需要協助的人求救結案後改列「已協助」：附近點名不再叫志工去，進度報告也不再列他；再求救就回到需要協助。"""
+    from app.models.need import CommunityNeed
+    mk(db, "跌倒的阿嬤", ["elderly"], "U-fell", lat=23.665, lng=121.418, address="大進村 9 號")
+    near = mk(db, "附近志工", ["volunteer"], "U-near", lat=23.666, lng=121.418)
+    mk(db, "管理員", ["admin"], "U-boss")
+    _emergency(db)
+    press("U-fell", "action=confirm_sos")
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    assert _status(db)["跌倒的阿嬤"] == "help"
+    press("U-near", f"action=sos_go&need_id={need.id}")
+    assert _status(db)["跌倒的阿嬤"] == "help", "受理了還沒結案，仍然算需要協助"
+    press("U-near", f"action=sos_done&need_id={need.id}")
+
+    board = rollcall.board(db)
+    person = next(p for p in board["people"] if p["name"] == "跌倒的阿嬤")
+    assert (person["status"], person["status_label"]) == ("helped", "已協助")
+    assert board["counts"]["help"] == 0 and board["counts"]["helped"] == 1
+    assert rollcall.nearby_unanswered(db, near) == []
+    assert rollcall.counts_line(board["counts"]).endswith("已協助 1")
+
+    press("U-fell", "action=confirm_sos")                              # 又需要幫忙
+    assert _status(db)["跌倒的阿嬤"] == "help"
+    assert db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.status == "open").count() == 1
+
+
+def test_sos_opened_before_the_emergency_and_closed_during_it_counts_as_helped(db, line_outbox):
+    """點名前就開著的求救，後台標需要協助會沿用那一張；在這一輪結案也算已協助。"""
+    from app.main import app
+    from app.models.need import CommunityNeed
+    elder = mk(db, "早上就求救的阿公", ["elderly"], None, lat=23.665, lng=121.418)
+    db.add(CommunityNeed(requester_id=elder.id, need_type="sos", status="open", lat=23.665, lng=121.418))
+    db.commit()
+    _emergency(db)
+    client = TestClient(app)
+    assert "已經有求救單" in client.post(f"/api/rollcall/{elder.id}?status=help").json()["message"]
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    assert client.post(f"/api/resources/needs/{need.id}/resolve_sos").status_code == 200
+    db.expire_all()
+    assert _status(db)["早上就求救的阿公"] == "helped"

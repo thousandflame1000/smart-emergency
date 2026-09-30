@@ -85,7 +85,7 @@ aside { padding: 18px 14px; overflow: auto; min-width: 0; }
 .map-dot.rc-pending { outline: 3px dashed #546e7a; outline-offset: 2px; }
 .map-dot.rc-help { outline: 3px solid #c62828; outline-offset: 2px; }
 .map-dot.rc-unwell { outline: 3px solid #ef8f00; outline-offset: 2px; }
-.map-dot.rc-ok { outline: 3px solid #2e7d32; outline-offset: 2px; }
+.map-dot.rc-ok, .map-dot.rc-helped { outline: 3px solid #2e7d32; outline-offset: 2px; }
 .map-dot.cap-high { outline: 3px solid #ef8f00; outline-offset: 2px; }
 .map-dot.cap-full { outline: 3px solid #c62828; outline-offset: 2px; }
 .map-dot.selected { outline: 3px solid #f8b52c; }
@@ -120,7 +120,7 @@ footer { min-height: 35px; display: flex; gap: 16px; align-items: center; justif
 .rollcall-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:6px 0 8px; }
 .rollcall-summary .rc { display:flex; justify-content:space-between; padding:6px 8px; border-radius:5px; font-size:12px; border:1px solid transparent; min-height:auto; }
 .rollcall-summary .rc.on { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
-.rollcall-summary .rc b { font-size:15px; }
+.rollcall-summary .rc b { font-size:15px; } .rollcall-summary .rc.wide { grid-column:1 / -1; }
 .rc.ok, .rc-chip.ok { background:#e2f2e9; color:#13603f; } .rc.warn, .rc-chip.warn { background:#fff3d6; color:#8a4b0f; }
 .rc.urgent, .rc-chip.urgent { background:#ffe8e4; color:#a52d20; } .rc.pending, .rc-chip.pending { background:#eceff1; color:#37474f; }
 .rollcall-actions { display:grid; gap:6px; margin-bottom:6px; } .rollcall-since { margin:4px 0 0; font-size:12px; } .rollcall-actions button, .rollcall-actions a { width:100%; }

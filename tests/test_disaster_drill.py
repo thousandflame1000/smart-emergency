@@ -124,10 +124,11 @@ def test_full_disaster_drill_over_the_real_webhook(db, line_outbox, line):
     # 7. 後台看板與災情摘要對得上
     board = client.get("/api/rollcall").json()
     by_name = {p["name"]: p["status"] for p in board["people"]}
-    assert by_name == {"平安阿嬤": "ok", "求救阿公": "help", "沒手機阿伯": "ok"}
+    assert by_name == {"平安阿嬤": "ok", "求救阿公": "helped", "沒手機阿伯": "ok"}, "求救結案後不再列為需要協助"
     db.expire_all()  # 按鈕是 webhook 在另一個 session 處理的
     report = sitrep.build(db)
     assert report["sos"]["total"] == 2 and report["sos"]["closed"] == 2 and report["sos"]["median_ack_min"] is not None
+    assert report["rollcall"]["follow_up"] == [], "每個人都確認或處理完了，沒有要追蹤的人"
     whats = {t["what"] for t in report["timeline"]}
     assert {"通報求救", "受理求救", "求救結案", "家屬請人探視", "點名回報：需要協助"} <= whats
 

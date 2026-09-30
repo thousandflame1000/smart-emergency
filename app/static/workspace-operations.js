@@ -238,7 +238,7 @@ async function assignSos(node,userId,label,replace=false){
 let rollcallData=null,rollcallById=new Map(),rollcallFilter='';
 // 地圖與面板用：這位長者這一輪點名的狀態（沒有點名時是 null）
 function rollcallOf(node){return rollcallData?.active&&node?.properties?.db==='user'?rollcallById.get(node.id.replace('db:person:',''))||null:null;}
-const ROLLCALL_CLASS={help:'urgent',pending:'pending',unwell:'warn',ok:'ok'};
+const ROLLCALL_CLASS={help:'urgent',pending:'pending',unwell:'warn',helped:'ok',ok:'ok'};
 async function loadRollcall(){
   const before=JSON.stringify([...rollcallById].map(([k,v])=>[k,v.status]));
   try{const r=await fetch('/api/rollcall');rollcallData=r.ok?await r.json():null;}catch(e){rollcallData=null;}
@@ -260,7 +260,7 @@ function renderRollcall(){
   const chip=(key,cls,label)=>`<button type="button" class="rc ${cls}${rollcallFilter===key?' on':''}" data-rc-filter="${key}" aria-pressed="${rollcallFilter===key}">${label} <b>${c[key]}</b></button>`;
   const query=$('search').value.trim().toLowerCase();
   const shown=d.people.filter(p=>(!rollcallFilter||p.status===rollcallFilter)&&(!query||(p.name+' '+p.address).toLowerCase().includes(query)));
-  box.innerHTML=`<p class="muted rollcall-since">點名開始於 ${escapeHtml(reportedText(d.started_at))}</p><div class="rollcall-summary">${chip('ok','ok','平安')}${chip('unwell','warn','不舒服')}${chip('help','urgent','需要協助')}${chip('pending','pending','還沒回')}</div>
+  box.innerHTML=`<p class="muted rollcall-since">點名開始於 ${escapeHtml(reportedText(d.started_at))}</p><div class="rollcall-summary">${chip('ok','ok','平安')}${chip('unwell','warn','不舒服')}${chip('help','urgent','需要協助')}${chip('pending','pending','還沒回')}${c.helped?chip('helped','ok wide','已協助（求救已結案）'):''}</div>
     <div class="rollcall-actions"><button id="rollcall-remind" type="button"${c.pending?'':' disabled'}><i data-lucide="bell-ring"></i>再問一次還沒回的人</button><a class="icon-button" href="/api/rollcall/export.csv" download title="匯出點名名單（Excel 可開）"><i data-lucide="download"></i>匯出 CSV</a></div>
     <div class="rollcall-list">${shown.length?'':'<p class="muted">這個條件下沒有人</p>'}${shown.map(p=>{
       const meta=[p.status==='pending'?'脆弱度 '+p.vulnerability:(p.marked_by?p.marked_by+'確認':'本人回報')+(p.responded_at?' · '+sinceText(p.responded_at):''),p.address||'地址未填',p.line?'':'未綁 LINE'].filter(Boolean).join(' · ');

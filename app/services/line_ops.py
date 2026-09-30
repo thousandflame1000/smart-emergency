@@ -339,7 +339,8 @@ def _rollcall_line(db: Session) -> str | None:
     if not board.get("active"):
         return None
     c = board["counts"]
-    return f"📋 災時點名：平安 {c['ok']}｜需要協助 {c['help']}｜不舒服 {c['unwell']}｜還沒回 {c['pending']}"
+    from app.services.rollcall import counts_line
+    return f"📋 災時點名：{counts_line(c)}"
 
 
 def admin_rollcall(event, db: Session, user: User) -> None:

@@ -18,7 +18,7 @@ from app.timeutil import now_utc
 logger = logging.getLogger(__name__)
 
 ROUND_KEY = "rollcall_round"
-STATUS_LABEL = {"ok": "平安", "unwell": "不舒服", "help": "需要協助", "pending": "還沒回"}
+STATUS_LABEL = {"ok": "平安", "unwell": "不舒服", "help": "需要協助", "helped": "已協助", "pending": "還沒回"}
 PROMPT = ("🚨 社區緊急模式啟動\n\n請回報您是否平安：按下方「我平安」。\n"
           "身體不舒服或需要人幫忙，請按「需要幫忙」。\n生命危險請直接撥打 119。")
 
@@ -79,6 +79,29 @@ def last_round(db: Session) -> str | None:
     return row.value if row else None
 
 
+def _helped(db: Session, round_id: str, help_ids: list[str]) -> set[str]:
+    """回報需要協助、求救在這一輪裡結案、而且現在沒有未結案求救的人。
+
+    需要協助一定會開求救單（或沿用點名前就開著的那張）；結案後點名若還是「需要協助」，附近點名會一直
+    叫志工去已經處理好的人家，進度報告也一直把他列在最需要確認的名單上。取消的求救本人已經記成平安。"""
+    from datetime import datetime, timedelta
+    from app.models.dispatch_event import DispatchEvent
+    from app.models.need import CommunityNeed
+    if not help_ids:
+        return set()
+    started = datetime.fromisoformat(round_id).replace(tzinfo=None) - timedelta(seconds=2)
+    sos = db.query(CommunityNeed.id, CommunityNeed.requester_id, CommunityNeed.status).filter(
+        CommunityNeed.need_type == "sos", CommunityNeed.requester_id.in_(help_ids)).all()
+    still_open = {str(uid) for _id, uid, status in sos if status == "open"}
+    closed = {str(need_id): str(uid) for need_id, uid, status in sos if status == "fulfilled" and str(uid) not in still_open}
+    if not closed:
+        return set()
+    resolved = db.query(DispatchEvent.need_id).filter(
+        DispatchEvent.action == "sos_resolved", DispatchEvent.need_id.in_(list(closed)),
+        DispatchEvent.created_at >= started).all()
+    return {closed[str(need_id)] for (need_id,) in resolved}
+
+
 def board(db: Session, round_id: str | None = None) -> dict:
     """點名看板：人數與名單。還沒回的依脆弱度由高到低，需要協助的排在最前面。
 
@@ -89,12 +112,13 @@ def board(db: Session, round_id: str | None = None) -> dict:
     if not round_id:
         return {"active": False}
     replies = {str(r.user_id): r for r in db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id).all()}
-    rank = {"help": 0, "pending": 1, "unwell": 2, "ok": 3}
+    helped = _helped(db, round_id, [uid for uid, r in replies.items() if r.status == "help"])
+    rank = {"help": 0, "pending": 1, "unwell": 2, "helped": 3, "ok": 4}
     vulnerability = vulnerability_scorer(db)
     people = []
     for u in elders(db):
         reply = replies.get(str(u.id))
-        status = reply.status if reply else "pending"
+        status = "helped" if str(u.id) in helped else reply.status if reply else "pending"
         people.append({
             "id": str(u.id), "name": u.name, "address": u.address or "", "phone": u.phone or "",
             "line": bool(u.line_uid), "lat": u.lat, "lng": u.lng, "status": status,
@@ -107,6 +131,11 @@ def board(db: Session, round_id: str | None = None) -> dict:
     counts = {key: sum(p["status"] == key for p in people) for key in STATUS_LABEL}
     return {"active": ongoing or round_id == current_round(db), "started_at": round_id, "total": len(people),
             "counts": counts, "people": people}
+
+
+def counts_line(c: dict) -> str:
+    return (f"平安 {c['ok']}｜需要協助 {c['help']}｜不舒服 {c['unwell']}｜還沒回 {c['pending']}"
+            + (f"｜已協助 {c['helped']}" if c.get("helped") else ""))
 
 
 NEARBY_KM = 2.0
@@ -142,7 +171,7 @@ def auto_follow_up(db: Session | None = None) -> int:
             info = board(db)
             c = info["counts"]
             worst = [p["name"] for p in info["people"] if p["status"] in ("help", "pending")][:3]
-            notify_admins(db, f"📋 點名 {step} 分鐘：平安 {c['ok']}｜需要協助 {c['help']}｜不舒服 {c['unwell']}｜還沒回 {c['pending']}\n"
+            notify_admins(db, f"📋 點名 {step} 分鐘：{counts_line(c)}\n"
                               + (f"最需要先確認：{'、'.join(worst)}\n" if worst else "")
                               + (f"已自動再問 {asked} 位還沒回的長者。" if asked else "還沒回的長者都沒有綁 LINE，請電話或派志工上門。"),
                           buttons=[{"label": "📋 看點名", "text": "點名"}])
