@@ -334,8 +334,10 @@ const sos=n.properties?.db==='need'&&n.properties.need_type==='sos'&&n.propertie
 const size=sos?34:n.kind==='incident'?28:24;
 // 緊急模式點名時，長者外圈顯示狀態：還沒回虛線、需要協助紅、不舒服橘、平安綠
 const rc=typeof rollcallOf==='function'?rollcallOf(n):null;
-      const marker=L.marker([n.lat,n.lng],{zIndexOffset:sos?1000:0,draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${sos?'sos-dot '+(n.properties.responder?'taken':'waiting'):''} ${rc?'rc-'+rc.status:''} ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${sos?'#c62828':nodeColor(n)}">${sos?'<b>SOS</b>':nodeIcon(n)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
-      marker.bindTooltip(document.createTextNode(sos?`${n.label} · ${n.properties.responder?'處理中：'+n.properties.responder:'尚未受理'}`:`${n.label} · ${nodeTypeLabel(n)}${rc?' · 點名：'+rc.status_label:''}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
+// 收容所：滿了紅圈、八成以上橘圈，派人過去前一眼看得到
+const cap=n.properties?.db==='point'&&n.properties.capacity?n.properties.current_load/n.properties.capacity:null;
+      const marker=L.marker([n.lat,n.lng],{zIndexOffset:sos?1000:0,draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${sos?'sos-dot '+(n.properties.responder?'taken':'waiting'):''} ${rc?'rc-'+rc.status:''} ${cap>=1?'cap-full':cap>=0.8?'cap-high':''} ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${sos?'#c62828':nodeColor(n)}">${sos?'<b>SOS</b>':nodeIcon(n)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
+      marker.bindTooltip(document.createTextNode(sos?`${n.label} · ${n.properties.responder?'處理中：'+n.properties.responder:'尚未受理'}`:`${n.label} · ${nodeTypeLabel(n)}${rc?' · 點名：'+rc.status_label:''}${cap!==null?` · 收容 ${n.properties.current_load}/${n.properties.capacity}${cap>=1?'（已滿）':''}`:''}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});
       if(sos)marker.addTo(mapLayers);else markers.push(marker);
     }
