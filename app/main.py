@@ -357,7 +357,10 @@ async def no_cache_static(request, call_next):
     freshness and can keep serving a pre-deploy copy well past a normal reload. Force
     revalidation on every request instead (still cheap: ETag/Last-Modified make it a 304)."""
     response = await call_next(request)
-    if request.url.path.startswith("/static/"):
+    if request.url.path.startswith("/static/vendor/"):
+        # 第三方函式庫版本固定（換版本就是換檔），可以放心長期快取；現場網路差時少下載約 1 MB
+        response.headers["Cache-Control"] = "public, max-age=604800"
+    elif request.url.path.startswith("/static/"):
         response.headers["Cache-Control"] = "no-cache"
     if request.url.path.startswith(("/api/", "/f/")):
         response.headers["Cache-Control"] = "no-store"

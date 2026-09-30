@@ -137,3 +137,9 @@ def test_browsers_get_a_readable_404_page_while_apis_keep_json():
     api = client.get("/api/resources/needs/nope/events", headers={"Accept": "text/html"})
     assert api.headers["content-type"].startswith("application/json")
     assert client.get("/no-such-page").json()["error"]
+
+
+def test_vendored_libraries_are_cached_but_our_own_files_revalidate(web):
+    """第三方函式庫版本固定，可以長期快取；我們自己的 JS 每次都要重新確認，部署後才不會拿到舊版。"""
+    assert "max-age" in web.get("/static/vendor/lucide.min.js").headers["cache-control"]
+    assert web.get("/static/sos-alarm.js").headers["cache-control"] == "no-cache"
