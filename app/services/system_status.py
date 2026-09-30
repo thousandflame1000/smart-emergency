@@ -24,6 +24,7 @@ from app.timeutil import TAIWAN, now_utc, today_tw
 _line_cache: dict = {"at": 0.0, "result": None}
 _quota_cache: dict = {"at": 0.0, "result": None}
 LINE_CACHE_SECONDS = 300
+QUOTA_CACHE_SECONDS = 60  # 演練工具每跑一次就看一次剩多少，快取短一點
 QUOTA_WARN_LEFT = 50
 
 
@@ -52,7 +53,7 @@ def _line_check() -> dict:
 
 def _quota_check() -> dict:
     """本月推播額度：主動推給每個人各算一則（回覆不算）。用完之後求救、點名、家屬通知都推不出去。"""
-    if _quota_cache["result"] and time.time() - _quota_cache["at"] < LINE_CACHE_SECONDS:
+    if _quota_cache["result"] and time.time() - _quota_cache["at"] < QUOTA_CACHE_SECONDS:
         return _quota_cache["result"]
     label = "LINE 推播額度（本月）"
     try:

@@ -688,6 +688,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
             <button class="btn btn-ghost-danger btn-sm" onclick="runKit('cleanup')">清除演練資料</button>
           </div>
           <div class="muted" id="kit-result" role="status"></div>
+          <div class="muted" id="kit-quota"></div>
         </div>
       </details>
     </div>
@@ -1705,9 +1706,20 @@ function askConfirm(title, bodyHtml, okLabel = '確認', okClass = 'btn-success'
 // Load all users + resources
 // ════════════════════════════════════════════════
 let kitTesters = [];
+// 演練會用掉推播額度（免費方案每月 200 則）；決賽前要看得到還剩多少
+async function loadKitQuota() {
+  const box = document.getElementById('kit-quota');
+  if (!box) return;
+  try {
+    const item = (await fetch('/api/system/status').then(r => r.json())).items.find(i => i.key === 'quota');
+    box.textContent = item ? 'LINE 本月推播：' + item.detail : '';
+    box.style.color = item && item.level !== 'ok' ? 'var(--danger,#dc2626)' : '';
+  } catch (e) { box.textContent = ''; }
+}
 async function loadKitTesters() {
   const select = document.getElementById('kit-tester');
   if (!select) return;
+  loadKitQuota();
   try {
     kitTesters = await fetch('/api/dashboard/rehearsal/testers').then(r => r.json());
     const keep = select.value;
