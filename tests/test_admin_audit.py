@@ -72,13 +72,18 @@ def test_every_write_endpoint_has_a_readable_action_name():
     from app.main import app
     from app.services.admin_audit import describe, should_record
     missing = []
-    for route in app.routes:
-        for method in getattr(route, "methods", set()) & {"POST", "PUT", "PATCH", "DELETE"}:
-            path = re.sub(r"\{[^}]+\}", "x1", route.path)
+    # FastAPI 0.141 起 app.routes 只列最上層（include_router 變成 _IncludedRouter），
+    # 之前逐一看 app.routes 其實一條 API 都沒檢查到；改看 OpenAPI 列出的完整路徑。
+    paths = {path: set(ops) for path, ops in app.openapi()["paths"].items()}
+    paths.setdefault("/api/rehearsal", set()).add("put")  # 不在 schema 裡的寫入端點
+    assert len(paths) > 80, "路徑清單不完整，這個測試就等於沒檢查"
+    for route_path, methods in paths.items():
+        for method in {m.upper() for m in methods} & {"POST", "PUT", "PATCH", "DELETE"}:
+            path = re.sub(r"\{[^}]+\}", "x1", route_path)
             if path == "/api/dashboard/mode":
                 path += "?mode=emergency"
             if should_record(method, path) and describe(method, path) == path:
-                missing.append(f"{method} {route.path}")
+                missing.append(f"{method} {route_path}")
     assert not missing, missing
 
 

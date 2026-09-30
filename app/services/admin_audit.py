@@ -67,6 +67,7 @@ _ACTIONS = [
     ("PUT", rf"/api/rag/chunks/{_ID}", "修改知識庫段落"),
     ("DELETE", rf"/api/rag/chunks/{_ID}", "刪除知識庫段落"),
     ("POST", r"/api/system/rich-menu/install", "重裝 LINE 選單"),
+    ("PUT", r"/api/rehearsal", "儲存演練紀錄"),
 ]
 
 
