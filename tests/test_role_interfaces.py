@@ -446,7 +446,10 @@ def test_console_delete_still_works_and_reports_blockers(db):
     blocked = c.delete(f"/api/dashboard/users/{vol.id}")
     assert blocked.status_code == 409 and "進行中的派遣" in blocked.text
     dispatch.cancel_need(str(need.id), db)
-    assert c.delete(f"/api/dashboard/users/{vol.id}").status_code == 200
+    # 取消後不再是進行中的派遣，但物資的庫存帳（inventory_events，RESTRICT）是稽核紀錄要保留：
+    # 正式站 PostgreSQL 會擋下刪除，改用停用。測試開了外鍵檢查後才看得到這個真實行為。
+    kept = c.delete(f"/api/dashboard/users/{vol.id}")
+    assert kept.status_code == 409 and "停用" in kept.json()["error"]
 
 
 # ═══════════════ 用綁定碼加入成員（不用貼 LINE User ID）═══════════════

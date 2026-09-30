@@ -19,6 +19,14 @@ import pytest
 
 from app.database import engine, Base, SessionLocal
 import app.models.resource_point  # noqa: F401 確保所有 model 都被註冊
+from sqlalchemy import event
+
+
+@event.listens_for(engine, "connect")
+def _enforce_foreign_keys(dbapi_connection, _record):
+    # SQLite 預設不檢查外鍵；正式站 PostgreSQL 會檢查。不開的話，刪除使用者漏清某張表這種錯誤
+    # 測試全過、上線才 500。
+    dbapi_connection.execute("PRAGMA foreign_keys=ON")
 
 
 def pytest_sessionfinish(session, exitstatus):

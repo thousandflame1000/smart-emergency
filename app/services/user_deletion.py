@@ -10,6 +10,7 @@ from app.models.checkin import DailyCheckin
 from app.models.config import SystemConfig
 from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
+from app.models.safety_check import SafetyCheck
 from app.models.user import User
 from app.models.volunteer_application import VolunteerApplication
 
@@ -40,6 +41,10 @@ def delete_user_data(db: Session, user: User) -> None:
             f"還有 {active} 筆進行中的派遣"
             f"（{'或'.join(need_status(s) for s in BLOCKING_STATUSES)}），"
             "請先取消或完成後再刪除；也可以改成「停用」保留紀錄。")
+    handling = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.status == "open",
+                                              CommunityNeed.responder_id == user.id).count()
+    if handling:
+        raise UserDeletionBlocked(f"正在處理 {handling} 筆求救，請先改派或結案後再刪除。")
     uid, line_uid = user.id, user.line_uid
     try:
         checkin_ids = [c.id for c in db.query(DailyCheckin.id).filter(DailyCheckin.elderly_id == uid)]
@@ -55,6 +60,10 @@ def delete_user_data(db: Session, user: User) -> None:
             {"applicant_id": None}, synchronize_session=False)
         db.query(VolunteerApplication).filter(VolunteerApplication.reviewed_by == uid).update(
             {"reviewed_by": None}, synchronize_session=False)
+        db.query(SafetyCheck).filter(SafetyCheck.user_id == uid).delete(synchronize_session=False)
+        # 結案的求救留著（別人的紀錄），只拿掉處理人；誰處理的仍記在事件紀錄的操作者名稱
+        db.query(CommunityNeed).filter(CommunityNeed.responder_id == uid).update(
+            {"responder_id": None}, synchronize_session=False)
         db.query(CommunityNeed).filter(CommunityNeed.requester_id == uid).delete(synchronize_session=False)
         db.query(CommunityResource).filter(CommunityResource.owner_id == uid).delete(synchronize_session=False)
         if line_uid:

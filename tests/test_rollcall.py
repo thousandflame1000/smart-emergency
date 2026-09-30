@@ -357,3 +357,31 @@ def test_sos_opened_before_the_emergency_and_closed_during_it_counts_as_helped(d
     assert client.post(f"/api/resources/needs/{need.id}/resolve_sos").status_code == 200
     db.expire_all()
     assert _status(db)["早上就求救的阿公"] == "helped"
+
+
+def test_people_who_answered_a_roll_call_or_took_an_sos_can_still_be_deleted(db, line_outbox):
+    """點名紀錄與求救處理人是後來加的外鍵；刪除使用者時要一起處理，不然正式站會擋下刪除。"""
+    from app.models.need import CommunityNeed
+    from app.models.safety_check import SafetyCheck
+    from app.models.user import User
+    from app.services.user_deletion import UserDeletionBlocked, delete_user_data
+    import pytest
+    mk(db, "回報過的阿嬤", ["elderly"], "U-answered")
+    helper = mk(db, "處理過的志工", ["volunteer"], "U-helper2")
+    other = mk(db, "另一位長者", ["elderly"], "U-other2")
+    _emergency(db)
+    press("U-answered", "action=safe")
+    done = CommunityNeed(requester_id=other.id, need_type="sos", status="fulfilled", responder_id=helper.id)
+    live = CommunityNeed(requester_id=other.id, need_type="sos", status="open", responder_id=helper.id)
+    db.add_all([done, live]); db.commit()
+
+    with pytest.raises(UserDeletionBlocked, match="正在處理 1 筆求救"):
+        delete_user_data(db, helper)
+    live.status = "fulfilled"; db.commit()
+    delete_user_data(db, helper)
+    db.expire_all()
+    assert db.query(CommunityNeed).filter(CommunityNeed.responder_id.isnot(None)).count() == 0
+
+    elder = db.query(User).filter(User.line_uid == "U-answered").one()
+    delete_user_data(db, elder)
+    assert db.query(SafetyCheck).count() == 0 and db.query(User).filter(User.line_uid == "U-answered").count() == 0
