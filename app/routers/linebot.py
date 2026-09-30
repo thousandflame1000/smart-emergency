@@ -1626,7 +1626,7 @@ def handle_postback(event: PostbackEvent):
     elif action == "claim":
         _handle_claim(event, db, user, data.get("need_id", ""))
 
-    elif action in ("sos_go", "sos_take", "sos_done"):
+    elif action in ("sos_go", "sos_take", "sos_done", "sos_arrived"):
         _handle_sos_button(event, db, user, action, data.get("need_id", ""))
 
     elif action == "family_check":
@@ -1667,6 +1667,11 @@ def _handle_family_check(event, db, user, elder_id: str) -> None:
 def _handle_sos_button(event, db, user, action: str, need_id: str) -> None:
     """附近志工按「我過去」、管理員按「我來處理」、處理人按「處理完成」。"""
     from app.services import sos
+    if action == "sos_arrived":
+        result = sos.arrive(db, need_id, user)
+        _say(event, "⚠️ " + result["error"] if result.get("error") else
+             "已經回報過到場了。" if result.get("already") else "📍 已回報到場，管理員知道您到了。確認安全後請按「處理完成」。")
+        return
     if action == "sos_done":
         result = sos.finish(db, need_id, user)
         _say(event, "⚠️ " + result["error"] if result.get("error") else

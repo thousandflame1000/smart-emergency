@@ -33,7 +33,7 @@ def _minutes(values: list[float]) -> float | None:
 
 
 EVENT_LABEL = {
-    "sos_acknowledged": "受理求救", "sos_resolved": "求救結案", "sos_escalated": "求救逾時沒人受理，再通知管理員",
+    "sos_acknowledged": "受理求救", "sos_on_scene": "處理人到場", "sos_resolved": "求救結案", "sos_escalated": "求救逾時沒人受理，再通知管理員",
     "sos_reported_119": "轉報 119", "welfare_check_requested": "家屬請人探視",
     "propose_dispatch": "建立派遣建議", "confirm_dispatch": "核准派遣", "manual_dispatch": "派遣",
     "auto_match_facility": "自動媒合資源點", "decline_suggestion": "退回派遣建議", "task_accept": "志工接單",
@@ -100,8 +100,10 @@ def build(db: Session) -> dict:
         CommunityNeed.created_at >= window, CommunityNeed.status.in_(("open", "suggested", "matched")))).all()
     sos = [n for n in needs if n.need_type == "sos"]
     supplies = [n for n in needs if n.need_type != "sos"]
-    resolved_at = {str(e.need_id): _naive(e.created_at) for e in db.query(DispatchEvent).filter(
-        DispatchEvent.action == "sos_resolved", DispatchEvent.need_id.in_([str(n.id) for n in sos])).all()} if sos else {}
+    sos_events = db.query(DispatchEvent).filter(DispatchEvent.action.in_(("sos_resolved", "sos_on_scene")),
+                                                DispatchEvent.need_id.in_([str(n.id) for n in sos])).all() if sos else []
+    resolved_at = {str(e.need_id): _naive(e.created_at) for e in sos_events if e.action == "sos_resolved"}
+    arrived_at = {str(e.need_id): _naive(e.created_at) for e in sos_events if e.action == "sos_on_scene"}
 
     def sos_row(n: CommunityNeed) -> dict:
         state = "已結案" if n.status == "fulfilled" else "處理中" if n.responder_id else "未受理" if n.status == "open" else "已取消"
@@ -112,6 +114,7 @@ def build(db: Session) -> dict:
 
     ack = [(_naive(n.acknowledged_at) - _naive(n.created_at)).total_seconds() / 60 for n in sos if n.acknowledged_at]
     close = [(resolved_at[str(n.id)] - _naive(n.created_at)).total_seconds() / 60 for n in sos if str(n.id) in resolved_at]
+    arrive = [(arrived_at[str(n.id)] - _naive(n.created_at)).total_seconds() / 60 for n in sos if str(n.id) in arrived_at]
 
     by_type: dict[str, dict] = {}
     for n in supplies:
@@ -138,7 +141,7 @@ def build(db: Session) -> dict:
         "sos": {"total": len(sos), "waiting": sum(r["state"] == "未受理" for r in map(sos_row, sos)),
                 "in_progress": sum(1 for n in sos if n.status == "open" and n.responder_id),
                 "closed": sum(1 for n in sos if n.status == "fulfilled"),
-                "median_ack_min": _minutes(ack), "median_close_min": _minutes(close),
+                "median_ack_min": _minutes(ack), "median_arrive_min": _minutes(arrive), "median_close_min": _minutes(close),
                 "rows": [sos_row(n) for n in sorted(sos, key=lambda n: n.created_at or now)]},
         "needs": {"total": len(supplies), "by_type": by_type,
                   "by_status": {NEED_STATUS_ZH.get(s, s): sum(n.status == s for n in supplies)

@@ -57,7 +57,7 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
     var s = d.sos;
     html += '<section><h2>一鍵求救</h2><div class="grid">' + stat('總數', s.total) + stat('未受理', s.waiting, s.waiting ? 'red' : '') +
       stat('處理中', s.in_progress, 'amber') + stat('已結案', s.closed, 'green') +
-      stat('受理中位數（分）', s.median_ack_min) + stat('結案中位數（分）', s.median_close_min) + '</div>' +
+      stat('受理中位數（分）', s.median_ack_min) + stat('到場中位數（分）', s.median_arrive_min) + stat('結案中位數（分）', s.median_close_min) + '</div>' +
       (s.rows.length ? '<div class="table-wrap"><table><thead><tr><th>通報</th><th>當事人</th><th>狀態</th><th>處理人</th><th>地點</th></tr></thead><tbody>' +
         s.rows.map(function (r) { return '<tr><td>' + esc(r.reported) + '</td><td>' + esc(r.name) + '</td><td><span class="tag ' + (TONE[r.state] || '') + '">' + esc(r.state) + (r.waiting_min != null ? '・等 ' + r.waiting_min + ' 分' : '') + '</span></td><td>' + esc(r.responder || '—') + '</td><td>' + esc(r.address || '—') + '</td></tr>'; }).join('') +
         '</tbody></table></div>' : '<p class="empty">這段期間沒有求救。</p>') + '</section>';

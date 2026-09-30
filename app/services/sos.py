@@ -95,13 +95,14 @@ def responder_card(need: CommunityNeed) -> dict:
         buttons.append({"label": f"📞 撥打 {requester.name}"[:20], "uri": tel_uri(requester.phone), "color": "#c0392b"})
     if _navigate(need):
         buttons.append({"label": "🧭 導航", "uri": _navigate(need)})
+    buttons.append({"label": "📍 已到場", "data": f"action=sos_arrived&need_id={need.id}"})
     buttons.append({"label": "✅ 處理完成", "data": f"action=sos_done&need_id={need.id}"})
     return bubble("🆘 由您處理這筆求救", "#c0392b",
                   [f"當事人：{requester.name if requester else '未知'}",
                    f"地點：{need.address or '見導航'}",
                    f"狀況：{need.description or '未說明'}",
                    *([_aed_line(need)] if _aed_line(need) else []),
-                   "到場確認安全後按「處理完成」。需要送醫請撥 119。"], buttons)
+                   "到了按「已到場」，確認安全後按「處理完成」。需要送醫請撥 119。"], buttons)
 
 
 def take(db: Session, need_id: str, user: User, *, via: str) -> dict:
@@ -231,6 +232,33 @@ def _tell_family(db: Session, need: CommunityNeed, text: str) -> None:
         digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
         send_text_reliably(aggregate_type="CommunityNeed", aggregate_id=str(need.id), destination=uid,
                            content=text, dedupe_key=f"welfare-family:{need.id}:{digest}")
+
+
+def arrive(db: Session, need_id: str, user: User) -> dict:
+    """處理人回報已到場：後台與提出的家屬知道人到了，時間軸記下到場時間（每筆只記第一次）。"""
+    from app.models.dispatch_event import DispatchEvent
+    from app.services.alert import notify_admins
+    from app.services.dispatch import _log_dispatch_event
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == str(need_id)).first()
+    if need is None or need.need_type != "sos":
+        return {"error": "找不到這筆求救"}
+    if need.status != "open":
+        return {"error": "這筆求救已經結案了。"}
+    if not user.has_role("admin") and str(need.responder_id) != str(user.id):
+        return {"error": "只有受理這筆求救的人可以回報到場。"}
+    if db.query(DispatchEvent).filter(DispatchEvent.need_id == str(need.id), DispatchEvent.action == "sos_on_scene").first():
+        return {"ok": True, "already": True}
+    role = "管理員" if user.has_role("admin") else "志工"
+    _log_dispatch_event(db, "sos_on_scene", need=need, actor_id=str(user.id), actor_label=f"{role}:{user.name}",
+                        previous_status="open", new_status="open", outcome="on_scene", details={})
+    db.commit()
+    elder = need.requester.name if need.requester else "居民"
+    try:
+        notify_admins(db, f"📍 {role} {user.name} 已到 {elder} 身邊。")
+    except Exception:
+        logger.warning("notify admins about arrival failed", exc_info=True)
+    _tell_family(db, need, f"📍 {role} {user.name} 已經到 {elder} 身邊了。")
+    return {"ok": True}
 
 
 def finish(db: Session, need_id: str, user: User) -> dict:

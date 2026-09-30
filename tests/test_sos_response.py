@@ -222,3 +222,23 @@ def test_console_can_message_the_sos_responder(db, line_outbox):
     r = client.post(f"/api/resources/needs/{need.id}/message_assignee", json={"text": "救護車快到了，請在巷口等"})
     assert r.status_code == 200 and "近志工" in r.json()["message"]
     assert any("陳阿公 的求救" in t and "巷口等" in t for t in line_outbox.texts("U-near"))
+
+
+def test_responder_reports_arrival_once(db, line_outbox):
+    from app.models.dispatch_event import DispatchEvent
+    from app.services import sitrep
+    need, *_ = _world(db)
+    press("U-mid", f"action=sos_arrived&need_id={need.id}")
+    assert "只有受理這筆求救的人" in replies(line_outbox)[-1]
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    assert f"action=sos_arrived&need_id={need.id}" in json.dumps(card.contents.to_dict(), ensure_ascii=False)
+    press("U-mid", f"action=sos_arrived&need_id={need.id}")
+    assert "已回報到場" in replies(line_outbox)[-1]
+    assert any("中志工 已到 陳阿公 身邊" in t for t in sent_to(line_outbox, "U-admin"))
+    press("U-mid", f"action=sos_arrived&need_id={need.id}")
+    assert "已經回報過到場" in replies(line_outbox)[-1]
+    assert db.query(DispatchEvent).filter(DispatchEvent.action == "sos_on_scene").count() == 1
+    db.expire_all()
+    assert sitrep.build(db)["sos"]["median_arrive_min"] is not None
+    assert "處理人到場" in {t["what"] for t in sitrep.build(db)["timeline"]}
