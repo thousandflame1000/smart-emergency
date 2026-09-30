@@ -15,6 +15,14 @@ def board(db: Session = Depends(get_db), _principal: dict | None = Depends(requi
     return rollcall.board(db)
 
 
+def _taiwan_time(iso: str | None) -> str:
+    """表格給公所的人看：換成台灣時間。"""
+    from datetime import datetime, timedelta, timezone
+    if not iso:
+        return ""
+    return datetime.fromisoformat(iso).astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
+
+
 @router.get("/export.csv")
 def export_csv(db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """點名名單匯出成 CSV（Excel 開得起來的 UTF-8 BOM）：公所或應變中心要用試算表彙整時用。"""
@@ -27,11 +35,11 @@ def export_csv(db: Session = Depends(get_db), _principal: dict | None = Depends(
         board_ = rollcall.board(db, last) if last else {"people": []}
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["姓名", "狀態", "脆弱度", "電話", "地址", "回報方式", "代為確認", "回報時間（UTC）"])
+    writer.writerow(["姓名", "狀態", "脆弱度", "電話", "地址", "回報方式", "代為確認", "回報時間"])
     via = {"line": "LINE", "app": "App", "family": "家屬", "console": "後台", "volunteer": "志工上門"}
     for p in board_["people"]:
         writer.writerow([p["name"], p["status_label"], p["vulnerability"], p["phone"], p["address"],
-                         via.get(p["via"], p["via"] or ""), p["marked_by"] or "", p["responded_at"] or ""])
+                         via.get(p["via"], p["via"] or ""), p["marked_by"] or "", _taiwan_time(p["responded_at"])])
     return Response("\ufeff" + buffer.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": "attachment; filename=rollcall.csv"})
 

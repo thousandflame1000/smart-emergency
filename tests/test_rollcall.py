@@ -294,3 +294,5 @@ def test_roll_call_exports_as_csv_that_excel_opens(db, line_outbox):
     text = r.content.decode("utf-8")
     assert text.startswith("\ufeff姓名,狀態"), "Excel 要有 BOM 才不會亂碼"
     assert "回了,平安" in text and "0911000111" in text and "沒回,還沒回" in text
+    import re
+    assert re.search(r"LINE,,20\d\d-\d\d-\d\d \d\d:\d\d", text), "回報時間用台灣時間、到分鐘"
