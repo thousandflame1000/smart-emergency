@@ -71,6 +71,9 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
       stat('已送達', d.dispatch.delivered, 'green') + stat('可動員志工', d.volunteers) +
       stat('登記收容所', d.shelters.count) + stat('收容人數／容量', d.shelters.load + '／' + d.shelters.capacity) + '</div>' +
       '<p class="empty">另可查詢內政部公告的全國避難收容處所 5,928 處。</p></section>';
+    html += '<section><h2>時間軸（新的在前）</h2>' + (d.timeline.length ? '<div class="table-wrap"><table><thead><tr><th>時間</th><th>事件</th><th>當事人</th><th>操作者／地點</th></tr></thead><tbody>' +
+      d.timeline.map(function (t) { return '<tr><td>' + esc(t.time) + '</td><td>' + esc(t.what) + '</td><td>' + esc(t.who || '—') + '</td><td>' + esc(t.by || '—') + '</td></tr>'; }).join('') +
+      '</tbody></table></div>' : '<p class="empty">這段期間還沒有事件。</p>') + '</section>';
     document.getElementById('report').innerHTML = html;
   }
   function load() {

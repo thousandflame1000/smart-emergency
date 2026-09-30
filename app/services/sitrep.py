@@ -32,6 +32,51 @@ def _minutes(values: list[float]) -> float | None:
     return round(median(values), 1) if values else None
 
 
+EVENT_LABEL = {
+    "sos_acknowledged": "受理求救", "sos_resolved": "求救結案", "sos_escalated": "求救逾時沒人受理，再通知管理員",
+    "sos_reported_119": "轉報 119", "welfare_check_requested": "家屬請人探視",
+    "propose_dispatch": "建立派遣建議", "confirm_dispatch": "核准派遣", "manual_dispatch": "派遣",
+    "auto_match_facility": "自動媒合資源點", "decline_suggestion": "退回派遣建議", "task_accept": "志工接單",
+    "task_decline": "志工婉拒", "task_delivered": "物資送達", "task_report": "現場回報",
+    "cancel_need": "取消需求", "admin_message": "管理員傳訊息給志工",
+}
+TIMELINE_LIMIT = 60
+
+
+def actor_name(label: str | None) -> str:
+    """紀錄裡的操作者代號（manager、admin:王小明）轉成人話。"""
+    if not label:
+        return "系統"
+    if label == "manager" or label.startswith("未登入"):
+        return "後台"
+    for prefix, name in (("admin:", "管理員："), ("志工:", "志工："), ("管理員:", "管理員："), ("家屬:", "家屬：")):
+        if label.startswith(prefix):
+            return name + label[len(prefix):]
+    return label
+
+
+def timeline(db: Session, since: datetime) -> list[dict]:
+    """這段期間發生的事，新的在前：求救、受理、轉報 119、點名的求助與不舒服、派遣、模式切換。"""
+    from app.models.admin_audit import AdminAudit
+    from app.models.safety_check import SafetyCheck
+    from app.services.admin_audit import describe
+    since = since - timedelta(seconds=2)  # 資料庫預設時間有的只到秒；跟啟動同一秒的事件不能漏掉
+    rows: list[tuple[datetime, str, str, str]] = []
+    for n in db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.created_at >= since).all():
+        rows.append((_naive(n.created_at), "通報求救", n.requester.name if n.requester else "", n.address or ""))
+    for e in db.query(DispatchEvent).filter(DispatchEvent.created_at >= since).all():
+        if e.action in EVENT_LABEL:
+            who = e.need.requester.name if e.need is not None and e.need.requester is not None else ""
+            rows.append((_naive(e.created_at), EVENT_LABEL[e.action], who, actor_name(e.actor_label)))
+    for s in db.query(SafetyCheck).filter(SafetyCheck.responded_at >= since, SafetyCheck.status.in_(("help", "unwell"))).all():
+        rows.append((_naive(s.responded_at), "點名回報：" + ("需要協助" if s.status == "help" else "不舒服"),
+                     s.user.name if s.user else "", s.marked_by or "本人"))
+    for a in db.query(AdminAudit).filter(AdminAudit.created_at >= since, AdminAudit.path.like("/api/dashboard/mode%")).all():
+        rows.append((_naive(a.created_at), describe(a.method, a.path), "", actor_name(a.actor_label)))
+    rows.sort(key=lambda r: r[0], reverse=True)
+    return [{"time": _local(t), "what": what, "who": who, "by": by} for t, what, who, by in rows[:TIMELINE_LIMIT]]
+
+
 def period(db: Session) -> tuple[datetime, str]:
     """回報的起點（UTC、無時區）與說明。"""
     round_id = rollcall.current_round(db)
@@ -45,10 +90,11 @@ def period(db: Session) -> tuple[datetime, str]:
 def build(db: Session) -> dict:
     since, label = period(db)
     now = _naive(now_utc())
+    window = since - timedelta(seconds=2)  # 跟 timeline 一樣，資料庫時間只到秒時不漏掉同一秒的紀錄
 
     # 這段期間新增的，加上之前就在、到現在還沒結案的（持續中的案子不能因為換期就從報告消失）
     needs = db.query(CommunityNeed).filter(or_(
-        CommunityNeed.created_at >= since, CommunityNeed.status.in_(("open", "suggested", "matched")))).all()
+        CommunityNeed.created_at >= window, CommunityNeed.status.in_(("open", "suggested", "matched")))).all()
     sos = [n for n in needs if n.need_type == "sos"]
     supplies = [n for n in needs if n.need_type != "sos"]
     resolved_at = {str(e.need_id): _naive(e.created_at) for e in db.query(DispatchEvent).filter(
@@ -72,7 +118,7 @@ def build(db: Session) -> dict:
             row["done"] += 1
         elif n.status in ("open", "suggested", "matched"):
             row["open"] += 1
-    events = db.query(DispatchEvent).filter(DispatchEvent.created_at >= since).all()
+    events = db.query(DispatchEvent).filter(DispatchEvent.created_at >= window).all()
     count = lambda *actions: sum(e.action in actions for e in events)  # noqa: E731
 
     shelters = db.query(ResourcePoint).filter(ResourcePoint.is_active.is_(True), ResourcePoint.point_type == "shelter").all()
@@ -98,4 +144,5 @@ def build(db: Session) -> dict:
                      "accepted": count("task_accept"), "delivered": count("task_delivered")},
         "shelters": {"count": len(shelters), "capacity": capacity, "load": load},
         "volunteers": volunteers,
+        "timeline": timeline(db, since),
     }

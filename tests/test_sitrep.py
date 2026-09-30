@@ -57,3 +57,19 @@ def test_cases_still_open_from_before_the_period_stay_in_the_report(db):
     report = sitrep.build(db)
     assert report["sos"]["waiting"] == 1, "兩天前的求救還沒人處理，一定要在報告上"
     assert report["needs"]["total"] == 0, "早就結案的舊需求不算進這一期"
+
+
+def test_timeline_lists_what_happened_newest_first(db, line_outbox):
+    from app.main import app
+    from app.routers import linebot as lb
+    mk(db, "管理員", ["admin"], "U-boss")
+    elder = mk(db, "阿公", ["elderly"], "U-elder", lat=23.665, lng=121.418)
+    client = TestClient(app)
+    client.post("/api/dashboard/mode?mode=emergency")
+    lb._trigger_sos(elder, db)
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    press("U-boss", f"action=sos_take&need_id={need.id}")
+    client.post(f"/api/resources/needs/{need.id}/reported_119")
+    events = [t["what"] for t in sitrep.build(db)["timeline"]]
+    assert {"轉報 119", "受理求救", "點名回報：需要協助", "通報求救", "啟動緊急模式"} <= set(events)
+    assert sitrep.actor_name("admin:王小明") == "管理員：王小明" and sitrep.actor_name("manager") == "後台"
