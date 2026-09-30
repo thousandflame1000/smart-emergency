@@ -71,7 +71,7 @@ class RehearsalSubmission(BaseModel):
 
 def _development_only() -> None:
     if settings.APP_ENV != "development":
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
 
 
 @router.get("/rehearsal", include_in_schema=False)

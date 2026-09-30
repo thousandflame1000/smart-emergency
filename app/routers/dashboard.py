@@ -617,7 +617,7 @@ def delete_relation(relation_id: str, db: Session = Depends(get_db)):
     from fastapi import HTTPException
     rel = db.query(CareRelation).filter(CareRelation.id == relation_id).first()
     if not rel:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
     db.delete(rel)
     db.commit()
     return {"message": "關係刪除成功"}

@@ -38,7 +38,7 @@ def _unreserved(resource, db):
 @router.get("/{resource_id}/inventory-events")
 def list_inventory_events(resource_id: str, limit: int = 100, db: Session = Depends(get_db)):
     if not db.query(CommunityResource.id).filter(CommunityResource.id == resource_id).first():
-        raise HTTPException(status_code=404, detail="Resource not found")
+        raise HTTPException(status_code=404, detail="找不到這筆物資")
     rows = (
         db.query(InventoryEvent)
         .filter(InventoryEvent.resource_id == resource_id)
@@ -206,7 +206,7 @@ def delete_resource(resource_id: str, db: Session = Depends(get_db), _principal:
     r = db.query(CommunityResource).filter(CommunityResource.id == resource_id).first()
     if not r:
         from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
     _unreserved(r, db)
     changed = db.query(CommunityResource).filter(*row_predicates(r)).delete(synchronize_session=False)
     if changed != 1:
@@ -384,7 +384,7 @@ def delete_need(need_id: str, db: Session = Depends(get_db), _principal: dict | 
     """
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if not need:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
     if need.status not in ("open", "cancelled"):
         raise HTTPException(
             status_code=409,
@@ -678,7 +678,7 @@ def update_resource_point(
 ):
     pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
     if not pt:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
     if name             is not None: pt.name             = name
     if address          is not None: pt.address          = address
     if lat              is not None: pt.lat              = lat
@@ -702,7 +702,7 @@ def checkin_to_point(point_id: str, count: int = 1, db: Session = Depends(get_db
     """
     pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
     if not pt:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
     pt.current_load = max(0, pt.current_load + count)
     db.commit()
     return {"id": point_id, "current_load": pt.current_load, "capacity": pt.capacity}
@@ -714,7 +714,7 @@ def checkout_from_point(point_id: str, count: int = 1, db: Session = Depends(get
     """回報有人離開此資源點，current_load 隨即 -count（不會低於 0）"""
     pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
     if not pt:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
     pt.current_load = max(0, pt.current_load - count)
     db.commit()
     return {"id": point_id, "current_load": pt.current_load, "capacity": pt.capacity}
@@ -725,7 +725,7 @@ def delete_resource_point(point_id: str, db: Session = Depends(get_db),
                           _principal: dict | None = Depends(require_admin)):
     pt = db.query(ResourcePoint).filter(ResourcePoint.id == point_id).first()
     if not pt:
-        raise HTTPException(status_code=404, detail="Not found")
+        raise HTTPException(status_code=404, detail="找不到這筆資料")
     db.delete(pt)
     db.commit()
     return {"message": "刪除成功"}

@@ -22,7 +22,7 @@ def task_notifications(task_id: str, db: Session = Depends(get_db)):
 def task_events(task_id: str, db: Session = Depends(get_db)):
     task = db.get(Task, task_id)
     if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="找不到這筆任務")
     events = (
         db.query(TaskEvent)
         .filter(TaskEvent.task_id == task.id)

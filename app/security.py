@@ -19,7 +19,7 @@ def require_admin() -> dict | None:
     if principal is None and auth_mode() == "open":
         return None
     if not principal or "admin" not in (principal.get("roles") or []):
-        raise HTTPException(status_code=403, detail="Administrator authentication required")
+        raise HTTPException(status_code=403, detail="需要管理員登入")
     return principal
 
 
@@ -30,5 +30,5 @@ def require_staff() -> dict | None:
         return None
     roles = set((principal or {}).get("roles") or [])
     if not roles & {"admin", "field_staff"}:
-        raise HTTPException(status_code=403, detail="Staff or administrator authentication required")
+        raise HTTPException(status_code=403, detail="需要管理員或基層員工登入")
     return principal
