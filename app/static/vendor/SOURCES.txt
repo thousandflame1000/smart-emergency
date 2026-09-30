@@ -1,0 +1,8 @@
+第三方前端函式庫，放在自己的伺服器上：決賽現場或災區網路不穩時，後台不必依賴外部 CDN。
+更新版本時從下列網址重新下載覆蓋即可。
+
+lucide.min.js          lucide@0.468.0        https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js            ISC
+leaflet/               leaflet@1.9.4         https://unpkg.com/leaflet@1.9.4/dist/                              BSD-2-Clause
+markercluster/         leaflet.markercluster@1.5.3  https://unpkg.com/leaflet.markercluster@1.5.3/dist/         MIT
+cytoscape.min.js       cytoscape@3.30.4      https://cdn.jsdelivr.net/npm/cytoscape@3.30.4/dist/cytoscape.min.js MIT
+papaparse.min.js       papaparse@5.4.1       https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js      MIT
