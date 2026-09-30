@@ -23,6 +23,7 @@ GENERATE_MODEL     = "gemini-2.5-flash"
 SIMILARITY_THRESHOLD = 0.70
 TOP_K              = 3
 _client_instance = None
+GEMINI_TIMEOUT_MS = 20_000
 
 
 def _client():
@@ -30,7 +31,11 @@ def _client():
     if not settings.EXTERNAL_AI_ENABLED:
         raise RuntimeError("External AI processing is disabled")
     if _client_instance is None:
-        _client_instance = genai.Client(api_key=settings.GEMINI_API_KEY)
+        # SDK 預設不設逾時：Gemini 卡住時 LINE 那一則會一直等到回覆權杖過期，使用者什麼都收不到。
+        # 逾時後走下面的例外處理，改回知識庫原文摘錄。查一次是 embedding＋生成，最壞約 40 秒。
+        from google.genai import types
+        _client_instance = genai.Client(api_key=settings.GEMINI_API_KEY,
+                                        http_options=types.HttpOptions(timeout=GEMINI_TIMEOUT_MS))
     return _client_instance
 
 

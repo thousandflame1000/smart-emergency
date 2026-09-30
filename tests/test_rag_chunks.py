@@ -214,3 +214,19 @@ def test_ai_questions_are_rate_limited_per_person(db, line_outbox, monkeypatch):
     assert len(asked) == lb.QUESTION_LIMIT and "請稍等一分鐘" in replies(line_outbox)[-1]
     say("U-calm", "中風怎麼辦？")
     assert len(asked) == lb.QUESTION_LIMIT + 1
+
+
+def test_gemini_client_has_a_request_timeout(monkeypatch):
+    """SDK 預設不設逾時；Gemini 卡住時 LINE 那一則會一直等到回覆權杖過期。"""
+    from app.config import settings
+    seen = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            seen.update(kwargs)
+
+    monkeypatch.setattr(settings, "EXTERNAL_AI_ENABLED", True)
+    monkeypatch.setattr(rag_svc, "_client_instance", None)
+    monkeypatch.setattr(rag_svc.genai, "Client", FakeClient)
+    rag_svc._client()
+    assert seen["http_options"].timeout == rag_svc.GEMINI_TIMEOUT_MS <= 30_000
