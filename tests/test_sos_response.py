@@ -290,3 +290,16 @@ def test_my_tasks_brings_back_the_sos_card(db, line_outbox):
     press("U-mid", f"action=sos_done&need_id={need.id}")
     say("U-mid", "我的任務")
     assert "沒有進行中的任務" in replies(line_outbox)[-1]
+
+
+def test_admin_sos_list_puts_untaken_first(db, line_outbox):
+    from tests.test_line_hardening import say
+    from app.routers import linebot as lb
+    need, elder, near, mid, far, admin = _world(db)
+    other = mk(db, "晚到的阿嬤", ["elderly"], "U-later", lat=23.66, lng=121.41)
+    press("U-mid", f"action=sos_go&need_id={need.id}")  # 第一筆已受理
+    lb._trigger_sos(other, db)                           # 第二筆沒人受理
+    say("U-admin", "求救單")
+    card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1].contents.to_dict()
+    titles = [json.dumps(b, ensure_ascii=False) for b in card["contents"]]
+    assert "晚到的阿嬤" in titles[0] and "陳阿公" in titles[1]

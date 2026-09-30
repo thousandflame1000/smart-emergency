@@ -424,7 +424,8 @@ def application_bubble(app_id: str, name: str, phone: str | None, area: str | No
 
 def admin_sos_list(event, db: Session, user: User) -> None:
     rows = (db.query(CommunityNeed).filter(CommunityNeed.status == "open", CommunityNeed.need_type == "sos")
-            .order_by(CommunityNeed.created_at).limit(10).all())
+            .order_by(CommunityNeed.created_at).all())
+    rows = sorted(rows, key=lambda n: n.responder_id is not None)[:10]  # 沒人受理的排前面，其餘照通報先後
     if not rows:
         _say(event, "目前沒有待處理的求救單 👍")
         return
