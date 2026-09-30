@@ -80,3 +80,12 @@ def test_every_write_endpoint_has_a_readable_action_name():
             if should_record(method, path) and describe(method, path) == path:
                 missing.append(f"{method} {route.path}")
     assert not missing, missing
+
+
+def test_new_emergency_actions_read_as_chinese_in_the_audit_log():
+    from app.services.admin_audit import describe
+    assert describe("POST", "/api/resources/needs/n1/assign_sos?user_id=u1") == "指派求救處理人"
+    assert describe("POST", "/api/resources/needs/n1/assign_sos?user_id=u1&replace=true") == "改派求救處理人"
+    assert describe("POST", "/api/resources/needs/n1/reported_119") == "轉報 119"
+    assert describe("POST", "/api/rollcall/remind") == "點名：再問還沒回的人"
+    assert describe("POST", "/api/rollcall/u1?status=ok") == "點名：代為標記"
