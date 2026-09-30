@@ -30,10 +30,22 @@ def pytest_sessionfinish(session, exitstatus):
             pass
 
 
+_schema_ready = False
+
+
 @pytest.fixture(autouse=True)
 def clean_db():
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    # 第一個測試建表，之後每個測試只清資料：每次 drop/create 全部表要 ~1 秒，六百多個測試就多好幾分鐘。
+    # 動到 schema 的測試（遷移相關）都用自己的暫存資料庫，不會改到這一個。
+    global _schema_ready
+    if not _schema_ready:
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+        _schema_ready = True
+    else:
+        with engine.begin() as connection:
+            for table in reversed(Base.metadata.sorted_tables):
+                connection.execute(table.delete())
     from app.services.zones import ensure_general_zone
     session = SessionLocal()
     try:
