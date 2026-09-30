@@ -44,18 +44,13 @@ def get_sitrep(db: Session = Depends(get_db), _principal: dict | None = Depends(
 @router.get("/sitrep/timeline.csv")
 def sitrep_timeline_csv(db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """時間軸全部匯出成 CSV（報告頁只列最近 60 筆系統事件）：災後檢討、向上級補報時用。依時間先後排。"""
-    import csv
-    import io
-    from fastapi.responses import Response
+    from app.csv_export import csv_response
     from app.services import sitrep
     since, _label = sitrep.period(db)
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(["時間", "類別", "事件", "當事人", "操作者／地點"])
-    for row in reversed(sitrep.timeline(db, since, limit=None, fmt=sitrep.full_time)):
-        writer.writerow([row["time"], "值班紀事" if row["note"] else "系統紀錄", row["what"], row["who"], row["by"]])
-    return Response("\ufeff" + buffer.getvalue(), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": "attachment; filename=timeline.csv"})
+    return csv_response(["時間", "類別", "事件", "當事人", "操作者／地點"],
+                        ([row["time"], "值班紀事" if row["note"] else "系統紀錄", row["what"], row["who"], row["by"]]
+                         for row in reversed(sitrep.timeline(db, since, limit=None, fmt=sitrep.full_time))),
+                        "timeline.csv")
 
 
 class DutyNote(BaseModel):

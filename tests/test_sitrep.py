@@ -169,3 +169,26 @@ def test_full_timeline_exports_as_csv_oldest_first(db):
     assert [r[0] for r in body] == sorted(r[0] for r in body) and len(body[0][0]) == len("2026-10-01 20:12:33")
     assert [r[1:] for r in body if r[1] == "值班紀事"] == [["值班紀事", "鄉公所來電", "", "後台"]]
     assert sum(r[1] == "系統紀錄" for r in body) == sitrep.TIMELINE_LIMIT + 5
+
+
+def test_csv_exports_do_not_let_typed_text_run_as_excel_formulas(db):
+    """姓名、地址、紀事是使用者自己打的：開頭是 = + - @ 的儲存格 Excel 會當公式執行（CSV injection）。"""
+    import csv
+    import io
+    from app.main import app
+    from app.models.config import SystemConfig
+    from app.csv_export import safe_cell
+    assert [safe_cell(v) for v in ("=1+1", "+886912", "-台9線", "@SUM(A1)", "王小明", None, 3.5)] == \
+        ["'=1+1", "'+886912", "'-台9線", "'@SUM(A1)", "王小明", "", "3.5"]
+    mk(db, '=HYPERLINK("http://evil.example","點我")', ["elderly"], None, address="+1 巷")
+    db.add(SystemConfig(key="mode", value="emergency")); db.commit()
+    rollcall.start(db)
+    c = TestClient(app)
+    c.post("/api/dashboard/sitrep/log", json={"text": "=cmd|' /C calc'!A0"})
+
+    def rows(path):
+        return list(csv.reader(io.StringIO(c.get(path).text.lstrip("\ufeff"))))[1:]
+    person = rows("/api/rollcall/export.csv")[0]
+    assert person[0].startswith("'=HYPERLINK") and person[4] == "'+1 巷"
+    note = [r for r in rows("/api/dashboard/sitrep/timeline.csv") if r[1] == "值班紀事"][0]
+    assert note[2] == "'=cmd|' /C calc'!A0"
