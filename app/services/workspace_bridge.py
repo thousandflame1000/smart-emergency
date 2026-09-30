@@ -40,6 +40,9 @@ def _location(row, fallback=None):
     return {"lat": None, "lng": None}
 
 
+CARE_RELATION_ZH = {"family": "家屬", "volunteer": "志工", "neighbor": "鄰居", "other": "聯絡人"}
+
+
 def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
     """The live projection a workspace merges into its graph.
 
@@ -160,7 +163,8 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
                                          "version": row_version(point), "base_values": editable_values(point),
                                          "observed_at": stamp, "operational_status": "unknown"})
     for c in care:
-        relation("care:" + str(c.id), person(c.contact_id), person(c.elderly_id), "照護 / " + c.relation, "care")
+        relation("care:" + str(c.id), person(c.contact_id), person(c.elderly_id),
+                 "照護 / " + CARE_RELATION_ZH.get(c.relation, c.relation), "care")
 
     graph = GraphDocument(nodes=list(nodes.values()), edges=edges)
     counts = {"elders": sum(u.is_active and u.has_role("elderly") for u in users.values()),

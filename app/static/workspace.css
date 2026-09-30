@@ -82,6 +82,11 @@ aside { padding: 18px 14px; overflow: auto; min-width: 0; }
 .map-dot.selected { outline: 3px solid #f8b52c; } .map-dot.unavailable { opacity: .4; }
 .map-dot svg { width: 62%; height: 62%; color: white; stroke-width: 2.75; }
 .map-dot.sos-dot { border-width: 3px; color: #fff; font-size: 10px; letter-spacing: .02em; }
+.map-dot.rc-pending { outline: 3px dashed #546e7a; outline-offset: 2px; }
+.map-dot.rc-help { outline: 3px solid #c62828; outline-offset: 2px; }
+.map-dot.rc-unwell { outline: 3px solid #ef8f00; outline-offset: 2px; }
+.map-dot.rc-ok { outline: 3px solid #2e7d32; outline-offset: 2px; }
+.map-dot.selected { outline: 3px solid #f8b52c; }
 .map-dot.sos-dot.waiting { animation: sos-ping 1.4s ease-out infinite; }
 .map-dot.sos-dot.taken { box-shadow: 0 0 0 4px #f8b52c, 0 1px 5px #0006; }
 @keyframes sos-ping { 0% { box-shadow: 0 0 0 0 rgba(198,40,40,.6), 0 1px 5px #0006; } 100% { box-shadow: 0 0 0 16px rgba(198,40,40,0), 0 1px 5px #0006; } }

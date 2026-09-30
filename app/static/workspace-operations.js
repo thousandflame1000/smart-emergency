@@ -126,6 +126,8 @@ async function runAutoDispatch(){
 function renderOperationalSelection(item,isNode){
   const p=item.properties,el=$('selection');
   const fields=[];
+  const rc=isNode?rollcallOf(item):null;
+  if(rc)fields.push(['災時點名',rc.status_label+(rc.marked_by?'（'+rc.marked_by+'確認）':'')]);
   if(p.db==='user')fields.push(['角色',(p.roles||[]).map(r=>ROLE_NAMES[r]||r).join('、')],['最近打卡',p.checkin?(CHECKIN_STATUS[p.checkin.status]||p.checkin.status)+' · '+p.checkin.date:'尚無紀錄'],['打卡回覆',p.checkin?.note||'未提供'],['未解除警報',p.active_alerts],['脆弱度',p.vulnerability??'未評估']);
   if(p.db==='resource')fields.push(['擁有者',p.owner],['登記數量',p.quantity_text||'未知'],['可用狀態',item.available?'可用':'保留中或不可用']);
   if(p.db==='point')fields.push(['收容容量',p.capacity??'未知'],['目前人數',p.current_load??'未知'],['庫存','未提供'],
@@ -150,6 +152,8 @@ function renderOperationalSelection(item,isNode){
   const actions=$('operational-actions');
   function button(label,icon,fn,primary=false){const b=document.createElement('button');b.type='button';b.className=primary?'primary':'';b.innerHTML=`<i data-lucide="${icon}"></i>${label}`;b.onclick=fn;actions.append(b);return b;}
   if(p.db==='resource'||p.db==='point')button('編輯正式資料','pencil',()=>editInventory(item));
+  if(rc&&rc.status!=='ok'){if(rc.phone){const a=document.createElement('a');a.className='icon-button';a.href='tel:'+rc.phone.replace(/[^0-9+]/g,'');a.innerHTML='<i data-lucide="phone"></i>';a.append('撥打 '+rc.phone);actions.append(a);}
+    button('標記平安','shield-check',e=>markRollcall(rc.id,e.currentTarget),true);icons();}
   if(p.db==='need'){
     if(p.status==='suggested'){
       loadOperationCandidates(item);
@@ -210,11 +214,17 @@ async function assignSos(node,userId,label){
   }catch(e){message(e.message,true);}
 }
 // ── 災時點名：緊急模式時誰平安、誰需要協助、誰還沒回；還沒回的依脆弱度排序，給志工照順序上門 ──
-let rollcallData=null;
+let rollcallData=null,rollcallById=new Map();
+// 地圖與面板用：這位長者這一輪點名的狀態（沒有點名時是 null）
+function rollcallOf(node){return rollcallData?.active&&node?.properties?.db==='user'?rollcallById.get(node.id.replace('db:person:',''))||null:null;}
 const ROLLCALL_CLASS={help:'urgent',pending:'pending',unwell:'warn',ok:'ok'};
 async function loadRollcall(){
+  const before=JSON.stringify([...rollcallById].map(([k,v])=>[k,v.status]));
   try{const r=await fetch('/api/rollcall');rollcallData=r.ok?await r.json():null;}catch(e){rollcallData=null;}
+  rollcallById=new Map((rollcallData?.people||[]).map(p=>[p.id,p]));
   renderRollcall();
+  // 點名狀態有變才重畫地圖，免得每 30 秒整張地圖閃一次
+  if(before!==JSON.stringify([...rollcallById].map(([k,v])=>[k,v.status]))){renderCanvas();if(state.selected?.type==='node')renderSelection();}
 }
 function renderRollcall(){
   const box=$('operation-rollcall'),badge=$('rollcall-count'),d=rollcallData;
