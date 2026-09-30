@@ -249,3 +249,31 @@ def test_admin_can_switch_emergency_mode_from_line_with_confirmation(db, line_ou
     assert _get_mode(db) == "normal"
     logged = [a.path for a in db.query(AdminAudit).filter(AdminAudit.method == "LINE").all()]
     assert logged == ["啟動緊急模式", "解除緊急模式"], "取消與重複按的不記"
+
+
+def test_field_staff_report_shelter_headcount_from_line(db, line_outbox):
+    import json
+    from app.models.admin_audit import AdminAudit
+    from app.models.resource_point import ResourcePoint
+    mk(db, "收容所志工", ["field_staff"], "U-staff", lat=23.665, lng=121.418)
+    mk(db, "居民", ["elderly"], "U-res2")
+    school = ResourcePoint(name="光復國小", point_type="shelter", lat=23.671, lng=121.425, capacity=6, current_load=0)
+    db.add(school); db.commit()
+    say("U-res2", "收容")
+    assert "查詢物資" in replies(line_outbox)[-1]
+    say("U-staff", "收容")
+    card = json.dumps([m for kind, _to, m in line_outbox.sent if kind == "reply"][-1].contents.to_dict(), ensure_ascii=False)
+    assert "光復國小" in card and f"action=shelter&id={school.id}&d=p5" in card
+    press("U-staff", f"action=shelter&id={school.id}&d=p5")
+    press("U-staff", f"action=shelter&id={school.id}&d=p1")
+    assert replies(line_outbox)[-1] == "光復國小 現在 6 人"
+    last = json.dumps([m for kind, _to, m in line_outbox.sent if kind == "reply"][-1].contents.to_dict(), ensure_ascii=False)
+    assert "已滿" in last
+    press("U-staff", f"action=shelter&id={school.id}&d=m5")
+    press("U-staff", f"action=shelter&id={school.id}&d=m5")
+    db.refresh(school)
+    assert school.current_load == 0, "不會變成負數"
+    press("U-res2", f"action=shelter&id={school.id}&d=p5")
+    db.refresh(school)
+    assert school.current_load == 0, "居民不能改"
+    assert db.query(AdminAudit).filter(AdminAudit.path.like("收容人數 光復國小%")).count() == 4

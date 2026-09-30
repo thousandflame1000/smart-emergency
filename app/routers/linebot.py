@@ -1138,7 +1138,7 @@ HELP_BASE = (
 )
 
 
-NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所")
+NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所", "收容所", "附近收容所")
 ROLLCALL_NEARBY_WORDS = ("附近點名", "附近長者", "幫忙點名")
 AED_WORDS = ("AED", "aed", "找AED", "找 AED", "附近AED", "最近的AED", "電擊器", "去顫器", "心臟電擊器")
 APP_WORDS = ("打開 App", "打開App", "開啟 App", "App", "app")

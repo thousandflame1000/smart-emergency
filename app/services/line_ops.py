@@ -31,6 +31,7 @@ logger = logging.getLogger(__name__)
 
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
 AVAILABILITY_COMMANDS = {"暫停支援", "恢復支援"}
+SHELTER_COMMANDS = {"收容", "收容人數"}
 ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救", "點名",
                   "緊急模式", "啟動緊急模式", "解除緊急模式"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
@@ -38,7 +39,8 @@ RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "
                      "我的資料", "個人資料", "修改資料", "刪除我的帳號", "刪除帳號"}
 ROLE_CENTER_COMMANDS = {"我的中心", "居民中心", "志工中心", "決策中心"}
 MAINTENANCE_COMMANDS = {"更新選單"}
-COMMAND_WORDS = (VOLUNTEER_COMMANDS | AVAILABILITY_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
+COMMAND_WORDS = (VOLUNTEER_COMMANDS | AVAILABILITY_COMMANDS | SHELTER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS
+                 | RESIDENT_COMMANDS
                  | ROLE_CENTER_COMMANDS | MAINTENANCE_COMMANDS)
 BIND_RE = re.compile(r"^綁定\s*(\d{6})$")
 JOIN_RE = re.compile(r"^加入\s*(\d{8})$")
@@ -192,6 +194,56 @@ def _volunteer_center_cards(paused: bool = False) -> list[dict]:
              {"label": "操作說明", "text": "幫助"}],
         ),
     ]
+
+
+SHELTER_STEPS = {"p1": 1, "p5": 5, "m1": -1, "m5": -5}
+
+
+def _shelter_bubble(point) -> dict:
+    cap = point.capacity or 0
+    full = cap and point.current_load >= cap
+    lines = [f"目前 {point.current_load} 人" + (f"／容量 {cap} 人" if cap else ""),
+             *(["⚠️ 已滿，請引導到其他收容所"] if full else []), point.address or ""]
+    return bubble(f"🏠 {point.name}", "#c0392b" if full else "#148f77", [line for line in lines if line],
+                  [{"label": "+1 人", "data": f"action=shelter&id={point.id}&d=p1", "color": "#13795b"},
+                   {"label": "+5 人", "data": f"action=shelter&id={point.id}&d=p5"},
+                   {"label": "−1 人", "data": f"action=shelter&id={point.id}&d=m1"},
+                   {"label": "−5 人", "data": f"action=shelter&id={point.id}&d=m5"}], large=True)
+
+
+def shelter_counts(event, db: Session, user: User) -> None:
+    """收容所現場人員用手機回報人數：管理員與基層員工可以按 +1／+5／−1。"""
+    from app.models.resource_point import ResourcePoint
+    from app.services.geo import haversine_km
+    if not (is_admin(user) or is_field_staff(user)):
+        _say(event, "想找附近的收容所，請按選單的「查詢物資」。收容人數由管理員或基層員工回報。")
+        return
+    points = db.query(ResourcePoint).filter(ResourcePoint.is_active.is_(True), ResourcePoint.point_type == "shelter").all()
+    if not points:
+        _say(event, "還沒有登記收容所。請先在後台「調度」新增收容所。")
+        return
+    if user.lat is not None and user.lng is not None:
+        points.sort(key=lambda p: haversine_km(user.lat, user.lng, p.lat, p.lng) if p.lat is not None else 9999)
+    _flex(event, "收容所人數", carousel([_shelter_bubble(p) for p in points[:10]]))
+
+
+def shelter_adjust(event, db: Session, user: User, point_id: str, step: str) -> bool:
+    from app.models.resource_point import ResourcePoint
+    if not (is_admin(user) or is_field_staff(user)) or step not in SHELTER_STEPS:
+        _say(event, "收容人數由管理員或基層員工回報。")
+        return False
+    point = db.query(ResourcePoint).filter(ResourcePoint.id == point_id, ResourcePoint.point_type == "shelter").first()
+    if point is None:
+        _say(event, "找不到這個收容所。")
+        return False
+    before = point.current_load or 0
+    point.current_load = max(0, before + SHELTER_STEPS[step])
+    db.commit()
+    from app.services import admin_audit
+    admin_audit.record({"id": str(user.id), "name": user.name}, "LINE",
+                       f"收容人數 {point.name} {before}→{point.current_load}", 200)
+    _flex(event, f"{point.name} 現在 {point.current_load} 人", _shelter_bubble(point))
+    return True
 
 
 def set_availability(event, db: Session, user: User, paused: bool) -> None:
@@ -918,6 +970,8 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
         my_tasks(event, db, user)
     elif text in AVAILABILITY_COMMANDS:
         set_availability(event, db, user, paused=text == "暫停支援")
+    elif text in SHELTER_COMMANDS:
+        shelter_counts(event, db, user)
     elif text in ("後台", "開啟後台"):
         # 基層員工只能拿登入連結進網頁更新物資／資源點，其他管理指令仍是管理員專用。
         if is_admin(user) or is_field_staff(user):
@@ -973,6 +1027,9 @@ def handle_postback(event, db: Session, user: User, action: str, data: dict) -> 
             if action == "admin_mode":
                 label = "啟動緊急模式" if data.get("m") == "emergency" else "解除緊急模式"
             admin_audit.record({"id": str(user.id), "name": user.name}, "LINE", label, 200 if ok else 409)
+        return True
+    if action == "shelter":
+        shelter_adjust(event, db, user, data.get("id", ""), data.get("d", ""))
         return True
     if action == "cancel_needs":
         cancel_my_needs(event, db, user)
