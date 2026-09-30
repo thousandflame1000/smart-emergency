@@ -47,8 +47,14 @@ def actor_name(label: str | None) -> str:
     """紀錄裡的操作者代號（manager、admin:王小明）轉成人話。"""
     if not label:
         return "系統"
-    if label == "manager" or label.startswith("未登入"):
+    if label == "manager" or label.startswith(("未登入", "workspace:")):
         return "後台"
+    if label.startswith("system:"):
+        return "系統"
+    if label.startswith("volunteer:"):
+        return "志工"
+    if label == "rehearsal":
+        return "演練"
     for prefix, name in (("admin:", "管理員："), ("志工:", "志工："), ("管理員:", "管理員："), ("家屬:", "家屬：")):
         if label.startswith(prefix):
             return name + label[len(prefix):]
@@ -56,12 +62,15 @@ def actor_name(label: str | None) -> str:
 
 
 def timeline(db: Session, since: datetime) -> list[dict]:
-    """這段期間發生的事，新的在前：求救、受理、轉報 119、點名的求助與不舒服、派遣、模式切換。"""
+    """這段期間發生的事，新的在前：求救、受理、轉報 119、點名的求助與不舒服、派遣、模式切換、值班紀事。"""
     from app.models.admin_audit import AdminAudit
+    from app.models.duty_log import DutyLog
     from app.models.safety_check import SafetyCheck
     from app.services.admin_audit import describe
     since = since - timedelta(seconds=2)  # 資料庫預設時間有的只到秒；跟啟動同一秒的事件不能漏掉
     rows: list[tuple[datetime, str, str, str]] = []
+    notes = [(_naive(n.created_at), n.text, "", n.author)
+             for n in db.query(DutyLog).filter(DutyLog.created_at >= since).all()]
     for n in db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.created_at >= since).all():
         rows.append((_naive(n.created_at), "通報求救", n.requester.name if n.requester else "", n.address or ""))
     for e in db.query(DispatchEvent).filter(DispatchEvent.created_at >= since).all():
@@ -76,8 +85,11 @@ def timeline(db: Session, since: datetime) -> list[dict]:
         AdminAudit.path.in_(("啟動緊急模式", "解除緊急模式")))).all()  # 管理員在 LINE 上確認
     for a in mode_switches:
         rows.append((_naive(a.created_at), describe(a.method, a.path), "", actor_name(a.actor_label)))
-    rows.sort(key=lambda r: r[0], reverse=True)
-    return [{"time": _local(t), "what": what, "who": who, "by": by} for t, what, who, by in rows[:TIMELINE_LIMIT]]
+    # 人記的紀事不跟系統事件搶名額：事件再多，值班寫下的決策也不能被擠出報告
+    rows = sorted(rows, key=lambda r: r[0], reverse=True)[:TIMELINE_LIMIT]
+    merged = sorted([(r, False) for r in rows] + [(n, True) for n in notes], key=lambda x: x[0][0], reverse=True)
+    return [{"time": _local(t), "what": what, "who": who, "by": by, "note": note}
+            for (t, what, who, by), note in merged]
 
 
 def period(db: Session) -> tuple[datetime, str]:

@@ -73,6 +73,8 @@ def test_timeline_lists_what_happened_newest_first(db, line_outbox):
     events = [t["what"] for t in sitrep.build(db)["timeline"]]
     assert {"轉報 119", "受理求救", "點名回報：需要協助", "通報求救", "啟動緊急模式"} <= set(events)
     assert sitrep.actor_name("admin:王小明") == "管理員：王小明" and sitrep.actor_name("manager") == "後台"
+    assert [sitrep.actor_name(x) for x in ("workspace:分配試算", "system:auto_dispatch", "volunteer:claim", "rehearsal", None)] == \
+        ["後台", "系統", "志工", "演練", "系統"]
 
 
 def test_report_lists_each_shelter_fullest_first(db):
@@ -96,3 +98,30 @@ def test_report_keeps_the_roll_call_after_the_emergency_ends(db, line_outbox):
     assert report["mode"] == "日常模式" and report["rollcall"]["ended"] is True
     assert report["rollcall"]["counts"]["ok"] == 1 and [p["name"] for p in report["rollcall"]["follow_up"]] == ["沒回"]
     assert rollcall.board(db) == {"active": False}, "看板本身在日常模式仍然關閉"
+
+
+def test_duty_log_goes_into_the_timeline_and_is_not_crowded_out(db):
+    from app.models.admin_audit import AdminAudit
+    from app.models.dispatch_event import DispatchEvent
+    from app.models.duty_log import DutyLog
+    from app.main import app
+    c = TestClient(app)
+    r = c.post("/api/dashboard/sitrep/log", json={"text": "  鄉公所來電：\n台9線 12K 坍方，改走縣道  "})
+    assert r.status_code == 200, r.text
+    entry = db.query(DutyLog).one()
+    assert entry.text == "鄉公所來電： 台9線 12K 坍方，改走縣道" and entry.author == "後台"
+    assert db.query(AdminAudit).filter(AdminAudit.path == "/api/dashboard/sitrep/log").count() == 1
+
+    # 系統事件再多，值班寫下的紀事也要留在報告裡
+    now = now_utc().replace(tzinfo=None)
+    db.add_all([DispatchEvent(action="task_report", actor_label="manager", created_at=now + timedelta(seconds=i))
+                for i in range(sitrep.TIMELINE_LIMIT + 5)])
+    db.commit()
+    rows = sitrep.build(db)["timeline"]
+    notes = [t for t in rows if t["note"]]
+    assert [t["what"] for t in notes] == ["鄉公所來電： 台9線 12K 坍方，改走縣道"] and notes[0]["by"] == "後台"
+    assert len(rows) == sitrep.TIMELINE_LIMIT + 1
+
+    assert c.post("/api/dashboard/sitrep/log", json={"text": "   "}).status_code == 422
+    assert c.post("/api/dashboard/sitrep/log", json={"text": "字" * 301}).status_code == 422
+    assert db.query(DutyLog).count() == 1

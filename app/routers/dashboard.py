@@ -1,6 +1,7 @@
 import logging
 from datetime import UTC
 from fastapi import APIRouter, Depends, Query, Request
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -38,6 +39,22 @@ def get_sitrep(db: Session = Depends(get_db), _principal: dict | None = Depends(
     """災情摘要：往上回報公所或應變中心用；有點名名單與電話，限管理員。"""
     from app.services.sitrep import build
     return build(db)
+
+
+class DutyNote(BaseModel):
+    text: str = Field(min_length=1, max_length=300)
+
+
+@router.post("/sitrep/log")
+def add_duty_log(body: DutyNote, db: Session = Depends(get_db), principal: dict | None = Depends(require_admin)):
+    """值班紀事：來電、決策、現場狀況，記進災情摘要的時間軸。"""
+    from app.models.duty_log import DutyLog
+    text = " ".join(body.text.split())
+    if not text:
+        raise ApiError(422, "請輸入紀事內容。")
+    db.add(DutyLog(text=text, author=f"管理員：{principal['name']}" if principal else "後台"))
+    db.commit()
+    return {"message": "已記錄"}
 
 
 @router.get("/summary")

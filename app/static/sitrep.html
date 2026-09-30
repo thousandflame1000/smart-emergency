@@ -26,8 +26,15 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
 .tag { padding:1px 6px; border-radius:4px; font-size:12px; white-space:nowrap; }
 .tag.red { background:#ffe8e4; color:var(--red); } .tag.amber { background:#fff3d6; color:var(--amber); } .tag.green { background:#e2f2e9; color:var(--green); } .tag.grey { background:#eceff1; color:#37474f; }
 .muted { color:var(--muted); } .empty { color:var(--muted); font-size:14px; margin:6px 0 0; }
-.table-wrap { overflow-x:auto; }
-@media print { body { background:#fff; } .actions { display:none; } section { break-inside:avoid; border-color:#bbb; } main { padding:0; } }
+.table-wrap { overflow-x:auto; } .table-wrap table { min-width:560px; }
+.note-form { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+.note-form label { font-weight:600; font-size:14px; }
+.note-form input { flex:1 1 240px; min-width:0; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
+.note-form button { padding:8px 14px; border:1px solid #13795b; border-radius:6px; background:#13795b; color:#fff; font:inherit; cursor:pointer; }
+.note-form button:disabled { opacity:.6; cursor:default; }
+.note-status { width:100%; margin:0; font-size:13px; color:var(--muted); } .note-status.error { color:var(--red); }
+tr.note td { background:#f3f8ff; } tr.note td:nth-child(2) { font-weight:600; }
+@media print { body { background:#fff; } .actions, .note-section { display:none; } section { break-inside:avoid; border-color:#bbb; } main { padding:0; } }
 </style>
 </head>
 <body>
@@ -36,6 +43,14 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
     <div><h1>災情摘要</h1><div class="meta" id="meta">讀取中…</div></div>
     <div class="actions"><button type="button" id="reload">重新整理</button> <button type="button" class="primary" onclick="print()">列印／存成 PDF</button></div>
   </header>
+  <section class="note-section">
+    <form id="note-form" class="note-form">
+      <label for="note">值班紀事</label>
+      <input id="note" name="note" maxlength="300" autocomplete="off" required>
+      <button type="submit">記錄</button>
+      <p class="note-status" id="note-status" role="status"></p>
+    </form>
+  </section>
   <div id="report"></div>
 </main>
 <script>
@@ -76,7 +91,7 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
         '</tbody></table></div>' : '') +
       '<p class="empty">另可查詢內政部公告的全國避難收容處所 5,928 處。</p></section>';
     html += '<section><h2>時間軸（新的在前）</h2>' + (d.timeline.length ? '<div class="table-wrap"><table><thead><tr><th>時間</th><th>事件</th><th>當事人</th><th>操作者／地點</th></tr></thead><tbody>' +
-      d.timeline.map(function (t) { return '<tr><td>' + esc(t.time) + '</td><td>' + esc(t.what) + '</td><td>' + esc(t.who || '—') + '</td><td>' + esc(t.by || '—') + '</td></tr>'; }).join('') +
+      d.timeline.map(function (t) { return '<tr' + (t.note ? ' class="note"' : '') + '><td>' + esc(t.time) + '</td><td>' + (t.note ? '<span class="tag grey">紀事</span> ' : '') + esc(t.what) + '</td><td>' + esc(t.who || '—') + '</td><td>' + esc(t.by || '—') + '</td></tr>'; }).join('') +
       '</tbody></table></div>' : '<p class="empty">這段期間還沒有事件。</p>') + '</section>';
     document.getElementById('report').innerHTML = html;
   }
@@ -85,6 +100,19 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
       .then(render).catch(function () { document.getElementById('meta').textContent = '讀取失敗，請按重新整理'; });
   }
   document.getElementById('reload').onclick = load;
+  document.getElementById('note-form').onsubmit = function (e) {
+    e.preventDefault();
+    var input = document.getElementById('note'), status = document.getElementById('note-status'), button = this.querySelector('button');
+    var text = input.value.trim();
+    status.className = 'note-status'; status.textContent = '';
+    if (!text) { input.value = ''; input.focus(); return; }
+    button.disabled = true;
+    fetch('/api/dashboard/sitrep/log', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text }) })
+      .then(function (r) { return r.json().catch(function () { return {}; }).then(function (body) { if (!r.ok) throw new Error(typeof body.error === 'string' ? body.error : '記錄失敗'); return body; }); })
+      .then(function () { input.value = ''; status.textContent = '已記錄'; load(); })
+      .catch(function (err) { status.className = 'note-status error'; status.textContent = err instanceof TypeError ? '連不上伺服器，紀事還沒送出' : (err.message || '記錄失敗'); })
+      .then(function () { button.disabled = false; input.focus(); });
+  };
   // 在外框裡切回這一頁時重新產出，報告永遠是當下的狀況
   window.addEventListener('message', function (e) { if (e.origin === location.origin && e.data && e.data.workspaceVisible) load(); });
   load();

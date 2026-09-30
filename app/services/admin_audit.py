@@ -41,6 +41,7 @@ _ACTIONS = [
     ("POST", rf"/api/resources/needs/{_ID}/assign_sos", "指派求救處理人"),
     ("POST", rf"/api/resources/needs/{_ID}/reported_119", "轉報 119"),
     ("POST", r"/api/rollcall/remind", "點名：再問還沒回的人"),
+    ("POST", r"/api/dashboard/sitrep/log", "記錄值班紀事"),
     ("POST", rf"/api/rollcall/{_ID}", "點名：代為標記"),
     ("POST", r"/api/resources/needs", "新增需求"),
     ("PUT", rf"/api/resources/needs/{_ID}", "修改需求"),

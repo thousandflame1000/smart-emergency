@@ -18,3 +18,4 @@ from app.models.privacy import PrivacyConsent
 from app.models.workspace import TopologyWorkspace
 from app.models.admin_audit import AdminAudit
 from app.models.safety_check import SafetyCheck
+from app.models.duty_log import DutyLog

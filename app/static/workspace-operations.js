@@ -206,7 +206,7 @@ async function loadNeedContact(node){
   }catch(e){/* 讀不到就不顯示 */}
 }
 // 紀錄裡的操作者是系統內部代號（manager、admin:王小明），畫面上說人話
-function actorName(label){if(!label||label==='manager')return label?'後台':'系統';return label.replace(/^admin:/,'管理員：').replace(/^(志工|管理員|家屬):/,'$1：');}
+function actorName(label){if(!label||/^system:/.test(label))return '系統';if(label==='manager'||/^workspace:/.test(label))return '後台';if(/^volunteer:/.test(label))return '志工';if(label==='rehearsal')return '演練';return label.replace(/^admin:/,'管理員：').replace(/^(志工|管理員|家屬):/,'$1：');}
 // 求救還沒人受理：列出可以指派的人（志工由近到遠，再來是管理員），指派後對方會收到 LINE 任務卡
 async function loadSosCandidates(node,replace=false){
   const actions=$('operational-actions');
