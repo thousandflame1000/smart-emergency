@@ -443,3 +443,16 @@ def test_family_sees_a_closed_sos_as_handled(db, line_outbox):
     resolve_sos(str(need.id), db)
     say("U-son", "長輩狀況")
     assert "求救已處理完成" in _last_card(line_outbox)
+
+
+def test_no_morning_check_in_card_while_a_roll_call_is_running(db, monkeypatch):
+    """緊急模式跨過早上 8 點：長者已經有點名卡，不再多推一張「今天好嗎」（搞混又用掉推播額度）。"""
+    mk(db, "阿嬤", ["elderly"], "U-morning")
+    sent = []
+    monkeypatch.setattr(checkin_svc, "send_checkin_message", lambda uid, cid: sent.append(uid))
+    _emergency(db)
+    checkin_svc.send_daily_checkins()
+    assert sent == [] and db.query(DailyCheckin).count() == 0
+    db.query(SystemConfig).filter(SystemConfig.key == "mode").update({"value": "normal"}); db.commit()
+    checkin_svc.send_daily_checkins()
+    assert db.query(DailyCheckin).count() == 1, "解除緊急模式後照常打卡"

@@ -16,6 +16,12 @@ def send_daily_checkins() -> None:
     """Scheduler 每天早上呼叫：發打卡訊息給所有活躍長者"""
     db: Session = SessionLocal()
     try:
+        from app.services import rollcall
+        if rollcall.current_round(db):
+            # 緊急模式時長者已經收到點名卡（沒回的 30／90 分鐘會自動再問）；再推一張「今天好嗎」
+            # 只會讓人搞不清楚要按哪張，也白白用掉推播額度。
+            logger.info("daily check-in skipped: roll call in progress")
+            return
         today = today_tw()
         elderly_list = (
             db.query(User)
