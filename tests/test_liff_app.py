@@ -156,3 +156,16 @@ def test_only_the_responder_can_act_on_the_sos_in_the_app(db, client, line_outbo
     need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
     _open(client, "U-app-other")
     assert client.post(f"/app/api/sos/{need.id}/done", json={}).status_code == 409
+
+
+def test_elder_can_cancel_their_sos_in_the_app(db, client, line_outbox):
+    from app.models.need import CommunityNeed
+    db.add(User(name="阿嬤", roles=["elderly"], line_uid="U-app-oops", lat=23.66, lng=121.42)); db.commit()
+    _open(client, "U-app-oops")
+    assert client.get("/app/api/me").json()["my_sos"] is False
+    assert client.post("/app/api/sos", json={}).status_code == 200
+    assert client.get("/app/api/me").json()["my_sos"] is True
+    assert "已取消求救" in client.post("/app/api/sos/cancel", json={}).json()["message"]
+    assert db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one().status == "cancelled"
+    assert client.get("/app/api/me").json()["my_sos"] is False
+    assert "沒有進行中的求救" in client.post("/app/api/sos/cancel", json={}).json()["message"]

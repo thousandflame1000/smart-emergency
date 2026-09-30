@@ -133,6 +133,8 @@ def me(request: Request, db: Session = Depends(get_db)):
             CommunityNeed.requester_id == user.id,
             CommunityNeed.status.in_(("open", "suggested", "matched"))).count(),
         "sos_tasks": _sos_tasks(db, user),
+        "my_sos": bool(db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id, CommunityNeed.need_type == "sos",
+                                                       CommunityNeed.status == "open").first()),
     }
 
 
@@ -155,6 +157,22 @@ def _sos_tasks(db: Session, user) -> list[dict]:
                     "navigate": f"https://www.google.com/maps/dir/?api=1&destination={where[0]},{where[1]}" if where else None,
                     "arrived": str(n.id) in arrived})
     return out
+
+
+@router.post("/app/api/sos/cancel")
+def sos_cancel(request: Request, db: Session = Depends(get_db)):
+    """長者誤按或已經沒事：取消自己的求救（App 上先跳確認視窗）。"""
+    from app.models.need import CommunityNeed
+    from app.services import sos
+    user = _user(db, request)
+    need = db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id, CommunityNeed.need_type == "sos",
+                                          CommunityNeed.status == "open").first()
+    if need is None:
+        return {"message": "您目前沒有進行中的求救。"}
+    result = sos.cancel_by_requester(db, str(need.id), user)
+    if result.get("error"):
+        raise ApiError(409, result["error"])
+    return {"message": "已取消求救，已告訴家人與管理員。如果又需要幫忙，隨時按「需要幫忙」。"}
 
 
 @router.post("/app/api/sos/{need_id}/{step}")

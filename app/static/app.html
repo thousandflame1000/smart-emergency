@@ -16,7 +16,7 @@ header{position:sticky;top:0;z-index:5;background:var(--green);color:#fff;paddin
 header h1{font-size:20px;font-weight:800}header p{font-size:14px;opacity:.9;margin-top:2px}
 .banner{background:var(--red);color:#fff;font-weight:700;padding:10px 18px;font-size:15px}
 main{padding:14px 14px 8px}
-.view[hidden]{display:none}
+[hidden]{display:none!important}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:12px}
 .card h2{font-size:17px;margin-bottom:8px}
 .muted{color:var(--muted);font-size:15px}
@@ -67,7 +67,8 @@ dialog h2{font-size:21px;margin-bottom:8px}
 
   <section class="view" id="view-home" hidden>
     <div id="sos-tasks"></div>
-    <div class="card"><div class="status" id="today"><span class="dot"></span><div><strong id="today-title">今天還沒回報</strong><div class="muted" id="today-sub">每天早上按一下「我很好」就可以</div></div></div></div>
+    <div class="card"><div class="status" id="today"><span class="dot"></span><div><strong id="today-title">今天還沒回報</strong><div class="muted" id="today-sub">每天早上按一下「我很好」就可以</div></div></div>
+      <div class="row-actions" id="my-sos" hidden><button class="btn full" id="btn-sos-cancel" type="button">我沒事了（取消求救）</button></div></div>
     <div class="grid">
       <button class="big b-green" id="btn-ok"><span class="ic">✅</span><span><b id="ok-title">我很好</b><small id="ok-sub">回報今天平安</small></span></button>
       <button class="big b-amber" id="btn-unwell"><span class="ic">🤒</span><span>不舒服<small>家人會收到通知</small></span></button>
@@ -114,6 +115,14 @@ dialog h2{font-size:21px;margin-bottom:8px}
 </nav>
 
 <div class="toast" id="toast" role="status" hidden></div>
+<dialog id="cancel-dialog">
+  <h2>確定取消求救？</h2>
+  <p class="muted">取消後，家人、管理員與志工會收到「已取消」。<br>還需要幫忙請按「不要取消」。</p>
+  <div class="row-actions">
+    <button class="btn" id="cancel-keep">不要取消</button>
+    <button class="btn primary" id="cancel-confirm">確定取消（我沒事）</button>
+  </div>
+</dialog>
 <dialog id="sos-dialog">
   <h2>確定要求救嗎？</h2>
   <p class="muted">會立刻通知你的家人與社區管理員。<br>有生命危險請直接撥 <strong>119</strong>。</p>
@@ -195,6 +204,7 @@ dialog h2{font-size:21px;margin-bottom:8px}
     $('emergency').hidden = !me.emergency;
     $('volunteer-card').hidden = !me.is_volunteer;
     renderSosTasks(me.sos_tasks || []);
+    $('my-sos').hidden = !me.my_sos;
   }
   // 我受理的求救：放在首頁最上面，撥號、導航、已到場、處理完成都在這裡
   function renderSosTasks(tasks) {
@@ -229,6 +239,13 @@ dialog h2{font-size:21px;margin-bottom:8px}
     api('/app/api/checkin', { status: 'unwell' }).then(function (d) { toast(d.message); return refreshMe(); }).catch(function (e) { toast(e.message); });
   });
   $('btn-sos').addEventListener('click', function () { $('sos-dialog').showModal(); });
+  // 誤按或已經沒事：先確認一次，真的有危險時不能因為手滑就取消
+  $('btn-sos-cancel').addEventListener('click', function () { $('cancel-dialog').showModal(); });
+  $('cancel-keep').addEventListener('click', function () { $('cancel-dialog').close(); });
+  $('cancel-confirm').addEventListener('click', function () {
+    $('cancel-dialog').close();
+    api('/app/api/sos/cancel', {}).then(function (d) { toast(d.message); return refreshMe(); }).catch(function (e) { toast(e.message); });
+  });
   $('sos-cancel').addEventListener('click', function () { $('sos-dialog').close(); });
   $('sos-confirm').addEventListener('click', function () {
     $('sos-dialog').close();
