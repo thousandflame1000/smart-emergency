@@ -15,7 +15,7 @@ from linebot.v3.webhooks import (
 )
 
 from app.config import settings
-from app.database import get_db
+from app.database import SessionLocal
 from app.services import checkin as checkin_svc
 from app.services import conversation, line_ops
 from app.services.line_notify import reply_text, reply_text_with_commands
@@ -1355,10 +1355,25 @@ def handle_text(event: MessageEvent):
     _run_command(event, event.message.text.strip())
 
 
+def _with_session(handle, *args) -> None:
+    """每個 LINE 事件用自己的 session，處理完一定關掉。
+
+    之前用 next(get_db())：產生器馬上被回收，session 當場就被關掉，接著查詢又自動開一條新連線，
+    這條再也沒人關，要等垃圾回收才還給連線池；訊息一多連線池（15 條）就用完，所有請求卡 30 秒。"""
+    db = SessionLocal()
+    try:
+        handle(*args, db)
+    finally:
+        db.close()
+
+
 def _run_command(event, text: str) -> None:
     """打字與靜默按鈕（postback cmd=）共用同一條處理流程。"""
+    _with_session(_run_command_in, event, text)
+
+
+def _run_command_in(event, text: str, db) -> None:
     line_uid = event.source.user_id
-    db       = next(get_db())
 
     user = db.query(User).filter(User.line_uid == line_uid).first()
     first_contact = user is None
@@ -1402,8 +1417,11 @@ def _run_command(event, text: str) -> None:
 # ──────────────────────────────────────────────
 @handler.add(FollowEvent)
 def handle_follow(event: FollowEvent):
+    _with_session(_handle_follow, event)
+
+
+def _handle_follow(event: FollowEvent, db):
     line_uid = event.source.user_id
-    db = next(get_db())
     user = db.query(User).filter(User.line_uid == line_uid).first()
     if not user:
         user = _register_user(db, line_uid)
@@ -1449,8 +1467,11 @@ def save_location(db, user, lat: float, lng: float, address: str | None = None) 
 @handler.add(MessageEvent, message=LocationMessageContent)
 def handle_location(event: MessageEvent):
     """LINE 原生「分享位置」：點一下就拿到真實 GPS，不需要長者記得地址。"""
+    _with_session(_handle_location, event)
+
+
+def _handle_location(event: MessageEvent, db):
     line_uid = event.source.user_id
-    db = next(get_db())
     user = db.query(User).filter(User.line_uid == line_uid).first()
     first_contact = user is None
     if first_contact:
@@ -1552,11 +1573,14 @@ def _handle_task_button(event, db, user, action, need_id) -> None:
 
 @handler.add(PostbackEvent)
 def handle_postback(event: PostbackEvent):
+    _with_session(_handle_postback, event)
+
+
+def _handle_postback(event: PostbackEvent, db):
     raw      = event.postback.data or ""
     data     = dict(p.split("=", 1) for p in raw.split("&") if "=" in p)
     action   = data.get("action")
     line_uid = event.source.user_id
-    db       = next(get_db())
 
     if action == "task_v2":
         try:

@@ -162,7 +162,7 @@ def take(db: Session, need_id: str, user: User, *, via: str) -> dict:
                            "有生命危險請直接撥 119。")
     elder = need.requester.name if need.requester else "居民"
     try:
-        notify_admins(db, f"🙋 {role} {user.name} 已受理 {elder} 的求救（{via}）。")
+        notify_admins(db, f"🙋 {role} {user.name} 已受理 {elder} 的求救（{via}）。", skip=user)
     except Exception:
         logger.warning("notify admins about SOS acknowledgement failed", exc_info=True)
     _tell_family(db, need, f"🙋 {role} {user.name} 已經要去看 {elder}，有消息會再通知您。")
@@ -375,7 +375,7 @@ def arrive(db: Session, need_id: str, user: User) -> dict:
     db.commit()
     elder = need.requester.name if need.requester else "居民"
     try:
-        notify_admins(db, f"📍 {role} {user.name} 已到 {elder} 身邊。")
+        notify_admins(db, f"📍 {role} {user.name} 已到 {elder} 身邊。", skip=user)
     except Exception:
         logger.warning("notify admins about arrival failed", exc_info=True)
     _tell_family(db, need, f"📍 {role} {user.name} 已經到 {elder} 身邊了。")
@@ -402,7 +402,7 @@ def cancel_by_requester(db: Session, need_id: str, user: User) -> dict:
     elder = need.requester.name if need.requester else user.name
     text = f"ℹ️ {elder} 取消了求救（誤按或已經沒事）。"
     try:
-        notify_admins(db, text)
+        notify_admins(db, text, skip=user)
     except Exception:
         logger.warning("notify admins about SOS cancel failed", exc_info=True)
     if need.responder is not None and need.responder.line_uid and need.responder_id != need.requester_id:

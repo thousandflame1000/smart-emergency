@@ -405,3 +405,18 @@ def test_arrival_reminder_restarts_after_reassignment(db, line_outbox):
     need.acknowledged_at = now_utc().replace(tzinfo=None) - timedelta(minutes=sos.ARRIVAL_MINUTES + 1)
     db.commit()
     assert sos.escalate_unacknowledged(db) == 1, "新的處理人逾時也要提醒"
+
+
+def test_the_admin_who_acts_is_not_pushed_news_of_their_own_action(db, line_outbox):
+    """管理員按「我過去」「已到場」時已經收到回覆；不再推一則說他自己做了什麼（推播按則計費），別的管理員照樣收到。"""
+    mk(db, "阿公", ["elderly"], "U-gp", lat=23.66, lng=121.42)
+    mk(db, "值班管理員", ["admin", "volunteer"], "U-duty", lat=23.661, lng=121.421)
+    mk(db, "另一位管理員", ["admin"], "U-other")
+    press("U-gp", "action=confirm_sos")
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    before = len(sent_to(line_outbox, "U-duty"))
+    press("U-duty", f"action=sos_go&need_id={need.id}")
+    press("U-duty", f"action=sos_arrived&need_id={need.id}")
+    assert len(sent_to(line_outbox, "U-duty")) == before
+    other = sent_to(line_outbox, "U-other")
+    assert any("值班管理員 已受理 阿公" in t for t in other) and any("值班管理員 已到 阿公 身邊" in t for t in other)

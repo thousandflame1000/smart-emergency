@@ -26,9 +26,12 @@ def send_alerts_for_checkin(checkin_id, alert_type: str, db: Session) -> int:
     return _escalate(db, checkin, alert_type, now_utc())
 
 
-def notify_admins(db: Session, text: str, buttons: list[dict] | None = None) -> int:
+def notify_admins(db: Session, text: str, buttons: list[dict] | None = None, *, skip=None) -> int:
     """推播給所有綁了 LINE 的管理員。一鍵求助之前只通知照護聯絡人，長者沒有
-    聯絡人時完全沒有任何人知道，管理員只能靠自己盯著後台。"""
+    聯絡人時完全沒有任何人知道，管理員只能靠自己盯著後台。
+
+    skip：做這件事的管理員本人（他按按鈕時已經收到回覆），不再推一則說他自己做了什麼；
+    推播按則計費，免費方案一個月只有 200 則。"""
     import uuid
     from app.models.user import User
     from app.services.outbox import send_flex_reliably, send_text_reliably
@@ -39,6 +42,8 @@ def notify_admins(db: Session, text: str, buttons: list[dict] | None = None) -> 
         card = bubble("📣 需要您處理", "#c0392b", text.split("\n"), buttons)
     batch = uuid.uuid4().hex
     for admin in db.query(User).filter(User.role_filter("admin"), User.line_uid != None).all():  # noqa: E711
+        if skip is not None and str(admin.id) == str(skip.id):
+            continue
         # 先存進寄件佇列再推，LINE 暫時失敗會重試；求救與升級通知不能推一次失敗就沒了
         try:
             if card:
