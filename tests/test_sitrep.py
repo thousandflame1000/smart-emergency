@@ -82,3 +82,17 @@ def test_report_lists_each_shelter_fullest_first(db):
     db.commit()
     rows = sitrep.build(db)["shelters"]["rows"]
     assert [r["name"] for r in rows] == ["快滿", "空的"]
+
+
+def test_report_keeps_the_roll_call_after_the_emergency_ends(db, line_outbox):
+    from app.models.config import SystemConfig
+    mk(db, "回了", ["elderly"], "U-yes-r")
+    mk(db, "沒回", ["elderly"], "U-no-r")
+    db.add(SystemConfig(key="mode", value="emergency")); db.commit()
+    rollcall.start(db)
+    press("U-yes-r", "action=safe")
+    db.query(SystemConfig).filter(SystemConfig.key == "mode").update({"value": "normal"}); db.commit()
+    report = sitrep.build(db)
+    assert report["mode"] == "日常模式" and report["rollcall"]["ended"] is True
+    assert report["rollcall"]["counts"]["ok"] == 1 and [p["name"] for p in report["rollcall"]["follow_up"]] == ["沒回"]
+    assert rollcall.board(db) == {"active": False}, "看板本身在日常模式仍然關閉"

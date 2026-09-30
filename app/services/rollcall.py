@@ -73,10 +73,19 @@ def elders(db: Session) -> list[User]:
     return db.query(User).filter(User.role_filter("elderly"), User.is_active.is_(True)).all()
 
 
-def board(db: Session) -> dict:
-    """點名看板：人數與名單。還沒回的依脆弱度由高到低，需要協助的排在最前面。"""
+def last_round(db: Session) -> str | None:
+    """最近一輪點名（不管緊急模式解除了沒有）；災後檢討用。"""
+    row = db.query(SystemConfig).filter(SystemConfig.key == ROUND_KEY).first()
+    return row.value if row else None
+
+
+def board(db: Session, round_id: str | None = None) -> dict:
+    """點名看板：人數與名單。還沒回的依脆弱度由高到低，需要協助的排在最前面。
+
+    不指定 round_id 時看進行中的一輪（日常模式回 active=False）；指定時看那一輪（災後報告用）。"""
     from app.services.dispatch import vulnerability_scorer
-    round_id = current_round(db)
+    ongoing = round_id is None
+    round_id = round_id or current_round(db)
     if not round_id:
         return {"active": False}
     replies = {str(r.user_id): r for r in db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id).all()}
@@ -96,7 +105,8 @@ def board(db: Session) -> dict:
         })
     people.sort(key=lambda p: (rank[p["status"]], -p["vulnerability"], p["name"]))
     counts = {key: sum(p["status"] == key for p in people) for key in STATUS_LABEL}
-    return {"active": True, "started_at": round_id, "total": len(people), "counts": counts, "people": people}
+    return {"active": ongoing or round_id == current_round(db), "started_at": round_id, "total": len(people),
+            "counts": counts, "people": people}
 
 
 NEARBY_KM = 2.0

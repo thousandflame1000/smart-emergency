@@ -48,7 +48,7 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
     var html = '';
     if (d.rollcall) {
       var c = d.rollcall.counts;
-      html += '<section><h2>災時點名（長者 ' + d.rollcall.total + ' 位）</h2><div class="grid">' +
+      html += '<section><h2>災時點名（長者 ' + d.rollcall.total + ' 位）' + (d.rollcall.ended ? '・已結束' : '') + '</h2><div class="grid">' +
         stat('平安', c.ok, 'green') + stat('不舒服', c.unwell, 'amber') + stat('需要協助', c.help, 'red') + stat('還沒回', c.pending) + '</div>' +
         (d.rollcall.follow_up.length ? '<div class="table-wrap"><table><thead><tr><th>需追蹤</th><th>狀態</th><th>脆弱度</th><th>電話</th><th>地址</th></tr></thead><tbody>' +
           d.rollcall.follow_up.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td><span class="tag ' + (TONE[p.status_label] || '') + '">' + esc(p.status_label) + '</span></td><td>' + esc(p.vulnerability) + '</td><td>' + esc(p.phone || '—') + '</td><td>' + esc(p.address || '—') + '</td></tr>'; }).join('') +

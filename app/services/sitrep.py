@@ -132,12 +132,18 @@ def build(db: Session) -> dict:
     load = sum(p.current_load or 0 for p in shelters)
 
     board = rollcall.board(db)
+    if not board.get("active"):
+        # 緊急模式解除後，報告仍保留今天那一輪點名的結果（災後檢討最常在這時候看）
+        last = rollcall.last_round(db)
+        if last and _naive(datetime.fromisoformat(last)) >= since:
+            board = {**rollcall.board(db, last), "ended": True}
     volunteers = db.query(User).filter(User.role_filter("volunteer"), User.is_active.is_(True)).count()
     return {
         "generated_at": _local(now), "period": label, "mode": "緊急模式" if board.get("active") else "日常模式",
-        "rollcall": {"counts": board["counts"], "total": board["total"],
+        "rollcall": {"counts": board["counts"], "total": board["total"], "ended": bool(board.get("ended")),
                      "follow_up": [{k: p[k] for k in ("name", "status_label", "address", "phone", "vulnerability")}
-                                   for p in board["people"] if p["status"] in ("help", "pending")]} if board.get("active") else None,
+                                   for p in board["people"] if p["status"] in ("help", "pending")]}
+        if board.get("active") or board.get("ended") else None,
         "sos": {"total": len(sos), "waiting": sum(r["state"] == "未受理" for r in map(sos_row, sos)),
                 "in_progress": sum(1 for n in sos if n.status == "open" and n.responder_id),
                 "closed": sum(1 for n in sos if n.status == "fulfilled"),
