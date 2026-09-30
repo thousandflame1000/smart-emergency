@@ -30,7 +30,7 @@ from app.services.rich_menu import liff_url
 logger = logging.getLogger(__name__)
 
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
-ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救"}
+ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救", "點名"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
 RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "我的紀錄",
                      "我的資料", "個人資料", "修改資料", "刪除我的帳號", "刪除帳號"}
@@ -249,8 +249,37 @@ def _system_problems(db: Session) -> list[str]:
         return []
 
 
+def _rollcall_line(db: Session) -> str | None:
+    from app.services import rollcall
+    board = rollcall.board(db)
+    if not board.get("active"):
+        return None
+    c = board["counts"]
+    return f"📋 災時點名：平安 {c['ok']}｜需要協助 {c['help']}｜不舒服 {c['unwell']}｜還沒回 {c['pending']}"
+
+
+def admin_rollcall(event, db: Session, user: User) -> None:
+    """管理員在 LINE 看點名：需要協助與還沒回的人，依脆弱度排序，附電話方便直接打。"""
+    from app.services import rollcall
+    board = rollcall.board(db)
+    if not board.get("active"):
+        _say(event, "目前是日常模式，沒有點名。啟動緊急模式時會自動問每位長者是否平安。")
+        return
+    todo = [p for p in board["people"] if p["status"] in ("help", "pending")]
+    lines = [_rollcall_line(db), ""]
+    for p in todo[:12]:
+        lines.append(f"{'🆘' if p['status'] == 'help' else '⏳'} {p['name']}（脆弱度 {p['vulnerability']}）"
+                     f"{' ☎ ' + p['phone'] if p['phone'] else ''}{' · ' + p['address'] if p['address'] else ''}")
+    if len(todo) > 12:
+        lines.append(f"…另有 {len(todo) - 12} 位，完整名單在後台工作區「點名」。")
+    if not todo:
+        lines.append("全部長者都已回報 👍")
+    _say(event, "\n".join(lines))
+
+
 def admin_overview(event, db: Session, user: User) -> None:
     stats = _admin_snapshot(db)
+    roll = _rollcall_line(db)
     _say(event, "\n".join([
         f"📊 目前狀況　{stats['mode']}",
         f"🆘 待處理求救單：{stats['sos']}",
@@ -258,22 +287,26 @@ def admin_overview(event, db: Session, user: User) -> None:
         f"🚚 進行中任務：{stats['matched']}（志工已確認 {stats['accepted']}）",
         f"🙋 待審志工申請：{stats['apps']}",
         f"👴 今日長者：求助 {stats['helping']}、不舒服 {stats['unwell']}、未回覆 {stats['unanswered']}",
+        *([roll] if roll else []),
         *([f"⚠️ 系統需處理：{'、'.join(stats['problems'])}（後台「系統狀態」有修正方式）"] if stats["problems"] else []),
         "",
-        "指令：待派、待審、求救單、後台",
+        "指令：待派、待審、求救單、點名、後台",
     ]))
 
 
 def decision_center(event, db: Session, user: User) -> None:
     stats = _admin_snapshot(db)
+    roll = _rollcall_line(db)
     _flex(event, "決策中心", carousel([
         bubble(
             "決策中心", "#2471a3",
             [stats["mode"],
              f"緊急求救 {stats['sos']}｜待派 {stats['open']}｜建議{_status_label('suggested')} {stats['suggested']}",
              f"進行中 {stats['matched']}｜志工待審 {stats['apps']}",
+             *([roll] if roll else []),
              *([f"⚠️ 系統需處理：{'、'.join(stats['problems'])}"] if stats["problems"] else [])],
             [{"label": "緊急求救", "text": "求救單"},
+             *([{"label": "災時點名", "text": "點名"}] if roll else []),
              {"label": "待派需求", "text": "待派"},
              {"label": "完整總覽", "text": "總覽"}],
         ),
@@ -831,6 +864,8 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
             admin_pending_apps(event, db, user)
         elif text in ("求救單", "緊急求救"):
             admin_sos_list(event, db, user)
+        elif text == "點名":
+            admin_rollcall(event, db, user)
         else:
             admin_login_link(event, user)
     elif text == "邀請家人":

@@ -30,9 +30,10 @@ function taskInStage(node,stage){
   return node.properties.status===stage;
 }
 function setCatalog(tab){
-  catalogTab=tab;$('objects').hidden=tab!=='objects';$('operation-tasks').hidden=tab!=='tasks';$('operation-resources').hidden=tab!=='resources';
-  for(const key of ['objects','tasks','resources'])$('catalog-'+key).classList.toggle('active',tab===key);
-  $('catalog-title').textContent={objects:'物件',tasks:'需求與任務',resources:'物資回報'}[tab];renderObjects();
+  catalogTab=tab;$('objects').hidden=tab!=='objects';$('operation-tasks').hidden=tab!=='tasks';$('operation-resources').hidden=tab!=='resources';$('operation-rollcall').hidden=tab!=='rollcall';
+  for(const key of ['objects','tasks','resources','rollcall'])$('catalog-'+key).classList.toggle('active',tab===key);
+  $('catalog-title').textContent={objects:'物件',tasks:'需求與任務',resources:'物資回報',rollcall:'災時點名'}[tab];renderObjects();
+  if(tab==='rollcall')loadRollcall();
 }
 function renderOperations(){
   const tasks=operationalNodes();
@@ -102,6 +103,7 @@ async function refreshOperations(options={}){
     const edges=state.graph.edges.filter(e=>!e.id.startsWith('db:edge:')&&ids.has(e.source)&&ids.has(e.target)).concat(snapshot.graph.edges,bound.edges);
     mutate(()=>{state.graph={nodes,edges};if(state.selected&&!ids.has(state.selected.id))state.selected=null;});
     if(preserveLiveClean){state.undo=[];state.dirty=false;state.baseline=null;$('save-state').textContent='即時資料 · 自動更新';updateHistory();}
+    loadRollcall();
     // 單獨開啟工作區時自己響鈴；嵌在外框裡由外框響，避免同一筆響兩次
     if(!document.documentElement.classList.contains('embed')&&window.sosAlarm)
       sosAlarm.check(openSos().map(n=>({id:n.id,name:n.label.split(' · ')[0],address:n.properties.address,reported_at:n.properties.reported_at})),item=>showSos(item.id));
@@ -205,6 +207,46 @@ async function assignSos(node,userId,label){
     const data=await r.json();if(!r.ok||data.error)throw Error(data.error||data.detail||'指派失敗');
     operationEvents.clear();await refreshOperations({silent:true});focusOperational(node.id);message(data.message);
   }catch(e){message(e.message,true);}
+}
+// ── 災時點名：緊急模式時誰平安、誰需要協助、誰還沒回；還沒回的依脆弱度排序，給志工照順序上門 ──
+let rollcallData=null;
+const ROLLCALL_CLASS={help:'urgent',pending:'pending',unwell:'warn',ok:'ok'};
+async function loadRollcall(){
+  try{const r=await fetch('/api/rollcall');rollcallData=r.ok?await r.json():null;}catch(e){rollcallData=null;}
+  renderRollcall();
+}
+function renderRollcall(){
+  const box=$('operation-rollcall'),badge=$('rollcall-count'),d=rollcallData;
+  const waiting=d?.active?d.counts.pending+d.counts.help:0;
+  badge.hidden=!waiting;badge.textContent=waiting||'';
+  if(catalogTab!=='rollcall')return;
+  if(!d){box.innerHTML='<p class="muted">讀不到點名資料</p>';$('object-count').textContent='';return;}
+  if(!d.active){box.innerHTML='<p class="muted">日常模式沒有點名。啟動緊急模式時，系統會自動用 LINE 問每位長者是否平安，回報結果會出現在這裡。</p>';$('object-count').textContent='';return;}
+  $('object-count').textContent=d.total+' 位長者';
+  const c=d.counts;
+  box.innerHTML=`<div class="rollcall-summary"><span class="rc ok">平安 <b>${c.ok}</b></span><span class="rc warn">不舒服 <b>${c.unwell}</b></span><span class="rc urgent">需要協助 <b>${c.help}</b></span><span class="rc pending">還沒回 <b>${c.pending}</b></span></div>
+    <div class="rollcall-actions"><button id="rollcall-remind" type="button"${c.pending?'':' disabled'}><i data-lucide="bell-ring"></i>再問一次還沒回的人</button></div>
+    <div class="rollcall-list">${d.people.map(p=>{
+      const meta=[p.status==='pending'?'脆弱度 '+p.vulnerability:(p.marked_by?p.marked_by+'確認':'本人回報')+(p.responded_at?' · '+sinceText(p.responded_at):''),p.address||'地址未填',p.line?'':'未綁 LINE'].filter(Boolean).join(' · ');
+      const call=p.phone?`<a class="icon-button" href="tel:${escapeHtml(p.phone.replace(/[^0-9+]/g,''))}" title="撥打 ${escapeHtml(p.phone)}" aria-label="撥打 ${escapeHtml(p.name)}"><i data-lucide="phone"></i></a>`:'';
+      const mark=p.status==='ok'?'':`<button type="button" data-rc-ok="${escapeHtml(p.id)}" title="電話或上門確認後標記平安">標記平安</button>`;
+      return `<div class="rollcall-row"><button type="button" class="rc-person" data-rc-focus="${escapeHtml(p.id)}"><span class="rc-chip ${ROLLCALL_CLASS[p.status]}">${escapeHtml(p.status_label)}</span><span class="task-text">${escapeHtml(p.name)}<small>${escapeHtml(meta)}</small></span></button>${call}${mark}</div>`;}).join('')}</div>`;
+  box.querySelectorAll('[data-rc-focus]').forEach(b=>b.onclick=()=>focusOperational('db:person:'+b.dataset.rcFocus));
+  box.querySelectorAll('[data-rc-ok]').forEach(b=>b.onclick=()=>markRollcall(b.dataset.rcOk,b));
+  const remind=$('rollcall-remind');if(remind)remind.onclick=remindRollcall;
+  icons();
+}
+async function markRollcall(id,button){
+  const person=rollcallData?.people.find(p=>p.id===id);
+  if(!await askConfirm('標記平安？',`已經電話或上門確認 <strong>${escapeHtml(person?.name||'')}</strong> 平安了嗎？`,'標記平安'))return;
+  button.disabled=true;
+  try{const r=await fetch('/api/rollcall/'+encodeURIComponent(id)+'?status=ok',{method:'POST'});const data=await r.json();if(!r.ok)throw Error(data.detail||'標記失敗');message(data.message);await loadRollcall();}
+  catch(e){message(e.message,true);button.disabled=false;}
+}
+async function remindRollcall(){
+  if(!await askConfirm('再問一次？','用 LINE 再問一次還沒回報的長者是否平安。','傳送'))return;
+  try{const r=await fetch('/api/rollcall/remind',{method:'POST'});const data=await r.json();if(!r.ok)throw Error(data.detail||'傳送失敗');message(data.message);}
+  catch(e){message(e.message,true);}
 }
 const operationCandidates=new Map();
 async function loadOperationCandidates(node,proposeButton=null){
@@ -358,7 +400,7 @@ function initOperations(){
     $('more-tools').title=expanded?'收合進階工具':'開啟進階工具';
     map.invalidateSize();if(cy)cy.resize();
   };
-  $('catalog-objects').onclick=()=>{setCatalog('objects');renderOperations();};$('catalog-tasks').onclick=()=>{setCatalog('tasks');renderOperations();};$('catalog-resources').onclick=()=>{setCatalog('resources');renderOperations();};
+  $('catalog-objects').onclick=()=>{setCatalog('objects');renderOperations();};$('catalog-tasks').onclick=()=>{setCatalog('tasks');renderOperations();};$('catalog-resources').onclick=()=>{setCatalog('resources');renderOperations();};$('catalog-rollcall').onclick=()=>{setCatalog('rollcall');renderOperations();};
   run('review-inventory',reviewInventory);run('apply-inventory',applyInventory);
   $('close-inventory').onclick=()=>$('inventory-dialog').close();$('close-inventory-review').onclick=()=>$('inventory-review-dialog').close();
   $('discard-inventory').onclick=()=>{inventoryDrafts.clear();updateInventoryCount();$('inventory-review-dialog').close();};

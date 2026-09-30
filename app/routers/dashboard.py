@@ -215,12 +215,16 @@ def broadcast_mode_change(mode: str) -> int:
     from app.database import SessionLocal
     from app.services.line_notify import send_text, send_text_with_commands
     log = logging.getLogger(__name__)
+    from app.services import rollcall
     db = SessionLocal()
     try:
-        uids = [u.line_uid for u in db.query(User).filter(User.line_uid.isnot(None), User.is_active.is_(True)).all()]
+        users = db.query(User).filter(User.line_uid.isnot(None), User.is_active.is_(True)).all()
+        # 收到點名卡（我平安／需要幫忙／查詢物資）的長者，就不再重複收一般廣播
+        asked = set(rollcall.ask(db)) if mode == "emergency" else set()
+        uids = [u.line_uid for u in users if u.line_uid not in asked]
     finally:
         db.close()
-    sent = 0
+    sent = len(asked)
     for uid in uids:
         try:
             if mode == "emergency":
@@ -230,7 +234,7 @@ def broadcast_mode_change(mode: str) -> int:
             sent += 1
         except Exception:
             log.warning("mode broadcast failed for one user", exc_info=True)
-    log.info("mode broadcast (%s): %s/%s sent", mode, sent, len(uids))
+    log.info("mode broadcast (%s): %s sent (%s roll-call cards)", mode, sent, len(asked))
     return sent
 
 
@@ -253,6 +257,9 @@ def set_mode(request: Request, mode: str, db: Session = Depends(get_db)):
     else:
         db.add(SystemConfig(key="mode", value=mode))
     db.commit()
+    if mode == "emergency" and old_mode != "emergency":
+        from app.services import rollcall
+        rollcall.start(db)
 
     # 模式有變化才廣播
     if old_mode != mode:

@@ -271,7 +271,7 @@ FALL_WORDS = ["跌倒", "摔倒", "跌跤", "摔跤", "爬不起來", "站不起
 NEGATORS = ("不", "沒", "別", "免", "無需", "已經有", "已有")
 URGENCY_BY_TYPE = {"first_aid": 4}
 CANCEL_NEED_WORDS = ("取消需求", "取消求助", "我不需要了", "不需要了", "已經收到了", "已收到物資")
-CHECKIN_OK_WORDS = ("我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "回報平安")
+CHECKIN_OK_WORDS = ("我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "我平安", "回報平安")
 KNOWN_TOPICS = ("CPR", "cpr", "AED", "aed", "止血", "心肺復甦", "燒燙傷", "骨折", "中暑", "溺水",
                 "哽塞", "哈姆立克", "地震", "颱風", "淹水", "電線", "停電", "壓瘡", "褥瘡", "失智",
                 "癲癇", "抽搐", "過敏", "一氧化碳", "土石流", "跌倒", "低血糖", "失溫",
@@ -348,8 +348,10 @@ def _trigger_sos(user, db) -> dict:
     上的「需要幫忙」按鈕則只改狀態、根本沒有發警報。"""
     from app.models.checkin import DailyCheckin
     from app.models.need import CommunityNeed
+    from app.services import rollcall
     from app.services.alert import notify_admins, send_alerts_for_checkin
 
+    rollcall.note(db, user, "help")
     checkin = (
         db.query(DailyCheckin)
         .filter(DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw())
@@ -415,7 +417,9 @@ def _report_unwell(user, db, checkin=None) -> str:
     Not an emergency, so no SOS need is created and admins are not paged. It is a middle step
     between "I'm fine" and "help": family gets a card, the elder gets clear next steps."""
     from app.models.checkin import DailyCheckin
+    from app.services import rollcall
     from app.services.alert import send_alerts_for_checkin
+    rollcall.note(db, user, "unwell")
     if checkin is None:
         checkin = (db.query(DailyCheckin)
                    .filter(DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw()).first())
@@ -1042,7 +1046,7 @@ HELP_BASE = (
 NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所")
 APP_WORDS = ("打開 App", "打開App", "開啟 App", "App", "app")
 ASK_WORDS = ("急救問答", "問答")
-FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "回報平安",
+FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "我平安", "回報平安",
                   "狀態", "status", "幫助", "help", "?", "？", "操作說明",
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
@@ -1464,7 +1468,16 @@ def handle_postback(event: PostbackEvent):
             _say(event, "這張打卡卡片不是您的，或已失效。")
             return
         checkin_svc.mark_checkin(checkin_id, "ok", db)
+        from app.services import rollcall
+        rollcall.note(db, user, "ok")
         _say(event, "✅ 太好了！今天也要照顧好自己 🌟")
+
+    elif action == "safe":
+        # 點名卡的「我平安」：記進點名，也算今天的打卡
+        checkin_svc.record_ok(db, user)
+        from app.services import rollcall
+        _say(event, "✅ 已回報平安，社區與家人都看得到。請保持手機暢通，需要幫忙隨時按「需要幫忙」。"
+             if rollcall.current_round(db) else "✅ 收到，今天也要保重喔！")
 
     elif action in ("confirm_sos", "help"):
         # 打卡卡片上的「需要幫忙」之前只改狀態、完全沒發警報；現在兩條路徑一致。
@@ -1500,6 +1513,9 @@ def handle_postback(event: PostbackEvent):
             _say(event, "只有這位長者的照護聯絡人或管理員可以確認平安。")
             return
         checkin_svc.confirm_safe(checkin_id, str(user.id), db)
+        from app.services import rollcall
+        rollcall.note(db, db.query(User).filter(User.id == target.elderly_id).first(), "ok",
+                      via="family", marked_by=user.name)
         _say(event, "✅ 感謝您的確認，已更新紀錄。")
 
     elif action == "claim":

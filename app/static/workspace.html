@@ -76,7 +76,7 @@
       <button id="open-region" class="wide"><i data-lucide="map-pin"></i>選擇地區</button>
       <label class="zone-picker">選擇分區<select id="zone-select"><option value="">全部分區</option></select></label>
       <details><summary>資料圖層</summary><div id="layers"></div></details>
-      <div class="segmented catalog-tabs"><button id="catalog-objects" class="active">物件</button><button id="catalog-tasks">需求</button><button id="catalog-resources">物資</button></div>
+      <div class="segmented catalog-tabs"><button id="catalog-objects" class="active">物件</button><button id="catalog-tasks">需求</button><button id="catalog-resources">物資</button><button id="catalog-rollcall">點名<span id="rollcall-count" class="tab-count" hidden></span></button></div>
       <div class="catalog-heading">
         <h2 id="catalog-title">物件</h2>
         <div class="catalog-heading-actions">
@@ -97,6 +97,7 @@
       <div id="objects" class="object-list"></div>
       <div id="operation-tasks" class="object-list" hidden></div>
       <div id="operation-resources" class="object-list" hidden></div>
+      <div id="operation-rollcall" class="rollcall" hidden></div>
     </aside>
     <section class="canvas-region" aria-label="拓樸畫布">
       <div id="map"></div><div id="graph" hidden></div>

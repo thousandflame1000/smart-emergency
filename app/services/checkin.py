@@ -83,6 +83,8 @@ def record_ok(db: Session, user) -> None:
         db.refresh(row)
     if row.status in ("pending", "no_response"):
         mark_checkin(str(row.id), "ok", db)
+    from app.services import rollcall
+    rollcall.note(db, user, "ok")
 
 
 def mark_checkin(checkin_id: str, status: str, db: Session) -> DailyCheckin | None:

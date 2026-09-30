@@ -265,7 +265,7 @@ function renderObjects() {
   $('object-count').textContent=`${nodes.length} 筆`;
   $('objects').innerHTML=nodes.slice(0,150).map(n=>`<button data-node="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''}" title="${escapeHtml(n.label)}"><span class="swatch" style="background:${nodeColor(n)}"></span><span class="object-label">${escapeHtml(n.label)}</span>${n.lat===null?'<small>無座標</small>':''}</button>`).join('')+(nodes.length>150?'<div class="muted">顯示前 150 筆</div>':'');
   $('objects').querySelectorAll('[data-node]').forEach(btn=>btn.onclick=()=>{select('node',btn.dataset.node);const n=nodeById(btn.dataset.node);if(n.lat!==null)map.panTo([n.lat,n.lng]);if(cy){const el=cy.getElementById('node:'+n.id);cy.center(el);}});
-  renderOperationTasks();renderOperationResources();
+  renderOperationTasks();renderOperationResources();renderRollcall();
 }
 function select(type,id) {
   if(type==='node'&&$('mode').value==='connect') {
