@@ -251,12 +251,14 @@ def _remind_overdue_arrivals(db: Session) -> int:
         CommunityNeed.responder_id.isnot(None), CommunityNeed.acknowledged_at <= cutoff).all()
     if not taken:
         return 0
-    seen = {(str(e.need_id), e.action) for e in db.query(DispatchEvent).filter(
+    events = db.query(DispatchEvent).filter(
         DispatchEvent.action.in_(("sos_on_scene", "sos_arrival_overdue")),
-        DispatchEvent.need_id.in_([str(n.id) for n in taken])).all()}
+        DispatchEvent.need_id.in_([str(n.id) for n in taken])).all()
     sent = 0
     for need in taken:
-        if (str(need.id), "sos_on_scene") in seen or (str(need.id), "sos_arrival_overdue") in seen:
+        # 只看這一次受理之後的紀錄：改派後的新處理人逾時沒到，也要再提醒一次
+        since_ack = [e for e in events if str(e.need_id) == str(need.id) and e.created_at >= need.acknowledged_at]
+        if since_ack:
             continue
         elder = need.requester.name if need.requester else "居民"
         who = need.responder.name if need.responder else "處理人"

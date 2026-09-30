@@ -385,3 +385,23 @@ def test_console_reassigns_a_delayed_responder(db, line_outbox):
     assert "sos_reassigned" in events
     press("U-far", f"action=sos_arrived&need_id={need.id}")
     assert "只有受理這筆求救的人" in replies(line_outbox)[-1], "被換掉的人不能再回報"
+
+
+def test_arrival_reminder_restarts_after_reassignment(db, line_outbox):
+    from app.main import app
+    need, elder, near, mid, far, admin = _world(db)
+    press("U-far", f"action=sos_go&need_id={need.id}")
+    db.expire_all()
+    need.acknowledged_at = now_utc().replace(tzinfo=None) - timedelta(minutes=sos.ARRIVAL_MINUTES + 1)
+    db.commit()
+    assert sos.escalate_unacknowledged(db) == 1
+    TestClient(app).post(f"/api/resources/needs/{need.id}/assign_sos?user_id={near.id}&replace=true")
+    db.expire_all()
+    assert sos.escalate_unacknowledged(db) == 0, "剛改派的不提醒"
+    # 模擬時間往後：舊的提醒在改派之前，新的受理也已經過了 20 分鐘
+    from app.models.dispatch_event import DispatchEvent
+    earlier = now_utc().replace(tzinfo=None) - timedelta(minutes=sos.ARRIVAL_MINUTES + 5)
+    db.query(DispatchEvent).filter(DispatchEvent.action == "sos_arrival_overdue").update({"created_at": earlier})
+    need.acknowledged_at = now_utc().replace(tzinfo=None) - timedelta(minutes=sos.ARRIVAL_MINUTES + 1)
+    db.commit()
+    assert sos.escalate_unacknowledged(db) == 1, "新的處理人逾時也要提醒"
