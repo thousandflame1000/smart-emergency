@@ -185,7 +185,11 @@ def nearby(request: Request, db: Session = Depends(get_db)):
             "tel": tel_uri(p.phone), "phone": p.phone if tel_uri(p.phone) else None,
             "navigate": f"https://www.google.com/maps/dir/?api=1&destination={p.lat},{p.lng}",
         })
-    return {"has_location": True, "emergency": emergency, "points": points}
+    from app.services import aed
+    aeds = [{"name": r["aed"].name, "place": r["aed"].place, "km": round(r["km"], 2), "hours": r["hours"],
+             "open": r["open"], "navigate": f"https://www.google.com/maps/dir/?api=1&destination={r['aed'].lat},{r['aed'].lng}"}
+            for r in aed.nearest(user.lat, user.lng, limit=2)]
+    return {"has_location": True, "emergency": emergency, "points": points, "aeds": aeds}
 
 
 @router.post("/app/api/ask")

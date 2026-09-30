@@ -112,3 +112,14 @@ def test_during_an_emergency_home_asks_about_this_disaster_not_this_morning(db, 
     assert client.get("/app/api/me").json()["safety"] == "pending", "早上的打卡不算這次災害的平安"
     assert "已回報平安" in client.post("/app/api/checkin", json={"status": "ok"}).json()["message"]
     assert client.get("/app/api/me").json()["safety"] == "ok"
+
+
+def test_nearby_tab_lists_the_nearest_aed_first(db, client, monkeypatch):
+    from app.services import aed
+    box = aed.Aed("活動中心", "一樓", 25.031, 121.541, "00:00-23:59", "00:00-23:59", "00:00-23:59", "", None)
+    monkeypatch.setattr(aed, "aeds", lambda: (box,))
+    db.add(User(name="居民", roles=["elderly"], line_uid="U-app-aed", lat=25.03, lng=121.54)); db.commit()
+    _open(client, "U-app-aed")
+    data = client.get("/app/api/nearby").json()
+    assert data["aeds"][0]["name"] == "活動中心" and data["aeds"][0]["open"] is True
+    assert "destination=25.031,121.541" in data["aeds"][0]["navigate"]

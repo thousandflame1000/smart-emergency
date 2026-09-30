@@ -35,7 +35,7 @@ main{padding:14px 14px 8px}
 .btn.primary{background:var(--green);border-color:var(--green);color:#fff}
 .btn.full{width:100%}
 .row-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
-.place{border-left:5px solid var(--green)}.place.emg{border-left-color:var(--red)}
+.place{border-left:5px solid var(--green)}.place.emg{border-left-color:var(--red)}.place.aed{border-left-color:#c62828;background:#fff7f6}.place .meta.warn{color:#8a4b0f}
 .place .name{font-weight:800;font-size:18px}.place .meta{color:var(--muted);font-size:15px;margin-top:2px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
 .chip{border:1px solid var(--line);background:#fff;border-radius:18px;padding:8px 14px;font-size:15px}
@@ -79,7 +79,7 @@ dialog h2{font-size:21px;margin-bottom:8px}
   </section>
 
   <section class="view" id="view-nearby" hidden>
-    <div class="card"><h2>附近的避難所與物資</h2>
+    <div class="card"><h2>附近的 AED、避難所與物資</h2>
       <p class="muted" id="nearby-hint">用手機定位找最近的地方</p>
       <div class="row-actions"><button class="btn primary full" id="btn-locate">📍 用我現在的位置</button></div></div>
     <div id="nearby-list"></div>
@@ -199,6 +199,16 @@ dialog h2{font-size:21px;margin-bottom:8px}
     var list = $('nearby-list'); list.innerHTML = '';
     if (!d.has_location) { $('nearby-hint').textContent = '按下方按鈕用手機定位，找最近的避難所、衛生所與物資點'; return; }
     $('nearby-hint').textContent = d.emergency ? '緊急模式：先列出避難所、消防分隊與衛生所' : '依距離由近到遠';
+    // 最近的 AED 放最前面：心跳停止時分秒必爭，找避難所的人往下捲就好
+    (d.aeds || []).forEach(function (a) {
+      var c = el('div', null, 'card place aed');
+      c.appendChild(el('div', '❤️ AED・' + a.name, 'name'));
+      c.appendChild(el('div', '放在：' + (a.place || '未註明') + '・約 ' + (a.km < 1 ? Math.round(a.km * 1000) + ' 公尺' : a.km + ' 公里'), 'meta'));
+      c.appendChild(el('div', a.hours, 'meta' + (a.open === false ? ' warn' : '')));
+      var row = el('div', null, 'row-actions');
+      var nav = el('a', '🧭 導航', 'btn primary'); nav.href = a.navigate; nav.target = '_blank'; nav.rel = 'noopener'; row.appendChild(nav);
+      c.appendChild(row); list.appendChild(c);
+    });
     if (!d.points.length) { list.appendChild(el('div', '附近找不到據點。緊急時請撥 119。', 'card muted')); return; }
     d.points.forEach(function (p) {
       var c = el('div', null, 'card place' + (p.emergency ? ' emg' : ''));
