@@ -296,3 +296,22 @@ def test_roll_call_exports_as_csv_that_excel_opens(db, line_outbox):
     assert "回了,平安" in text and "0911000111" in text and "沒回,還沒回" in text
     import re
     assert re.search(r"LINE,,20\d\d-\d\d-\d\d \d\d:\d\d", text), "回報時間用台灣時間、到分鐘"
+
+
+def test_console_marking_help_opens_an_sos(db, line_outbox):
+    from app.main import app
+    from app.models.need import CommunityNeed
+    from fastapi.testclient import TestClient
+    elder = mk(db, "電話確認的阿公", ["elderly"], None, lat=23.665, lng=121.418, address="大進村 7 號")
+    mk(db, "附近志工", ["volunteer"], "U-help-vol", lat=23.666, lng=121.418)
+    _emergency(db)
+    client = TestClient(app)
+    r = client.post(f"/api/rollcall/{elder.id}?status=help")
+    assert r.status_code == 200 and "開了求救單" in r.json()["message"] and "附近 1 位志工" in r.json()["message"]
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    assert need.requester_id == elder.id and "電話確認" in need.description
+    assert sent_to(line_outbox, "U-help-vol") == ["🆘 附近有人需要幫忙"]
+    again = client.post(f"/api/rollcall/{elder.id}?status=help").json()["message"]
+    assert "已經有求救單" in again and db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").count() == 1
+    person = next(p for p in client.get("/api/rollcall").json()["people"] if p["name"] == "電話確認的阿公")
+    assert person["status"] == "help"

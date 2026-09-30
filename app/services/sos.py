@@ -276,6 +276,34 @@ def _remind_overdue_arrivals(db: Session) -> int:
     return sent
 
 
+def open_from_console(db: Session, elder: User, reporter: str) -> dict:
+    """後台打電話確認長者需要協助：開一張求救單走受理流程（附近志工、響鈴、受理、到場、結案）。
+
+    已經有未結案的求救就沿用那一筆，不重複開。"""
+    from app.services.alert import notify_admins
+    from app.services.dispatch import _log_dispatch_event
+    from app.services.zones import resolve_zone_for_point
+    existing = db.query(CommunityNeed).filter(CommunityNeed.requester_id == elder.id, CommunityNeed.need_type == "sos",
+                                              CommunityNeed.status == "open").first()
+    if existing:
+        return {"existing": True, "need": existing}
+    need = CommunityNeed(requester_id=elder.id, need_type="sos", urgency=5,
+                         description=f"{reporter}電話確認：需要協助", address=elder.address, lat=elder.lat, lng=elder.lng,
+                         zone_id=resolve_zone_for_point(db, elder.lat, elder.lng))
+    db.add(need)
+    db.commit()
+    db.refresh(need)
+    _log_dispatch_event(db, "welfare_check_requested", need=need, actor_label="manager", new_status="open",
+                        outcome="requested", details={"source": "console"})
+    db.commit()
+    nearby = alert_nearby(db, need)
+    buttons = [{"label": "🙋 我來處理", "data": f"action=sos_take&need_id={need.id}", "color": "#c0392b"}]
+    if tel_uri(elder.phone):
+        buttons.insert(0, {"label": f"📞 撥打 {elder.name}"[:20], "uri": tel_uri(elder.phone)})
+    notify_admins(db, f"🆘 {reporter}確認 {elder.name} 需要協助，已開求救單。\n地點：{elder.address or '未填'}", buttons=buttons)
+    return {"need": need, "nearby": nearby}
+
+
 def welfare_check(db: Session, elder: User, family: User, *, on_site: bool = False) -> dict:
     """家屬聯絡不到長輩：請附近志工去看看。
 

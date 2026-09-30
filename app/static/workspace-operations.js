@@ -161,7 +161,8 @@ function renderOperationalSelection(item,isNode){
   function button(label,icon,fn,primary=false){const b=document.createElement('button');b.type='button';b.className=primary?'primary':'';b.innerHTML=`<i data-lucide="${icon}"></i>${label}`;b.onclick=fn;actions.append(b);return b;}
   if(p.db==='resource'||p.db==='point')button('編輯正式資料','pencil',()=>editInventory(item));
   if(rc&&rc.status!=='ok'){if(rc.phone){const a=document.createElement('a');a.className='icon-button';a.href='tel:'+rc.phone.replace(/[^0-9+]/g,'');a.innerHTML='<i data-lucide="phone"></i>';a.append('撥打 '+rc.phone);actions.append(a);}
-    button('標記平安','shield-check',e=>markRollcall(rc.id,e.currentTarget),true);icons();}
+    button('標記平安','shield-check',e=>markRollcall(rc.id,e.currentTarget),true);
+    if(rc.status!=='help')button('需要協助','siren',e=>markRollcall(rc.id,e.currentTarget,'help'));icons();}
   if(p.db==='need'){
     if(p.status==='suggested'){
       loadOperationCandidates(item);
@@ -272,11 +273,13 @@ function renderRollcall(){
   const remind=$('rollcall-remind');if(remind)remind.onclick=remindRollcall;
   icons();
 }
-async function markRollcall(id,button){
-  const person=rollcallData?.people.find(p=>p.id===id);
-  if(!await askConfirm('標記平安？',`已經電話或上門確認 <strong>${escapeHtml(person?.name||'')}</strong> 平安了嗎？`,'標記平安'))return;
+async function markRollcall(id,button,status='ok'){
+  const person=rollcallData?.people.find(p=>p.id===id),name=escapeHtml(person?.name||'');
+  const ok=status==='ok'?await askConfirm('標記平安？',`已經電話或上門確認 <strong>${name}</strong> 平安了嗎？`,'標記平安')
+    :await askConfirm('需要協助？',`<strong>${name}</strong> 需要協助：會開一張求救單，通知附近志工，後台也會響鈴。`,'開求救單');
+  if(!ok)return;
   button.disabled=true;
-  try{const r=await fetch('/api/rollcall/'+encodeURIComponent(id)+'?status=ok',{method:'POST'});const data=await r.json();if(!r.ok)throw Error(data.detail||'標記失敗');message(data.message);await loadRollcall();}
+  try{const r=await fetch('/api/rollcall/'+encodeURIComponent(id)+'?status='+status,{method:'POST'});const data=await r.json();if(!r.ok)throw Error(data.detail||'標記失敗');message(data.message);await loadRollcall();if(status==='help')await refreshOperations({silent:true});}
   catch(e){message(e.message,true);button.disabled=false;}
 }
 async function remindRollcall(){

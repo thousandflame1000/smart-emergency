@@ -65,4 +65,12 @@ def mark(user_id: str, status: str = "ok", db: Session = Depends(get_db),
     who = f"後台：{principal['name']}" if principal else "後台"
     if not rollcall.note(db, user, status, via="console", marked_by=who):
         raise HTTPException(409, "目前不是緊急模式，或這個人不是長者。")
+    if status == "help":
+        # 需要協助不只是記一筆：開求救單，附近志工會收到、後台會響鈴
+        from app.services import sos
+        result = sos.open_from_console(db, user, who)
+        if result.get("existing"):
+            return {"message": f"已標記 {user.name}：需要協助（這位長者已經有求救單在處理）"}
+        nearby = result.get("nearby") or 0
+        return {"message": f"已標記 {user.name}：需要協助，並開了求救單" + (f"，已通知附近 {nearby} 位志工" if nearby else "，請指派處理人")}
     return {"message": f"已標記 {user.name}：{rollcall.STATUS_LABEL[status]}"}
