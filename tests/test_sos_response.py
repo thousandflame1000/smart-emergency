@@ -163,3 +163,15 @@ def test_the_check_on_button_is_on_family_cards(db, line_outbox):
     send_alert_message("U-dau", "阿嬤", "no_response_3h", "c1", elderly=elder)
     pushed = [m for kind, to, m in line_outbox.sent if kind == "push" and to == "U-dau"][-1]
     assert "family_check" in json.dumps(pushed.contents.to_dict(), ensure_ascii=False)
+
+
+def test_console_logs_when_an_sos_was_reported_to_119(db, line_outbox):
+    from app.main import app
+    need, *_ = _world(db)
+    client = TestClient(app)
+    assert client.post(f"/api/resources/needs/{need.id}/reported_119").status_code == 200
+    events = client.get(f"/api/resources/needs/{need.id}/events").json()
+    assert any(e["action"] == "sos_reported_119" for e in events)
+    other = CommunityNeed(requester_id=need.requester_id, need_type="water", status="open")
+    db.add(other); db.commit()
+    assert client.post(f"/api/resources/needs/{other.id}/reported_119").status_code == 404

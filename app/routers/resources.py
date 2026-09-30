@@ -487,6 +487,20 @@ def assign_sos(need_id: str, user_id: str, db: Session = Depends(get_db),
     return {"message": f"已指派 {person.name} 處理；{note}", "need_id": need_id}
 
 
+@router.post("/needs/{need_id}/reported_119")
+def sos_reported_119(need_id: str, db: Session = Depends(get_db),
+                     _principal: dict | None = Depends(require_admin)):
+    """記下「已轉報 119」：平台補 119 的不足，不取代 119；轉報的時間點要留在紀錄上。"""
+    from app.services.dispatch import _log_dispatch_event
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if need is None or need.need_type != "sos":
+        raise HTTPException(404, "找不到這筆求救")
+    _log_dispatch_event(db, "sos_reported_119", need=need, actor_label="manager", previous_status=need.status,
+                        new_status=need.status, outcome="reported", details={})
+    db.commit()
+    return {"message": "已記錄轉報 119"}
+
+
 @router.post("/needs/{need_id}/resolve_sos")
 def resolve_sos_need(need_id: str, db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """管理員確認已聯繫、處理完一筆一鍵求助"""

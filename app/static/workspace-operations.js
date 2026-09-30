@@ -161,7 +161,12 @@ function renderOperationalSelection(item,isNode){
       else actions.insertAdjacentHTML('beforeend','<p class="muted">核准派遣僅限管理員，請聯絡管理員處理。</p>');
     }
     if(p.status==='open'&&p.need_type==='sos'){
-      if(isAdmin()){if(!p.responder)loadSosCandidates(item);button('確認已處理','check-check',()=>actOnNeed(item,'resolve_sos'),!!p.responder);}
+      if(isAdmin()){if(!p.responder)loadSosCandidates(item);
+        // 需要送醫就撥 119，同時在紀錄上留下轉報的時間
+        const call=document.createElement('a');call.className='icon-button call-119';call.href='tel:119';call.innerHTML='<i data-lucide="siren"></i>通報 119';
+        call.onclick=()=>{fetch('/api/resources/needs/'+encodeURIComponent(item.id.slice(8))+'/reported_119',{method:'POST'}).then(()=>{operationEvents.clear();loadOperationEvents(item);}).catch(()=>{});};
+        actions.append(call);
+        button('確認已處理','check-check',()=>actOnNeed(item,'resolve_sos'),!!p.responder);}
       else actions.insertAdjacentHTML('beforeend','<p class="muted">受理與結案僅限管理員。</p>');
     }
     if(p.status==='open'&&p.need_type!=='sos'){
@@ -189,6 +194,8 @@ async function loadNeedContact(node){
     icons();
   }catch(e){/* 讀不到就不顯示 */}
 }
+// 紀錄裡的操作者是系統內部代號（manager、admin:王小明），畫面上說人話
+function actorName(label){if(!label||label==='manager')return label?'後台':'系統';return label.replace(/^admin:/,'管理員：').replace(/^(志工|管理員|家屬):/,'$1：');}
 // 求救還沒人受理：列出可以指派的人（志工由近到遠，再來是管理員），指派後對方會收到 LINE 任務卡
 async function loadSosCandidates(node){
   const actions=$('operational-actions');
@@ -298,10 +305,10 @@ async function loadOperationEvents(node){
     if(!operationEvents.has(key))operationEvents.set(key,resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/events'));
     const events=await operationEvents.get(key);
     if(state.selected?.id!==node.id||nodeById(node.id)?.properties.observed_at!==node.properties.observed_at||!$('operation-events'))return;
-    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',cancel_need:'取消需求',admin_message:'管理員指示'};
+    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',sos_reported_119:'已轉報 119',welfare_check_requested:'家屬請人探視',cancel_need:'取消需求',admin_message:'管理員指示'};
     // 求救事件不走物資狀態（受理後仍是 open，顯示「待媒合」會誤導）；時間轉成台灣時間
     const when=t=>{const d=new Date(String(t||'').replace(' ','T')+(/[zZ]|[+-]\d\d:?\d\d$/.test(t||'')?'':'Z'));return isNaN(d)?(t||''):d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});};
-    $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${e.action.startsWith('sos_')?'':escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(e.actor_label||'系統')} · ${escapeHtml(when(e.created_at))}</small></div>`).join(''):'尚無處理紀錄';
+    $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${e.action.startsWith('sos_')?'':escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(actorName(e.actor_label))} · ${escapeHtml(when(e.created_at))}</small></div>`).join(''):'尚無處理紀錄';
   }catch(e){operationEvents.delete(key);if(state.selected?.id===node.id&&$('operation-events'))$('operation-events').textContent=e.message;}
 }
 async function messageAssignee(node){
