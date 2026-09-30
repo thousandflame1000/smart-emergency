@@ -110,10 +110,16 @@ def me(request: Request, db: Session = Depends(get_db)):
     from app.models.checkin import DailyCheckin
     from app.models.need import CommunityNeed
     from app.routers.linebot import _get_mode
+    from app.models.safety_check import SafetyCheck
+    from app.services import rollcall
     user = _user(db, request)
     checkin = (db.query(DailyCheckin)
                .filter(DailyCheckin.elderly_id == user.id, DailyCheckin.date == today_tw()).first())
     roles = user.roles or []
+    # 災時點名：這次災害有沒有回報過（早上的打卡不算）
+    round_id = rollcall.current_round(db) if user.has_role("elderly") else None
+    reply = (db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id, SafetyCheck.user_id == user.id).first()
+             if round_id else None)
     return {
         "name": "" if is_placeholder_name(user.name) else user.name,
         "roles": roles,
@@ -121,6 +127,7 @@ def me(request: Request, db: Session = Depends(get_db)):
         "is_admin": "admin" in roles,
         "checkin": checkin.status if checkin else None,
         "emergency": _get_mode(db) == "emergency",
+        "safety": (reply.status if reply else "pending") if round_id else None,
         "has_location": user.lat is not None,
         "open_needs": db.query(CommunityNeed).filter(
             CommunityNeed.requester_id == user.id,
@@ -136,6 +143,9 @@ def checkin(body: CheckinRequest, request: Request, db: Session = Depends(get_db
     if body.status == "unwell":
         return {"message": _report_unwell(user, db)}
     checkin_svc.record_ok(db, user)
+    from app.services import rollcall
+    if rollcall.current_round(db):
+        return {"message": "✅ 已回報平安，社區與家人都看得到。需要幫忙隨時按「需要幫忙」。"}
     return {"message": "✅ 收到，今天也要保重喔！"}
 
 

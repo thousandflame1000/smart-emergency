@@ -60,7 +60,7 @@ dialog h2{font-size:21px;margin-bottom:8px}
 </head>
 <body>
 <header><h1 id="hello">鄰里守望</h1><p id="subtitle">社區照護與應變</p></header>
-<div class="banner" id="emergency" hidden>🚨 社區緊急模式中：先確認自身安全，有危險請按「需要幫忙」或撥 119</div>
+<div class="banner" id="emergency" hidden>🚨 社區緊急模式中：請按「我平安」回報；有危險請按「需要幫忙」或撥 119</div>
 
 <main>
   <div id="loading" class="center muted">載入中…</div>
@@ -68,7 +68,7 @@ dialog h2{font-size:21px;margin-bottom:8px}
   <section class="view" id="view-home" hidden>
     <div class="card"><div class="status" id="today"><span class="dot"></span><div><strong id="today-title">今天還沒回報</strong><div class="muted" id="today-sub">每天早上按一下「我很好」就可以</div></div></div></div>
     <div class="grid">
-      <button class="big b-green" id="btn-ok"><span class="ic">✅</span><span>我很好<small>回報今天平安</small></span></button>
+      <button class="big b-green" id="btn-ok"><span class="ic">✅</span><span><b id="ok-title">我很好</b><small id="ok-sub">回報今天平安</small></span></button>
       <button class="big b-amber" id="btn-unwell"><span class="ic">🤒</span><span>不舒服<small>家人會收到通知</small></span></button>
       <button class="big b-red wide" id="btn-sos"><span class="ic">🆘</span><span>需要幫忙<small>通知家人與管理員，會先跟你確認</small></span></button>
       <a class="big b-blue" href="/f/need" id="btn-need"><span class="ic">📝</span><span>申請物資<small>水、食物、藥品</small></span></a>
@@ -164,8 +164,17 @@ dialog h2{font-size:21px;margin-bottom:8px}
     no_response: ['warn', '今天還沒回報', '按「我很好」讓家人放心'],
     pending: ['warn', '今天還沒回報', '按「我很好」讓家人放心']
   };
+  // 緊急模式時首頁看的是「這次災害回報了沒」，不是早上的打卡
+  var SAFETY = {
+    pending: ['bad', '請回報這次是否平安', '按下方「我平安」，社區和家人就知道你沒事'],
+    ok: ['ok', '已回報平安', '社區與家人都看得到；需要幫忙隨時按「需要幫忙」'],
+    unwell: ['warn', '已回報身體不舒服', '家人已收到通知；變嚴重請按「需要幫忙」'],
+    help: ['bad', '已送出求救', '家人和管理員都收到通知了，請保持手機暢通']
+  };
   function renderHome() {
-    var s = TODAY[me.checkin] || ['', '今天還沒回報', '每天早上按一下「我很好」就可以'];
+    var s = (me.safety && SAFETY[me.safety]) || TODAY[me.checkin] || ['', '今天還沒回報', '每天早上按一下「我很好」就可以'];
+    $('ok-title').textContent = me.safety ? '我平安' : '我很好';
+    $('ok-sub').textContent = me.safety ? '回報這次災害平安' : '回報今天平安';
     $('today').className = 'status ' + s[0]; $('today-title').textContent = s[1]; $('today-sub').textContent = s[2];
     $('hello').textContent = me.name ? me.name + '，你好' : '鄰里守望';
     $('emergency').hidden = !me.emergency;

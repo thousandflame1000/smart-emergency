@@ -96,3 +96,19 @@ def test_nearby_marks_official_shelters(db, client, monkeypatch):
     point = client.get("/app/api/nearby").json()["points"][0]
     assert point["official"] == "臺北市大安區・內政部公告" and point["capacity"] == "可收容 200 人・可安置長者與身障者"
     assert point["emergency"] and point["tel"] == "tel:0227000000"
+
+
+def test_during_an_emergency_home_asks_about_this_disaster_not_this_morning(db, client):
+    from app.models.config import SystemConfig
+    from app.services import checkin as checkin_svc
+    from app.services import rollcall
+    elder = User(name="阿嬤", roles=["elderly"], line_uid="U-app-roll")
+    db.add(elder); db.commit()
+    checkin_svc.record_ok(db, elder)  # 早上打過卡
+    _open(client, "U-app-roll")
+    assert client.get("/app/api/me").json()["safety"] is None, "日常模式沒有點名"
+    db.add(SystemConfig(key="mode", value="emergency")); db.commit()
+    rollcall.start(db)
+    assert client.get("/app/api/me").json()["safety"] == "pending", "早上的打卡不算這次災害的平安"
+    assert "已回報平安" in client.post("/app/api/checkin", json={"status": "ok"}).json()["message"]
+    assert client.get("/app/api/me").json()["safety"] == "ok"
