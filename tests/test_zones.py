@@ -376,13 +376,13 @@ def test_resources_api_auto_resolves_zone_when_not_specified(api, db):
 
 def test_live_snapshot_leaves_out_old_closed_requests_and_old_check_ins(db):
     """即時現況每 30 秒重抓：還在進行的需求一定在，好幾個月前結案的不再畫上地圖。"""
-    from datetime import date, datetime, timedelta
+    from datetime import UTC, date, datetime, timedelta
     from app.models.checkin import DailyCheckin
     from app.models.need import CommunityNeed
     from app.models.user import User
     from app.services.workspace_bridge import operational_snapshot
     elder = User(name="阿嬤", roles=["elderly"]); db.add(elder); db.commit()
-    long_ago = datetime.utcnow() - timedelta(days=90)
+    long_ago = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=90)
     open_old = CommunityNeed(requester_id=elder.id, need_type="water", status="open", created_at=long_ago)
     done_old = CommunityNeed(requester_id=elder.id, need_type="food", status="fulfilled", created_at=long_ago)
     done_new = CommunityNeed(requester_id=elder.id, need_type="food", status="fulfilled")

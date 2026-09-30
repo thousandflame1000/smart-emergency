@@ -706,9 +706,9 @@ def test_need_contact_lists_family_in_notify_order(db, webclient):
 
 def test_summary_lists_open_sos_oldest_first(db, webclient):
     """外框靠這份清單判斷有沒有新的求救進來，要響鈴。"""
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta
     vol, req, adm, res, need = world(db)
-    now = datetime.utcnow()
+    now = datetime.now(UTC).replace(tzinfo=None)
     first = CommunityNeed(requester_id=req.id, need_type="sos", status="open", address="巷口", created_at=now - timedelta(minutes=9))
     later = CommunityNeed(requester_id=vol.id, need_type="sos", status="open", created_at=now - timedelta(minutes=1))
     done = CommunityNeed(requester_id=req.id, need_type="sos", status="fulfilled", created_at=now)
