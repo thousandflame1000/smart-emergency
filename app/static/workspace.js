@@ -314,7 +314,11 @@ function renderCanvas() {
   const nodes=new Map(state.graph.nodes.filter(visible).map(n=>[n.id,n]));
   const critical=new Set(state.report?.critical_edges||[]);
   if(state.view==='map'){
+    // 「需求歸到哪個事件」的連線在地圖上只是從事件中心拉到每個點的一團虛線，看不出東西；
+    // 地圖上只在選到那個事件或那個點時才畫，關係圖照樣全畫。
+    const sel=state.selected?.id;
     for(const e of state.graph.edges){const a=nodes.get(e.source),b=nodes.get(e.target);if(!a||!b||a.lat===null||b.lat===null)continue;
+      if(e.properties?.binding==='incident'&&![e.id,e.source,e.target].includes(sel))continue;
       const color=state.selected?.id===e.id?'#eda51c':e.status==='inactive'?'#9ca9a0':critical.has(e.id)?'#9a5b9e':'#2c8fad';
       const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color,weight:state.selected?.id===e.id?6:2,dashArray:e.status==='inactive'?'5 5':'7 5'}).addTo(mapLayers);
       line.bindTooltip(document.createTextNode(`${e.label} · ${STATUS[e.status]}${e.directed?' · 有方向':''}`));line.on('click',event=>{L.DomEvent.stopPropagation(event);select('edge',e.id);});
@@ -322,11 +326,13 @@ function renderCanvas() {
     const markers=[];
     for(const n of nodes.values()){if(n.lat===null)continue;// 24px 是 WCAG 2.5.8 的觸控目標下限。群集打開時看不出差別，但 zoom 到底、
 // 群集停用後每個標記都是獨立的點——那正是調度者要用手指點它的時候。
-const size=n.kind==='incident'?28:24;
-      const marker=L.marker([n.lat,n.lng],{draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${nodeColor(n)}">${nodeIcon(n)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
-      marker.bindTooltip(document.createTextNode(`${n.label} · ${nodeTypeLabel(n)}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
+// 未結案的求救：大一號、紅色、沒人受理時會脈動，而且不併進群集，縮到全台灣也看得到。
+const sos=n.properties?.db==='need'&&n.properties.need_type==='sos'&&n.properties.status==='open';
+const size=sos?34:n.kind==='incident'?28:24;
+      const marker=L.marker([n.lat,n.lng],{zIndexOffset:sos?1000:0,draggable:$('mode').value==='select'&&!n.id.startsWith('db:'),icon:L.divIcon({className:'',html:`<div class="map-dot ${sos?'sos-dot '+(n.properties.responder?'taken':'waiting'):''} ${state.selected?.id===n.id?'selected':''} ${n.available?'':'unavailable'}" style="width:${size}px;height:${size}px;background:${sos?'#c62828':nodeColor(n)}">${sos?'<b>SOS</b>':nodeIcon(n)}</div>`,iconSize:[size,size],iconAnchor:[size/2,size/2]})});
+      marker.bindTooltip(document.createTextNode(sos?`${n.label} · ${n.properties.responder?'處理中：'+n.properties.responder:'尚未受理'}`:`${n.label} · ${nodeTypeLabel(n)}`));marker.on('click',event=>{L.DomEvent.stopPropagation(event);select('node',n.id);});
       marker.on('dragend',()=>{const p=marker.getLatLng();mutate(()=>{n.lat=+p.lat.toFixed(7);n.lng=+p.lng.toFixed(7);});});
-      markers.push(marker);
+      if(sos)marker.addTo(mapLayers);else markers.push(marker);
     }
     markerCluster.addLayers(markers);
   }else renderGraph(nodes,critical);

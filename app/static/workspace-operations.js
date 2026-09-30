@@ -21,7 +21,8 @@ const inventoryDrafts=new Map(), operationEvents=new Map();
 let operationOwners=[], operationRequest=null, operationStage='open', catalogTab='objects', inventoryReview=null;
 
 function workspaceUrl(id){const url=new URL(location.href);id?url.searchParams.set('id',id):url.searchParams.delete('id');history.replaceState(null,'',url.pathname+url.search+url.hash);}
-function focusOperational(id){const node=nodeById(id);if(!node)return;$('mode').value='select';state.hidden.delete(node.kind);select('node',id);if(node.lat!==null)map.panTo([node.lat,node.lng]);if(cy)cy.center(cy.getElementById('node:'+id));}
+// 求救要看得到在哪條街：拉近到街道層級；其他物件只平移，不打斷調度者目前的比例尺
+function focusOperational(id){const node=nodeById(id);if(!node)return;$('mode').value='select';state.hidden.delete(node.kind);select('node',id);if(node.lat!==null){if(node.properties?.need_type==='sos')map.setView([node.lat,node.lng],Math.max(map.getZoom(),16));else map.panTo([node.lat,node.lng]);}if(cy)cy.center(cy.getElementById('node:'+id));}
 function operationalNodes(){return state.graph.nodes.filter(n=>n.properties.db==='need');}
 function operationalResources(){return state.graph.nodes.filter(n=>['resource','point'].includes(n.properties.db));}
 function taskInStage(node,stage){

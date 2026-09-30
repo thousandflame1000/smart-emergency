@@ -80,6 +80,11 @@ aside { padding: 18px 14px; overflow: auto; min-width: 0; }
 .map-dot { border: 2px solid white; border-radius: 50%; box-shadow: 0 1px 5px #0006; display: flex; align-items: center; justify-content: center; }
 .map-dot.selected { outline: 3px solid #f8b52c; } .map-dot.unavailable { opacity: .4; }
 .map-dot svg { width: 62%; height: 62%; color: white; stroke-width: 2.75; }
+.map-dot.sos-dot { border-width: 3px; color: #fff; font-size: 10px; letter-spacing: .02em; }
+.map-dot.sos-dot.waiting { animation: sos-ping 1.4s ease-out infinite; }
+.map-dot.sos-dot.taken { box-shadow: 0 0 0 4px #f8b52c, 0 1px 5px #0006; }
+@keyframes sos-ping { 0% { box-shadow: 0 0 0 0 rgba(198,40,40,.6), 0 1px 5px #0006; } 100% { box-shadow: 0 0 0 16px rgba(198,40,40,0), 0 1px 5px #0006; } }
+@media (prefers-reduced-motion: reduce) { .map-dot.sos-dot.waiting { animation: none; box-shadow: 0 0 0 4px rgba(198,40,40,.45); } }
 .inspector label, dialog label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-bottom: 10px; }
 .inspector input, .inspector select { width: 100%; color: var(--ink); }
 .inspector .checkbox-label, dialog .checkbox-label { flex-direction: row; align-items: center; }
