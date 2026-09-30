@@ -319,6 +319,38 @@ def arrive(db: Session, need_id: str, user: User) -> dict:
     return {"ok": True}
 
 
+def cancel_by_requester(db: Session, need_id: str, user: User) -> dict:
+    """長者誤按或已經沒事：本人（或管理員）取消求救，通知管理員、處理人與提出的家屬，點名記為平安。"""
+    from app.services import rollcall
+    from app.services.alert import notify_admins
+    from app.services.dispatch import _log_dispatch_event
+    from app.services.outbox import send_text_reliably
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == str(need_id)).first()
+    if need is None or need.need_type != "sos":
+        return {"error": "找不到這筆求救"}
+    if str(need.requester_id) != str(user.id) and not user.has_role("admin"):
+        return {"error": "只有求救的本人可以取消。"}
+    if need.status != "open":
+        return {"already": True}
+    need.status = "cancelled"
+    _log_dispatch_event(db, "sos_cancelled", need=need, actor_id=str(user.id), actor_label=f"本人:{user.name}",
+                        previous_status="open", new_status="cancelled", outcome="cancelled", details={})
+    db.commit()
+    elder = need.requester.name if need.requester else user.name
+    text = f"ℹ️ {elder} 取消了求救（誤按或已經沒事）。"
+    try:
+        notify_admins(db, text)
+    except Exception:
+        logger.warning("notify admins about SOS cancel failed", exc_info=True)
+    if need.responder is not None and need.responder.line_uid and need.responder_id != need.requester_id:
+        send_text_reliably(aggregate_type="CommunityNeed", aggregate_id=str(need.id), destination=need.responder.line_uid,
+                           content=text + "不用再過去了，謝謝您。", dedupe_key=f"sos-cancel:{need.id}:responder")
+    _tell_family(db, need, text)
+    if need.requester is not None:
+        rollcall.note(db, need.requester, "ok")
+    return {"ok": True}
+
+
 def finish(db: Session, need_id: str, user: User) -> dict:
     """處理人回報處理完成：結案並讓管理員知道。只有處理人本人或管理員可以結。"""
     from app.services.alert import notify_admins

@@ -1011,6 +1011,22 @@ def _question_allowed(uid: str) -> bool:
     return True
 
 
+def _confirm_sos_cancel(event, db, user) -> None:
+    """取消求救前先確認一次：真的有危險時不能因為手滑就取消。"""
+    from app.models.need import CommunityNeed
+    from app.services.line_ops import bubble
+    need = db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id, CommunityNeed.need_type == "sos",
+                                          CommunityNeed.status == "open").first()
+    if need is None:
+        _say(event, "您目前沒有進行中的求救。")
+        return
+    line_ops._flex(event, "確定取消求救？", bubble(
+        "確定取消求救？", "#c26a12",
+        ["取消後，家人、管理員與志工會收到「已取消」。", "如果還需要幫忙，請按「不要取消」。"],
+        [{"label": "確定取消（我沒事）", "data": f"action=sos_cancel&need_id={need.id}", "color": "#c26a12"},
+         {"label": "不要取消", "data": "action=sos_keep"}], large=True))
+
+
 def _reply_nearby_rollcall(event, db, user) -> None:
     """志工看附近還沒回報的長者，上門確認後直接回報。"""
     from app.services import rollcall
@@ -1140,6 +1156,7 @@ HELP_BASE = (
 
 NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所", "收容所", "附近收容所")
 ROLLCALL_NEARBY_WORDS = ("附近點名", "附近長者", "幫忙點名")
+SOS_CANCEL_WORDS = ("取消求救", "我按錯了", "按錯了", "誤按")
 AED_WORDS = ("AED", "aed", "找AED", "找 AED", "附近AED", "最近的AED", "電擊器", "去顫器", "心臟電擊器")
 APP_WORDS = ("打開 App", "打開App", "開啟 App", "App", "app")
 ASK_WORDS = ("急救問答", "問答")
@@ -1148,7 +1165,7 @@ FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
                   "申請物資", "物資申請", "需要物資", "申請表單", "申請需求",
-                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS) | set(APP_WORDS) | set(ASK_WORDS) | set(AED_WORDS)     | set(ROLLCALL_NEARBY_WORDS)
+                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS) | set(APP_WORDS) | set(ASK_WORDS) | set(AED_WORDS) | set(ROLLCALL_NEARBY_WORDS) | set(SOS_CANCEL_WORDS)
 UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
 # 長輩不會照指令打字：「今天頭好暈」「有點發燒」也是在說身體不適，要讓家人知道。
 UNWELL_HINTS = ("不舒服", "不太舒服", "頭暈", "頭很暈", "頭好暈", "暈眩", "發燒", "頭痛", "頭好痛", "肚子痛", "胃痛",
@@ -1261,6 +1278,10 @@ def _process_text(event, db, user, text) -> bool:
 
     if text in AED_WORDS:
         _reply_aeds(event, user)
+        return True
+
+    if text in SOS_CANCEL_WORDS:
+        _confirm_sos_cancel(event, db, user)
         return True
 
     if text in ROLLCALL_NEARBY_WORDS:
@@ -1590,7 +1611,21 @@ def handle_postback(event: PostbackEvent):
     elif action in ("confirm_sos", "help"):
         # 打卡卡片上的「需要幫忙」之前只改狀態、完全沒發警報；現在兩條路徑一致。
         result = _trigger_sos(user, db)
-        _say(event, _sos_reply_text(result), ask_location=user.lat is None)
+        if user.lat is None:
+            _say(event, _sos_reply_text(result), ask_location=True)
+        else:
+            from app.services.line_notify import reply_text_with_commands
+            reply_text_with_commands(event.reply_token, _sos_reply_text(result), [("我沒事了（取消求救）", "取消求救")])
+
+    elif action == "sos_cancel":
+        from app.services import sos
+        result = sos.cancel_by_requester(db, data.get("need_id", ""), user)
+        _say(event, "⚠️ " + result["error"] if result.get("error") else
+             "這筆求救已經結束了。" if result.get("already") else
+             "✅ 已取消求救，已告訴家人與管理員。如果又需要幫忙，隨時按「需要幫忙」。")
+
+    elif action == "sos_keep":
+        _say(event, "好的，求救仍然有效，會有人跟您聯絡。有生命危險請直接撥 119。")
 
     elif action == "form":
         _handle_form_postback(event, db, user, data)

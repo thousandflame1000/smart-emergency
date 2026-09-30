@@ -339,3 +339,30 @@ def test_paused_volunteers_are_not_alerted_until_they_resume(db, line_outbox):
     assert "已恢復" in replies(line_outbox)[-1]
     from app.services import sos as sos_svc
     assert "外地志工" in [u.name for u, _km in sos_svc.nearby_volunteers(db, need)]
+
+
+def test_elder_can_cancel_a_mistaken_sos_after_confirming(db, line_outbox):
+    from tests.test_line_hardening import say
+    need, elder, near, mid, far, admin = _world(db)
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    say("U-elder", "取消求救")
+    assert replies(line_outbox)[-1] == "確定取消求救？"
+    press("U-elder", "action=sos_keep")
+    db.expire_all()
+    assert need.status == "open" and "求救仍然有效" in replies(line_outbox)[-1]
+    press("U-near", f"action=sos_cancel&need_id={need.id}")
+    assert "只有求救的本人" in replies(line_outbox)[-1]
+    press("U-elder", f"action=sos_cancel&need_id={need.id}")
+    db.expire_all()
+    assert need.status == "cancelled" and "已取消求救" in replies(line_outbox)[-1]
+    assert any("陳阿公 取消了求救" in t for t in sent_to(line_outbox, "U-admin"))
+    assert any("不用再過去了" in t for t in line_outbox.texts("U-mid")), "已經出發的處理人要知道"
+    say("U-elder", "取消求救")
+    assert "沒有進行中的求救" in replies(line_outbox)[-1]
+
+
+def test_sos_reply_offers_a_cancel_shortcut(db, line_outbox):
+    mk(db, "有位置的阿嬤", ["elderly"], "U-granny", lat=23.66, lng=121.42)
+    press("U-granny", "action=confirm_sos")
+    message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    assert [i.action.data for i in message.quick_reply.items] == ["cmd=取消求救"]
