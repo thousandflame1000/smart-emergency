@@ -222,12 +222,8 @@ body {
   display: inline-flex; align-items: center; min-height: 24px; }
 .person-facts a:hover { text-decoration: underline; }
 .person-foot { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 5px; }
-.person .row-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px;
-  transition: opacity .12s; background: var(--card); }
-@media (hover: hover) and (pointer: fine) {
-  .person .row-actions { opacity: 0; }
-  .person:hover .row-actions, .person:focus-within .row-actions { opacity: 1; }
-}
+/* 編輯一直看得到：藏到滑過才出現，第一次用的人找不到 */
+.person .row-actions { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px; background: var(--card); }
 /* 看板：依角色分欄堆疊，哪一欄高就代表那一類人多，不用自己數。 */
 .board { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; padding: 14px 16px; align-items: start; }
 .board-col { border: 1px solid var(--border); border-radius: var(--radius); background: rgba(23,32,28,.018); }
@@ -570,16 +566,18 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     <button id="admin-nav-close" class="admin-nav-close" type="button" aria-label="關閉管理選單">&times;</button>
   </div>
 
-  <div class="nav-section">成員管理</div>
+  <div class="nav-section">人員</div>
   <div class="nav-item active" onclick="showPage('page-elderly')" data-page="page-elderly">
-    <span class="icon">👴</span> 長者管理
+    <span class="icon">👥</span> 人員管理
   </div>
   <div class="nav-item" onclick="showPage('page-volunteers')" data-page="page-volunteers">
-    <span class="icon">🙋</span> 志工 / 家屬 <span id="nav-volunteer-app-badge" class="badge badge-amber is-hidden" style="margin-left:4px"></span>
+    <span class="icon">🙋</span> 志工申請 <span id="nav-volunteer-app-badge" class="badge badge-amber is-hidden" style="margin-left:4px"></span>
   </div>
   <div class="nav-item" onclick="showPage('page-relations')" data-page="page-relations">
     <span class="icon">🔗</span> 照護關係
   </div>
+
+  <div class="nav-section">系統</div>
   <div class="nav-item" onclick="showPage('page-audit')" data-page="page-audit">
     <span class="icon">🧾</span> 操作紀錄
   </div>
@@ -607,7 +605,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
 <div class="main">
   <div class="topbar">
     <button class="admin-menu-button" id="admin-menu-button" type="button" aria-controls="admin-sidebar" aria-expanded="false">選單</button>
-    <span class="topbar-title" id="topbar-title">長者管理</span>
+    <span class="topbar-title" id="topbar-title">人員管理</span>
     <div class="topbar-actions">
       <button class="btn btn-ghost btn-sm" onclick="toggleMode()" id="mode-btn" title="切換日常／緊急模式（切換到緊急會廣播給所有 LINE 使用者）">
         載入中…
@@ -619,20 +617,20 @@ textarea.form-control { resize: vertical; min-height: 80px; }
   <div class="content">
 
     <!-- ══════════════════════════════════════════════ -->
-    <!-- 長者管理                                        -->
+    <!-- 人員管理：所有人一頁，角色在這裡改              -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page active" id="page-elderly">
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">長者名單</div>
+            <div class="card-title">人員名單</div>
           </div>
           <button class="btn btn-primary btn-sm" onclick="openUserModal('elderly')">
-            ＋ 新增長者
+            ＋ 新增人員
           </button>
         </div>
         <div class="list-toolbar">
-          <label class="search-field">搜尋<input type="search" id="elderly-search" aria-label="搜尋長者"></label>
+          <label class="search-field">搜尋<input type="search" id="elderly-search" aria-label="搜尋人員"></label>
           <div id="elderly-chips" style="display:flex;gap:6px;flex-wrap:wrap"></div>
         </div>
         <div id="elderly-grid" class="people-grid">
@@ -642,7 +640,7 @@ textarea.form-control { resize: vertical; min-height: 80px; }
     </div>
 
     <!-- ══════════════════════════════════════════════ -->
-    <!-- 志工 / 家屬                                     -->
+    <!-- 志工申請（審核、各角色名單、演練工具）          -->
     <!-- ══════════════════════════════════════════════ -->
     <div class="page" id="page-volunteers">
       <div class="card is-hidden" id="volunteer-applications-card">
@@ -1371,8 +1369,8 @@ const ROLE_LABEL = { elderly:'長者', volunteer:'志工', family:'家屬', admi
 const ROLE_BADGE = { elderly:'badge-blue', volunteer:'badge-green', family:'badge-amber', admin:'badge-red', field_staff:'badge-purple' };
 const RES_ICON   = { water:'💧', food:'🍱', first_aid:'🩹', shelter:'🏠', vehicle:'🚗', tool:'🔧', other:'📦' };
 const PAGE_TITLE = {
-  'page-elderly':   '長者管理',
-  'page-volunteers':'志工 / 家屬',
+  'page-elderly':   '人員管理',
+  'page-volunteers':'志工申請',
   'page-relations': '照護關係',
   'page-needs':     '調度',
   'page-kb':        '知識庫',
@@ -1792,7 +1790,7 @@ async function loadAll() {
       fetch('/api/resources/?available_only=false').then(r => r.json()),
     ]);
     allUsers = users;
-    renderElderly(users.filter(u => u.roles.includes('elderly')));
+    renderElderly(users);
     // "!includes('elderly')" 曾經漏掉長者本人兼志工的情況（例如志工
     // 自助申請核准後仍保留 elderly 角色）——改成明確列出這頁該顯示
     // 的角色，跟長者管理頁分流靠的是「有沒有志工/家屬/管理員身份」，
@@ -1839,6 +1837,10 @@ function personCard(u, { roles = false } = {}) {
 }
 let elderlyAll = [], elderlyFilter = '', volunteersAll = [], volunteerFilter = '';
 const ELDER_FILTERS = {
+  elderly:  { label: '長者',        test: u => u.roles.includes('elderly') },
+  volunteer:{ label: '志工',        test: u => u.roles.includes('volunteer') },
+  family:   { label: '家屬',        test: u => u.roles.includes('family') },
+  admin:    { label: '管理員',      test: u => u.roles.includes('admin') },
   bound:    { label: '已綁定 LINE', test: u => !!u.line_uid },
   unbound:  { label: '未綁定',      test: u => !u.line_uid },
   inactive: { label: '已停用',      test: u => !u.is_active },
@@ -1859,12 +1861,12 @@ function renderElderly(data) {
   const grid = document.getElementById('elderly-grid');
   if (!rows.length) {
     grid.innerHTML = `<div class="empty" style="grid-column:1/-1">
-      <div class="empty-icon">👴</div>
-      <div class="empty-text">${all.length ? '這個條件下沒有長者，換個篩選或清掉搜尋字' : '尚未新增長者'}</div>
+      <div class="empty-icon">👥</div>
+      <div class="empty-text">${all.length ? '這個條件下沒有人，換個篩選或清掉搜尋字' : '尚未新增人員'}</div>
     </div>`;
     return;
   }
-  grid.innerHTML = rows.map(u => personCard(u)).join('');
+  grid.innerHTML = rows.map(u => personCard(u, { roles: true })).join('');
 }
 
 // ════════════════════════════════════════════════

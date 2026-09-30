@@ -152,7 +152,7 @@ def main():
         page.screenshot(path=str(artifacts / "mobile-map.png"), full_page=True)
         page.locator("#nav-toggle").click()
         page.wait_for_timeout(250)
-        assert page.get_by_role("button", name="長者管理", exact=True).is_visible()
+        assert page.get_by_role("button", name="人員管理", exact=True).is_visible()
         page.screenshot(path=str(artifacts / "mobile-navigation.png"), full_page=True)
         page.locator("#nav-close").click()
         if frame.locator("#close-inspector").is_visible():

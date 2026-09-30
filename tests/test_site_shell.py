@@ -17,8 +17,8 @@ def web():
 def test_root_is_one_shell_with_every_section_in_a_single_nav(web):
     page = web.get("/")
     assert page.status_code == 200 and "<iframe" in page.text
-    for label in ("事件處置工作區", "總覽", "長者狀態", "趨勢分析", "長者管理",
-                  "志工 / 家屬", "照護關係", "AI 助手", "知識庫"):
+    for label in ("事件處置工作區", "總覽", "長者狀態", "趨勢分析", "人員管理",
+                  "志工申請", "照護關係", "AI 助手", "知識庫"):
         assert label in page.text, label
     for removed in ("社區地圖", "情境模擬", "路網沙盤", "調度（需求・物資）"):
         assert removed not in page.text, removed

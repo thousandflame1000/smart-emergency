@@ -159,7 +159,7 @@ def checks(db: Session) -> list[dict]:
     late = now_tw >= due and elders and not sent_today
     out.append(_item("checkin", f"今日打卡（{hour:02d}:{minute:02d} 發送）", "warn" if late else "ok",
                      f"已發送 {sent_today} 則，綁定 LINE 的長者 {elders} 位",
-                     "排程可能沒跑；到「長者管理」按「立即發送打卡」。"))
+                     "排程可能沒跑；到「人員管理」按上方「立即發送打卡」。"))
 
     covered = {row[0] for row in db.query(CareRelation.elderly_id).filter(CareRelation.is_active.is_(True)).all()}
     elder_ids = [row[0] for row in db.query(User.id).filter(User.role_filter("elderly"), User.is_active.is_(True)).all()]
