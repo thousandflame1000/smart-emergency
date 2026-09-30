@@ -175,3 +175,13 @@ def test_console_logs_when_an_sos_was_reported_to_119(db, line_outbox):
     other = CommunityNeed(requester_id=need.requester_id, need_type="water", status="open")
     db.add(other); db.commit()
     assert client.post(f"/api/resources/needs/{other.id}/reported_119").status_code == 404
+
+
+def test_admin_sos_card_carries_triage_details(db, line_outbox, monkeypatch):
+    from app.services import aed
+    monkeypatch.setattr(aed, "aeds", lambda: (aed.Aed("活動中心", "大廳", 23.6652, 121.4181, "00:00-23:59",
+                                                     "00:00-23:59", "00:00-23:59", "", None),))
+    _world(db)
+    message = [m for kind, to, m in line_outbox.sent if kind == "push" and to == "U-admin"][-1]
+    card = json.dumps(message.contents.to_dict(), ensure_ascii=False)
+    assert "脆弱度" in card and "已通知附近 2 位志工" in card and "最近的 AED：活動中心" in card

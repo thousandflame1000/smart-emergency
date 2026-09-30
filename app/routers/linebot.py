@@ -403,9 +403,16 @@ def _trigger_sos(user, db) -> dict:
         except Exception:
             logger.exception("[sos] 通知附近志工失敗")
     where = user.address or ("已分享的位置" if user.lat is not None else "位置未知")
+    # 管理員在手機上就能分輕重：平時打卡累積的脆弱度、附近有幾位志工被叫、最近的 AED
+    from app.services import aed
+    from app.services.dispatch import _vulnerability_pts
+    triage = [f"脆弱度 {_vulnerability_pts(user.id, db):.0f}（越高越需要優先）",
+              f"已通知附近 {nearby} 位志工" if nearby else "附近沒有可通知的志工，請管理員指派"]
+    aed_line = aed.one_line(sos_need.lat, sos_need.lng)
     admins = notify_admins(
         db,
-        f"🆘 {user.name} 剛按下一鍵求助（{where}）。{'已' if created else '之前已'}建立緊急求助單，請立即聯繫確認。",
+        f"🆘 {user.name} 剛按下一鍵求助（{where}）。{'已' if created else '之前已'}建立緊急求助單，請立即聯繫確認。\n"
+        + "\n".join(triage + ([aed_line] if aed_line else [])),
         buttons=_sos_admin_buttons(user, sos_need),
     )
     return {"contacts": contacts, "admins": admins, "created": created, "nearby": nearby}
