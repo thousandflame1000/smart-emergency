@@ -439,6 +439,54 @@ def need_contact(need_id: str, db: Session = Depends(get_db),
                          for r in relations if r.contact and r.contact.is_active]}
 
 
+@router.get("/needs/{need_id}/sos_candidates")
+def sos_candidates(need_id: str, db: Session = Depends(get_db),
+                   _principal: dict | None = Depends(require_admin)):
+    """可以指派去處理這筆求救的人：志工由近到遠，再加上管理員。"""
+    from app.models.user import User
+    from app.services.geo import haversine_km
+    from app.services.sos import spot
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
+    if need is None or need.need_type != "sos":
+        raise HTTPException(404, "找不到這筆求救")
+    where = spot(need)
+    people = []
+    for u in db.query(User).filter(User.is_active.is_(True)).all():
+        if u.id == need.requester_id or not (u.has_role("volunteer") or u.has_role("admin")):
+            continue
+        km = haversine_km(where[0], where[1], u.lat, u.lng) if where and None not in (u.lat, u.lng) else None
+        people.append({"id": str(u.id), "name": u.name, "role": "志工" if u.has_role("volunteer") else "管理員",
+                       "km": round(km, 1) if km is not None else None, "line": bool(u.line_uid)})
+    people.sort(key=lambda p: (p["role"] != "志工", p["km"] is None, p["km"] or 0))
+    return {"candidates": people[:12]}
+
+
+@router.post("/needs/{need_id}/assign_sos")
+def assign_sos(need_id: str, user_id: str, db: Session = Depends(get_db),
+               _principal: dict | None = Depends(require_admin)):
+    """後台指派處理人（受理）。對方綁了 LINE 就推任務卡：電話、導航、處理完成。"""
+    from app.models.user import User
+    from app.services import sos
+    from app.services.line_notify import push_flex_message
+    person = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
+    if person is None or not (person.has_role("volunteer") or person.has_role("admin")):
+        raise HTTPException(400, "只能指派志工或管理員")
+    result = sos.take(db, need_id, person, via="後台指派")
+    if result.get("error"):
+        raise HTTPException(404, result["error"])
+    if not result.get("ok"):
+        raise HTTPException(409, result["message"])
+    pushed = False
+    if person.line_uid and not result.get("already_mine"):
+        try:
+            push_flex_message(person.line_uid, "由您處理這筆求救", sos.responder_card(result["need"]))
+            pushed = True
+        except Exception:
+            pushed = False
+    note = "已傳 LINE 任務卡給對方" if pushed else "對方沒有綁定 LINE，請電話通知"
+    return {"message": f"已指派 {person.name} 處理；{note}", "need_id": need_id}
+
+
 @router.post("/needs/{need_id}/resolve_sos")
 def resolve_sos_need(need_id: str, db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """管理員確認已聯繫、處理完一筆一鍵求助"""

@@ -1102,7 +1102,7 @@ def resolve_sos(need_id: str, db: Session, *, actor_label: str = "manager") -> d
     db.commit()
     notify_requester(
         need,
-        "✅ 管理員已確認處理您的緊急求助。如果您仍然需要協助，請再傳「需要幫忙」；"
+        "✅ 您的緊急求助已確認處理完成。如果您仍然需要協助，請再傳「需要幫忙」；"
         "生命危險請直接撥打 119。",
     )
     return {"message": "sos resolved", "need_id": need_id}

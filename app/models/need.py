@@ -26,9 +26,13 @@ class CommunityNeed(Base):
     matched_resource_id = Column(GUID(), ForeignKey("community_resources.id"), nullable=True)
     valid_until         = Column(TIMESTAMP(), nullable=True)
     created_at          = Column(TIMESTAMP(), server_default=func.now())
+    # 一鍵求救的「受理」：第一個說「我過去／我來處理」的人，其他人就知道已經有人在處理
+    responder_id        = Column(GUID(), ForeignKey("users.id"), nullable=True)
+    acknowledged_at     = Column(TIMESTAMP(), nullable=True)
     zone_id             = Column(Text, ForeignKey("zones.id"), nullable=False,
                                  default=GENERAL_ZONE_ID, server_default=text(f"'{GENERAL_ZONE_ID}'"))
 
-    requester        = relationship("User", back_populates="needs")
+    requester        = relationship("User", back_populates="needs", foreign_keys=[requester_id])
+    responder        = relationship("User", foreign_keys=[responder_id])
     matched_resource = relationship("CommunityResource")
     zone             = relationship("Zone")

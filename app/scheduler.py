@@ -84,6 +84,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # 求救超過 10 分鐘沒人受理：再叫管理員一次
+    from app.services.sos import escalate_unacknowledged
+    _scheduler.add_job(
+        single_instance_job("sos_escalation", escalate_unacknowledged),
+        IntervalTrigger(minutes=2),
+        id="sos_escalation",
+        replace_existing=True,
+    )
+
     # 緊急模式：每 30 分鐘自動媒合物資
     from app.services.dispatch import auto_dispatch
     _scheduler.add_job(

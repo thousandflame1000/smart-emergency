@@ -25,7 +25,8 @@ class User(Base):
     alerts    = relationship("Alert", back_populates="elderly",
                              foreign_keys="Alert.elderly_id")
     resources = relationship("CommunityResource", back_populates="owner")
-    needs     = relationship("CommunityNeed", back_populates="requester")
+    needs     = relationship("CommunityNeed", back_populates="requester",
+                             foreign_keys="CommunityNeed.requester_id")
 
     def has_role(self, role: str) -> bool:
         return role in (self.roles or [])

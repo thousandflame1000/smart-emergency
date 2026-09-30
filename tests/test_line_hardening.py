@@ -641,7 +641,7 @@ def test_admin_can_close_a_sos_and_the_requester_is_told(db, line_outbox, api):
     res = api.post(f"/api/resources/needs/{nid}/resolve_sos")
     assert res.status_code == 200
     db3 = SessionLocal(); assert db3.query(CommunityNeed).one().status == "fulfilled"; db3.close()
-    assert any("管理員已確認處理" in t for t in sent_to(line_outbox, "Ualone"))
+    assert any("緊急求助已確認處理完成" in t for t in sent_to(line_outbox, "Ualone"))
     assert api.post(f"/api/resources/needs/{nid}/resolve_sos").status_code == 200  # 重複按不出錯
 
 

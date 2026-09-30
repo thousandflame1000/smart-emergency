@@ -327,7 +327,8 @@ def _looks_like_question(text: str) -> bool:
 # ──────────────────────────────────────────────
 def _sos_admin_buttons(user, sos_need) -> list[dict]:
     """管理員收到求救時最先要做的是打電話，其次是知道人在哪。"""
-    buttons = [{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={sos_need.id}", "color": "#c0392b"}]
+    buttons = [{"label": "🙋 我來處理", "data": f"action=sos_take&need_id={sos_need.id}", "color": "#c0392b"},
+               {"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={sos_need.id}"}]
     if tel_uri(user.phone):
         buttons.insert(0, {"label": f"📞 撥打 {user.name}"[:20], "uri": tel_uri(user.phone),
                            "color": "#c0392b"})
@@ -392,13 +393,20 @@ def _trigger_sos(user, db) -> dict:
         db.commit()
         created = True
 
+    nearby = 0
+    if created:
+        from app.services.sos import alert_nearby
+        try:
+            nearby = alert_nearby(db, sos_need)
+        except Exception:
+            logger.exception("[sos] 通知附近志工失敗")
     where = user.address or ("已分享的位置" if user.lat is not None else "位置未知")
     admins = notify_admins(
         db,
         f"🆘 {user.name} 剛按下一鍵求助（{where}）。{'已' if created else '之前已'}建立緊急求助單，請立即聯繫確認。",
         buttons=_sos_admin_buttons(user, sos_need),
     )
-    return {"contacts": contacts, "admins": admins, "created": created}
+    return {"contacts": contacts, "admins": admins, "created": created, "nearby": nearby}
 
 
 def _report_unwell(user, db, checkin=None) -> str:
@@ -438,6 +446,8 @@ def _sos_reply_text(result: dict) -> str:
         lines.append(f"已通知您的 {result['contacts']} 位照護聯絡人。")
     else:
         lines.append("目前沒有登記可以通知的家屬或志工。")
+    if result.get("nearby"):
+        lines.append(f"也通知了附近 {result['nearby']} 位志工。")
     if result["admins"]:
         lines.append("並已通知社區管理員。")
     else:
@@ -1495,11 +1505,35 @@ def handle_postback(event: PostbackEvent):
     elif action == "claim":
         _handle_claim(event, db, user, data.get("need_id", ""))
 
+    elif action in ("sos_go", "sos_take", "sos_done"):
+        _handle_sos_button(event, db, user, action, data.get("need_id", ""))
+
     elif line_ops.handle_postback(event, db, user, action or "", data):
         pass
 
     elif action in ("task_delivered", "task_decline", "task_accept"):
         _handle_task_button(event, db, user, action, data.get("need_id", ""))
+
+
+def _handle_sos_button(event, db, user, action: str, need_id: str) -> None:
+    """附近志工按「我過去」、管理員按「我來處理」、處理人按「處理完成」。"""
+    from app.services import sos
+    if action == "sos_done":
+        result = sos.finish(db, need_id, user)
+        _say(event, "⚠️ " + result["error"] if result.get("error") else
+             "這筆求救已經結案了。" if result.get("already_resolved") else "✅ 已結案，當事人與管理員都已收到通知。謝謝您！")
+        return
+    if action == "sos_take" and not user.has_role("admin"):
+        _say(event, "此功能僅限管理員使用。")
+        return
+    if action == "sos_go" and not (user.has_role("volunteer") or user.has_role("admin")):
+        _say(event, "只有已核准的志工可以受理求救。")
+        return
+    result = sos.take(db, need_id, user, via="LINE「我過去」" if action == "sos_go" else "LINE「我來處理」")
+    if result.get("ok"):
+        line_ops._flex(event, "由您處理這筆求救", sos.responder_card(result["need"]))
+    else:
+        _say(event, result.get("message") or "⚠️ " + result.get("error", "受理失敗"))
 
 
 def _get_mode(db) -> str:

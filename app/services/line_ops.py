@@ -363,15 +363,19 @@ def admin_sos_list(event, db: Session, user: User) -> None:
         _say(event, "目前沒有待處理的求救單 👍")
         return
     _flex(event, f"{len(rows)} 筆求救單", carousel([sos_bubble(str(n.id), n.requester.name if n.requester else "?",
-                                                              n.address, n.requester.phone if n.requester else None)
+                                                              n.address, n.requester.phone if n.requester else None,
+                                                              n.responder.name if n.responder else None)
                                                    for n in rows]))
 
 
-def sos_bubble(need_id: str, name: str, address: str | None, phone: str | None) -> dict:
+def sos_bubble(need_id: str, name: str, address: str | None, phone: str | None, responder: str | None = None) -> dict:
     buttons = [{"label": "✅ 已聯繫處理", "data": f"action=admin_sos&need_id={need_id}", "color": "#c0392b"}]
+    if not responder:
+        buttons.insert(0, {"label": "🙋 我來處理", "data": f"action=sos_take&need_id={need_id}", "color": "#c0392b"})
     if tel_uri(phone):
         buttons.insert(0, {"label": f"📞 撥打 {phone}"[:20], "uri": tel_uri(phone)})
-    return bubble("🆘 緊急求助", "#c0392b", [f"當事人：{name}", f"地點：{address or '未知'}", "請立即聯繫，必要時通報 119"],
+    return bubble("🆘 緊急求助", "#c0392b", [f"當事人：{name}", f"地點：{address or '未知'}",
+                                         f"處理人：{responder}" if responder else "尚未有人受理，請立即聯繫，必要時通報 119"],
                   buttons)
 
 

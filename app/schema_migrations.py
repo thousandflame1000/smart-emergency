@@ -55,6 +55,8 @@ def ensure_additive_schema(engine: Engine) -> None:
             "quantity_unit": "TEXT",
             "reserved_quantity_amount": "INTEGER NOT NULL DEFAULT 0",
             "fulfilled_quantity_amount": "INTEGER NOT NULL DEFAULT 0",
+            "responder_id": "VARCHAR(36)",
+            "acknowledged_at": "TIMESTAMP",
         }
         with engine.begin() as connection:
             for name, sql_type in additions.items():

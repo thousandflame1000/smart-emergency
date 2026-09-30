@@ -64,7 +64,8 @@ def get_summary(db: Session = Depends(get_db)):
         # 未處理的一鍵求救，最早的在前；外框靠 id 判斷有沒有新的進來
         "open_sos": [{"id": str(n.id), "name": n.requester.name if n.requester else "",
                       "address": n.address or (n.requester.address if n.requester else "") or "",
-                      "reported_at": n.created_at.replace(tzinfo=UTC).isoformat() if n.created_at else None}
+                      "reported_at": n.created_at.replace(tzinfo=UTC).isoformat() if n.created_at else None,
+                      "responder": n.responder.name if n.responder_id and n.responder else None}
                      for n in sos],
     }
 

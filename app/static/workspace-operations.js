@@ -14,7 +14,7 @@ const isSos=n=>n.properties.need_type==='sos';
 function minutesSince(iso){return iso?(Date.now()-new Date(iso))/60000:0;}
 function sinceText(iso){return iso&&window.sosAlarm?sosAlarm.since(iso):'';}
 function reportedText(iso){if(!iso)return'未知';const d=new Date(iso);return(minutesSince(iso)>=1440?d.toLocaleDateString('zh-TW')+' ':'')+d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})+'（'+sinceText(iso)+'）';}
-function ageClass(n){if(!isSos(n)||n.properties.status!=='open')return'';const m=minutesSince(n.properties.reported_at);return m>=SOS_OVERDUE_MIN?'overdue':m>=SOS_LATE_MIN?'late':'';}
+function ageClass(n){if(!isSos(n)||n.properties.status!=='open'||n.properties.responder)return'';const m=minutesSince(n.properties.reported_at);return m>=SOS_OVERDUE_MIN?'overdue':m>=SOS_LATE_MIN?'late':'';}
 function openSos(){return operationalNodes().filter(n=>isSos(n)&&n.properties.status==='open');}
 function showSos(id){operationStage='sos';setCatalog('tasks');renderOperations();focusOperational(id);}
 const inventoryDrafts=new Map(), operationEvents=new Map();
@@ -49,7 +49,7 @@ function renderOperationTasks(){
   const tasks=operationalNodes().filter(n=>taskInStage(n,operationStage)&&(n.label+' '+n.id+' '+n.properties.description).toLowerCase().includes(query)).sort((a,b)=>operationStage==='sos'?byAge(a,b):(b.properties.urgency-a.properties.urgency)||byAge(a,b));
   $('operation-tasks').innerHTML=tasks.map(n=>{
     const sos=isSos(n),where=n.lat===null?'位置未知':(n.properties.address||n.properties.location_source),since=sinceText(n.properties.reported_at);
-    const meta=sos?[since&&'通報 '+since,where]:[n.properties.quantity_text||'數量未填',where,since];
+    const meta=sos?[n.properties.responder?'處理中：'+n.properties.responder:'未受理',since&&'通報 '+since,where]:[n.properties.quantity_text||'數量未填',where,since];
     return `<button data-task="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''} ${ageClass(n)}"><span class="task-priority ${sos?'urgent':''}">${sos?'SOS':'P'+n.properties.urgency}</span><span class="task-text">${escapeHtml(n.label)}<small>${escapeHtml(meta.filter(Boolean).join(' · '))}</small></span></button>`;
   }).join('')||'<p class="muted">此狀態沒有需求</p>';
   $('operation-tasks').querySelectorAll('button').forEach(b=>b.onclick=()=>focusOperational(b.dataset.task));
@@ -128,7 +128,8 @@ function renderOperationalSelection(item,isNode){
   if(p.db==='point')fields.push(['收容容量',p.capacity??'未知'],['目前人數',p.current_load??'未知'],['庫存','未提供'],
     ['電話',p.base_values?.phone||'未提供'],['開放時間',p.base_values?.operating_hours||'未提供']);
   // 求救不是物資需求：不顯示數量、優先級，狀態說「待處理」而不是「待媒合」
-  if(p.db==='need'&&p.need_type==='sos')fields.push(['狀態',p.status==='open'?'待處理':(NEED_STATUS[p.status]||p.status)],['通報時間',reportedText(p.reported_at)],['狀況',p.description||'未說明'],['定位依據',p.location_source]);
+  if(p.db==='need'&&p.need_type==='sos')fields.push(['狀態',p.status==='open'?(p.responder?'處理中':'待受理'):(NEED_STATUS[p.status]||p.status)],
+    ['處理人',p.responder?p.responder+'，'+reportedText(p.acknowledged_at)+'受理':'尚未有人受理'],['通報時間',reportedText(p.reported_at)],['狀況',p.description||'未說明'],['定位依據',p.location_source]);
   else if(p.db==='need')fields.push(['狀態',NEED_STATUS[p.status]||p.status],['通報時間',reportedText(p.reported_at)],['優先級',p.urgency],['登記數量',p.quantity_text||'未知'],['需求',p.description||'未填'],['定位依據',p.location_source]);
   // 原始經緯度是系統內部表示（而且會露出浮點誤差），摘要只講定位結果；
   // 要精確數值的人是在編輯，那邊本來就有緯度／經度欄位。
@@ -153,8 +154,8 @@ function renderOperationalSelection(item,isNode){
       else actions.insertAdjacentHTML('beforeend','<p class="muted">核准派遣僅限管理員，請聯絡管理員處理。</p>');
     }
     if(p.status==='open'&&p.need_type==='sos'){
-      if(isAdmin())button('確認已處理','check-check',()=>actOnNeed(item,'resolve_sos'),true);
-      else actions.insertAdjacentHTML('beforeend','<p class="muted">標記已處理僅限管理員。</p>');
+      if(isAdmin()){if(!p.responder)loadSosCandidates(item);button('確認已處理','check-check',()=>actOnNeed(item,'resolve_sos'),!!p.responder);}
+      else actions.insertAdjacentHTML('beforeend','<p class="muted">受理與結案僅限管理員。</p>');
     }
     if(p.status==='open'&&p.need_type!=='sos'){
       let proposeButton=null;
@@ -180,6 +181,30 @@ async function loadNeedContact(node){
     box.innerHTML=links.length?'<h2>聯絡</h2>'+links.join(''):(isSos(node)?'<p class="error">求助者與家屬都沒有登記電話，請派人到場確認。</p>':'');
     icons();
   }catch(e){/* 讀不到就不顯示 */}
+}
+// 求救還沒人受理：列出可以指派的人（志工由近到遠，再來是管理員），指派後對方會收到 LINE 任務卡
+async function loadSosCandidates(node){
+  const actions=$('operational-actions');
+  const box=document.createElement('div');box.className='assign-sos';box.innerHTML='<span class="muted">讀取可指派的人…</span>';
+  actions.prepend(box);
+  try{
+    const data=await resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/sos_candidates');
+    if(state.selected?.id!==node.id||!box.isConnected)return;
+    const people=data.candidates||[];
+    if(!people.length){box.innerHTML='<p class="error">沒有可指派的志工或管理員，請直接撥電話或通報 119。</p>';return;}
+    box.innerHTML=`<label>指派處理人<select id="sos-assignee">${people.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}・${escapeHtml(c.role)}${c.km!=null?'・'+c.km+' km':''}${c.line?'':'・未綁 LINE'}</option>`).join('')}</select></label>`;
+    const go=document.createElement('button');go.type='button';go.className='primary';go.innerHTML='<i data-lucide="user-round-check"></i>指派';
+    go.onclick=()=>assignSos(node,$('sos-assignee').value,$('sos-assignee').selectedOptions[0].textContent);
+    box.append(go);icons();
+  }catch(e){if(box.isConnected)box.innerHTML=`<p class="error">${escapeHtml(e.message)}</p>`;}
+}
+async function assignSos(node,userId,label){
+  if(!await askConfirm('指派處理人？',`由 <strong>${escapeHtml(label)}</strong> 處理這筆求救。對方綁了 LINE 會收到任務卡（電話、導航、處理完成）。`,'指派'))return;
+  try{
+    const r=await fetch('/api/resources/needs/'+encodeURIComponent(node.id.slice(8))+'/assign_sos?user_id='+encodeURIComponent(userId),{method:'POST'});
+    const data=await r.json();if(!r.ok||data.error)throw Error(data.error||data.detail||'指派失敗');
+    operationEvents.clear();await refreshOperations({silent:true});focusOperational(node.id);message(data.message);
+  }catch(e){message(e.message,true);}
 }
 const operationCandidates=new Map();
 async function loadOperationCandidates(node,proposeButton=null){
@@ -220,8 +245,10 @@ async function loadOperationEvents(node){
     if(!operationEvents.has(key))operationEvents.set(key,resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/events'));
     const events=await operationEvents.get(key);
     if(state.selected?.id!==node.id||nodeById(node.id)?.properties.observed_at!==node.properties.observed_at||!$('operation-events'))return;
-    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',cancel_need:'取消需求',admin_message:'管理員指示'};
-    $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(e.actor_label||'系統')} · ${escapeHtml(e.created_at)}</small></div>`).join(''):'尚無派遣紀錄';
+    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',cancel_need:'取消需求',admin_message:'管理員指示'};
+    // 求救事件不走物資狀態（受理後仍是 open，顯示「待媒合」會誤導）；時間轉成台灣時間
+    const when=t=>{const d=new Date(String(t||'').replace(' ','T')+(/[zZ]|[+-]\d\d:?\d\d$/.test(t||'')?'':'Z'));return isNaN(d)?(t||''):d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});};
+    $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${e.action.startsWith('sos_')?'':escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(e.actor_label||'系統')} · ${escapeHtml(when(e.created_at))}</small></div>`).join(''):'尚無處理紀錄';
   }catch(e){operationEvents.delete(key);if(state.selected?.id===node.id&&$('operation-events'))$('operation-events').textContent=e.message;}
 }
 async function messageAssignee(node){

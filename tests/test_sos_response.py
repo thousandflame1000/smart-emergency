@@ -1,0 +1,125 @@
+"""一鍵求救的處理流程：通知附近志工、第一個人受理、逾時升級、結案、後台指派。"""
+import json
+from datetime import timedelta
+
+from fastapi.testclient import TestClient
+
+from app.models.dispatch_event import DispatchEvent
+from app.models.need import CommunityNeed
+from app.routers import linebot as lb
+from app.services import sos
+from app.timeutil import now_utc
+from tests.test_line_hardening import mk, press, replies, sent_to
+
+ALERT = "🆘 附近有人需要幫忙"
+
+
+def _world(db):
+    elder = mk(db, "陳阿公", ["elderly"], "U-elder", lat=23.6650, lng=121.4180,
+               address="光復鄉大進村 12 號", phone="0911222333")
+    near = mk(db, "近志工", ["volunteer"], "U-near", lat=23.6690, lng=121.4180)   # 約 445 公尺
+    mid = mk(db, "中志工", ["volunteer"], "U-mid", lat=23.6800, lng=121.4180)     # 約 1.7 公里
+    far = mk(db, "遠志工", ["volunteer"], "U-far", lat=23.7200, lng=121.4180)     # 約 6 公里
+    mk(db, "鄰居", ["elderly"], "U-res", lat=23.6651, lng=121.4181)    # 不是志工
+    admin = mk(db, "管理員", ["admin"], "U-admin")
+    lb._trigger_sos(elder, db)
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    return need, elder, near, mid, far, admin
+
+
+def _card(outbox, uid):
+    message = [m for kind, to, m in outbox.sent if kind == "push" and to == uid][-1]
+    return json.dumps(message.contents.to_dict(), ensure_ascii=False)
+
+
+def test_sos_alerts_only_volunteers_within_reach(db, line_outbox):
+    need, *_ = _world(db)
+    assert sent_to(line_outbox, "U-near") == [ALERT] and sent_to(line_outbox, "U-mid") == [ALERT]
+    assert not sent_to(line_outbox, "U-far") and not sent_to(line_outbox, "U-res"), "太遠的志工與一般居民不叫"
+    card = _card(line_outbox, "U-near")
+    assert f"action=sos_go&need_id={need.id}" in card and "公尺）" in card
+    assert "0911222333" not in card, "還沒受理前不給電話"
+    assert "也通知了附近 2 位志工" in lb._sos_reply_text({"contacts": 0, "admins": 1, "nearby": 2})
+
+
+def test_first_volunteer_to_press_takes_it_and_later_ones_are_told(db, line_outbox):
+    need, elder, near, mid, far, admin = _world(db)
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    press("U-near", f"action=sos_go&need_id={need.id}")
+    db.expire_all()
+    assert str(need.responder_id) == str(mid.id) and need.acknowledged_at is not None and need.status == "open"
+    assert replies(line_outbox)[-2] == "由您處理這筆求救"
+    assert "已經有 中志工 在處理了" in replies(line_outbox)[-1]
+    reply_card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-2]
+    assert "tel:0911222333" in json.dumps(reply_card.contents.to_dict(), ensure_ascii=False), "受理後才給電話"
+    assert any("中志工 已受理 陳阿公 的求救" in t for t in sent_to(line_outbox, "U-admin"))
+    assert db.query(DispatchEvent).filter(DispatchEvent.action == "sos_acknowledged").count() == 1
+
+
+def test_only_volunteers_and_admins_can_take(db, line_outbox):
+    need, *_ = _world(db)
+    press("U-res", f"action=sos_go&need_id={need.id}")
+    assert "只有已核准的志工" in replies(line_outbox)[-1]
+    press("U-near", f"action=sos_take&need_id={need.id}")
+    assert "僅限管理員" in replies(line_outbox)[-1]
+    db.expire_all()
+    assert need.responder_id is None
+
+
+def test_only_the_responder_or_an_admin_can_close(db, line_outbox):
+    need, *_ = _world(db)
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    press("U-near", f"action=sos_done&need_id={need.id}")
+    assert "只有受理這筆求救的人或管理員可以結案" in replies(line_outbox)[-1]
+    press("U-mid", f"action=sos_done&need_id={need.id}")
+    db.expire_all()
+    assert need.status == "fulfilled"
+    assert any("中志工 回報 陳阿公 的求救已處理完成" in t for t in sent_to(line_outbox, "U-admin"))
+    press("U-near", f"action=sos_go&need_id={need.id}")
+    assert "已經處理完成" in replies(line_outbox)[-1]
+
+
+def test_admin_takes_from_the_line_card(db, line_outbox):
+    need, *_ = _world(db)
+    press("U-admin", f"action=sos_take&need_id={need.id}")
+    db.expire_all()
+    assert need.responder.name == "管理員" and replies(line_outbox)[-1] == "由您處理這筆求救"
+
+
+def test_unacknowledged_sos_is_escalated_once(db, line_outbox):
+    need, *_ = _world(db)
+    assert sos.escalate_unacknowledged(db) == 0, "剛通報的不升級"
+    need.created_at = now_utc().replace(tzinfo=None) - timedelta(minutes=sos.ESCALATE_MINUTES + 1)
+    db.commit()
+    assert sos.escalate_unacknowledged(db) == 1
+    assert sos.escalate_unacknowledged(db) == 0, "每筆只再叫一次"
+    assert any("超過 10 分鐘沒有人受理" in t for t in sent_to(line_outbox, "U-admin"))
+
+
+def test_acknowledged_sos_is_not_escalated(db, line_outbox):
+    need, *_ = _world(db)
+    press("U-near", f"action=sos_go&need_id={need.id}")
+    db.expire_all()
+    need.created_at = now_utc().replace(tzinfo=None) - timedelta(minutes=30)
+    db.commit()
+    assert sos.escalate_unacknowledged(db) == 0
+
+
+def test_console_assigns_a_responder_who_gets_the_card(db, line_outbox):
+    from app.main import app
+    from app.services.workspace_bridge import operational_snapshot
+    need, elder, near, mid, far, admin = _world(db)
+    client = TestClient(app)
+    people = client.get(f"/api/resources/needs/{need.id}/sos_candidates").json()["candidates"]
+    assert [p["name"] for p in people] == ["近志工", "中志工", "遠志工", "管理員"], "志工由近到遠，管理員最後"
+    r = client.post(f"/api/resources/needs/{need.id}/assign_sos?user_id={far.id}")
+    assert r.status_code == 200 and "已傳 LINE 任務卡" in r.json()["message"]
+    assert sent_to(line_outbox, "U-far")[-1] == "由您處理這筆求救"
+    again = client.post(f"/api/resources/needs/{need.id}/assign_sos?user_id={near.id}")
+    assert again.status_code == 409 and "遠志工" in again.json()["detail"]
+    db.expire_all()
+    node = next(n for n in operational_snapshot(db)["graph"]["nodes"] if n["id"] == f"db:need:{need.id}")
+    assert node["properties"]["responder"] == "遠志工" and node["properties"]["acknowledged_at"].endswith("+00:00")
+    assert client.get("/api/dashboard/summary").json()["open_sos"][0]["responder"] == "遠志工"
+    bad = client.post(f"/api/resources/needs/{need.id}/assign_sos?user_id={elder.id}")
+    assert bad.status_code == 400
