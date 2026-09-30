@@ -14,14 +14,24 @@ from app.services import line_notify, system_status
 
 @pytest.fixture(autouse=True)
 def fresh_line_cache():
-    system_status._line_cache.update(at=0.0, result=None)
+    for cache in (system_status._line_cache, system_status._quota_cache):
+        cache.update(at=0.0, result=None)
     yield
-    system_status._line_cache.update(at=0.0, result=None)
+    for cache in (system_status._line_cache, system_status._quota_cache):
+        cache.update(at=0.0, result=None)
 
 
 class _Bot:
+    used = 12
+
     def get_bot_info(self):
         return SimpleNamespace(display_name="鄰里守望", basic_id="@571hpppb")
+
+    def get_message_quota(self):
+        return SimpleNamespace(type="limited", value=200)
+
+    def get_message_quota_consumption(self):
+        return SimpleNamespace(total_usage=self.used)
 
 
 def _healthy(db, monkeypatch):
@@ -130,3 +140,31 @@ def test_people_without_line_are_not_counted_as_delivery_failures(db):
                          message_type="TEXT", payload={}, status="DEAD", last_error="401 invalid token"))
     db.commit()
     assert _by_key(db)["outbox"]["level"] == "error"
+
+
+@pytest.mark.parametrize("used, level, detail", [
+    (12, "ok", "已推 12／200 則，剩 188 則"),
+    (160, "warn", "已推 160／200 則，剩 40 則"),
+    (205, "error", "已推 205／200 則，剩 0 則"),
+])
+def test_monthly_push_quota_warns_before_it_runs_out(db, monkeypatch, used, level, detail):
+    _healthy(db, monkeypatch)
+    monkeypatch.setattr(_Bot, "used", used)
+    item = _by_key(db)["quota"]
+    assert (item["level"], item["detail"]) == (level, detail)
+    assert bool(item["hint"]) == (level != "ok")
+
+
+def test_unlimited_plan_and_unreadable_quota(monkeypatch):
+    class Paid(_Bot):
+        def get_message_quota(self):
+            return SimpleNamespace(type=SimpleNamespace(value="none"), value=None)
+    monkeypatch.setattr(line_notify, "_get_api", lambda: Paid())
+    assert system_status._quota_check()["detail"] == "不限量，本月已推 12 則"
+    system_status._quota_cache.update(at=0.0, result=None)
+
+    class Broken(_Bot):
+        def get_message_quota(self):
+            raise RuntimeError("500")
+    monkeypatch.setattr(line_notify, "_get_api", lambda: Broken())
+    assert system_status._quota_check()["level"] == "warn"

@@ -22,7 +22,9 @@ from app.models.webhook_event import WebhookEvent
 from app.timeutil import TAIWAN, now_utc, today_tw
 
 _line_cache: dict = {"at": 0.0, "result": None}
+_quota_cache: dict = {"at": 0.0, "result": None}
 LINE_CACHE_SECONDS = 300
+QUOTA_WARN_LEFT = 50
 
 
 def _item(key, label, level, detail, hint=None):
@@ -46,6 +48,29 @@ def _line_check() -> dict:
                   f"LINE 回應錯誤（{status}）" if status else "連不上 LINE 伺服器")
         return _item("line", "LINE 官方帳號", "error", reason,
                      "檢查 Railway 的 LINE_CHANNEL_ACCESS_TOKEN 是否正確、未過期。")
+
+
+def _quota_check() -> dict:
+    """本月推播額度：主動推給每個人各算一則（回覆不算）。用完之後求救、點名、家屬通知都推不出去。"""
+    if _quota_cache["result"] and time.time() - _quota_cache["at"] < LINE_CACHE_SECONDS:
+        return _quota_cache["result"]
+    label = "LINE 推播額度（本月）"
+    try:
+        from app.services.line_notify import _get_api
+        api = _get_api()
+        quota = api.get_message_quota()
+        used = api.get_message_quota_consumption().total_usage
+    except Exception:
+        return _item("quota", label, "warn", "讀不到本月額度", "確認上方 LINE 官方帳號是綠燈。")
+    if str(getattr(quota.type, "value", quota.type)) != "limited":
+        result = _item("quota", label, "ok", f"不限量，本月已推 {used} 則")
+    else:
+        left = quota.value - used
+        result = _item("quota", label, "error" if left <= 0 else "warn" if left < QUOTA_WARN_LEFT else "ok",
+                       f"已推 {used}／{quota.value} 則，剩 {max(left, 0)} 則",
+                       "用完後求救、點名、家屬通知都推不出去（回覆訊息不受影響）。到 LINE 官方帳號管理後台升級方案，演練時少切幾次緊急模式。")
+    _quota_cache.update(at=time.time(), result=result)
+    return result
 
 
 def _menu_check() -> dict:
@@ -110,6 +135,7 @@ def checks(db: Session) -> list[dict]:
     line = _line_check()
     out.append(line)
     if line["level"] == "ok":
+        out.append(_quota_check())
         out.append(_menu_check())
 
     admins = db.query(User).filter(User.role_filter("admin"), User.line_uid.isnot(None), User.is_active.is_(True)).count()
