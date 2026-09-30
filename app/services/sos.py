@@ -39,6 +39,12 @@ def _navigate(need: CommunityNeed) -> str | None:
     return f"https://www.google.com/maps/dir/?api=1&destination={where[0]},{where[1]}" if where else None
 
 
+def _aed_line(need: CommunityNeed) -> str | None:
+    from app.services.aed import one_line
+    where = spot(need)
+    return one_line(*where) if where else None
+
+
 def nearby_volunteers(db: Session, need: CommunityNeed) -> list[tuple[User, float]]:
     """已核准、綁了 LINE、有登記位置的志工，由近到遠；求救者本人不算。"""
     where = spot(need)
@@ -70,6 +76,7 @@ def alert_nearby(db: Session, need: CommunityNeed) -> int:
         card = bubble("🆘 附近有人需要幫忙", "#c0392b",
                       [f"{requester.name if requester else '一位居民'}按下了一鍵求救",
                        f"地點：{need.address or '見導航'}（離您約 {distance}）",
+                       *([_aed_line(need)] if _aed_line(need) else []),
                        "能過去看看的話請按「我過去」；第一位按的人負責，其他人會收到通知。",
                        "有生命危險請直接撥 119。"], buttons)
         try:
@@ -94,6 +101,7 @@ def responder_card(need: CommunityNeed) -> dict:
                   [f"當事人：{requester.name if requester else '未知'}",
                    f"地點：{need.address or '見導航'}",
                    f"狀況：{need.description or '未說明'}",
+                   *([_aed_line(need)] if _aed_line(need) else []),
                    "到場確認安全後按「處理完成」。需要送醫請撥 119。"], buttons)
 
 

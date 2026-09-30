@@ -48,6 +48,8 @@ def no_open_shelters(monkeypatch):
     """全國公告收容所有六千處，會擠掉測試自己放的據點；要測它的測試自己換回真的清單。"""
     from app.services import nearby
     monkeypatch.setattr(nearby, "open_shelters", lambda: ())
+    from app.services import aed
+    monkeypatch.setattr(aed, "aeds", lambda: ())
 
 
 @pytest.fixture

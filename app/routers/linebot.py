@@ -1004,7 +1004,32 @@ def _question_allowed(uid: str) -> bool:
     return True
 
 
-def _handle_question(event, text) -> bool:
+def _reply_aeds(event, user) -> None:
+    """最近的 3 個 AED：放在哪、多遠、現在有沒有開、導航。"""
+    from app.services import aed
+    from app.services.line_notify import reply_flex_message
+    from app.services.line_ops import bubble, carousel
+    if user.lat is None or user.lng is None:
+        _say(event, "📍 請先分享位置，我才能找離您最近的 AED。\n有人倒地沒有呼吸：先撥 119，並開始 CPR。", ask_location=True)
+        return
+    rows = aed.nearest(user.lat, user.lng)
+    if not rows:
+        _say(event, "附近找不到登記的 AED。請撥 119，並開始 CPR。")
+        return
+    cards = []
+    for i, row in enumerate(rows, 1):
+        a = row["aed"]
+        buttons = [{"label": "🧭 導航", "uri": f"https://www.google.com/maps/dir/?api=1&destination={a.lat},{a.lng}"}]
+        if tel_uri(a.phone):
+            buttons.append({"label": f"📞 {a.phone}"[:20], "uri": tel_uri(a.phone)})
+        cards.append(bubble(f"{i}. {a.name}"[:40], "#b3261e",
+                            [f"放在：{a.place or '未註明'}", f"約 {aed.distance_text(row['km'])}（直線）", row["hours"],
+                             *([a.note] if a.note else [])], buttons))
+    reply_flex_message(event.reply_token, "最近的 AED：" + "、".join(r["aed"].name for r in rows),
+                       carousel(cards), location_prompt=True)
+
+
+def _handle_question(event, text, user=None) -> bool:
     if not _looks_like_question(text):
         return False
     if not _question_allowed(event.source.user_id):
@@ -1021,7 +1046,13 @@ def _handle_question(event, text) -> bool:
         sources = result.get("sources", [])
         src_line = f"\n\n📚 來源：{' | '.join(sources[:2])}" if sources else ""
         title = "📚 知識庫" if result.get("mode") == "keyword" else "🤖 AI 助手回答"
-        _say(event, f"{title}：\n\n{_clip(result['answer'])}{src_line}")
+        # 問到 CPR、昏倒、沒呼吸：順便告訴他最近的 AED 在哪
+        from app.services import aed
+        aed_line = ""
+        if aed.about_cpr(text):
+            where = aed.one_line(getattr(user, "lat", None), getattr(user, "lng", None))
+            aed_line = f"\n\n📍 {where}" if where else "\n\n📍 分享位置後傳「AED」，我可以告訴您最近的 AED 在哪。"
+        _say(event, f"{title}：\n\n{_clip(result['answer'])}{aed_line}{src_line}")
         return True
     _say(event, "🤖 知識庫裡目前沒有這個問題的資料，抱歉。\n" + EMERGENCY_TIP)
     return True
@@ -1044,6 +1075,7 @@ HELP_BASE = (
 
 
 NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所")
+AED_WORDS = ("AED", "aed", "找AED", "找 AED", "附近AED", "最近的AED", "電擊器", "去顫器", "心臟電擊器")
 APP_WORDS = ("打開 App", "打開App", "開啟 App", "App", "app")
 ASK_WORDS = ("急救問答", "問答")
 FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安", "我平安", "回報平安",
@@ -1051,7 +1083,7 @@ FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
                   "申請物資", "物資申請", "需要物資", "申請表單", "申請需求",
-                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS) | set(APP_WORDS) | set(ASK_WORDS)
+                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS) | set(APP_WORDS) | set(ASK_WORDS) | set(AED_WORDS)
 UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
 # 長輩不會照指令打字：「今天頭好暈」「有點發燒」也是在說身體不適，要讓家人知道。
 UNWELL_HINTS = ("不舒服", "不太舒服", "頭暈", "頭很暈", "頭好暈", "暈眩", "發燒", "頭痛", "頭好痛", "肚子痛", "胃痛",
@@ -1162,6 +1194,10 @@ def _process_text(event, db, user, text) -> bool:
              ("低血糖", "低血糖怎麼辦？")])
         return True
 
+    if text in AED_WORDS:
+        _reply_aeds(event, user)
+        return True
+
     if text in NEARBY_WORDS:
         from app.services.line_notify import reply_flex_message
         from app.services.nearby import NO_POINTS_TEXT, missing_text, nearby_cards
@@ -1217,7 +1253,7 @@ def _process_text(event, db, user, text) -> bool:
 
     if _handle_needs(event, db, user, text, intent):
         return True
-    return _handle_question(event, text)
+    return _handle_question(event, text, user)
 
 
 @handler.add(MessageEvent, message=TextMessageContent)

@@ -190,5 +190,10 @@ def ask(body: AskRequest, request: Request, db: Session = Depends(get_db)):
     except Exception:
         log.exception("app ask failed")
         raise ApiError(503, "AI 助手暫時無法使用，請稍後再試。有生命危險請直接撥 119。")
-    return {"answer": result.get("answer"), "sources": result.get("sources", [])[:3],
+    from app.services import aed
+    answer = result.get("answer")
+    if answer and aed.about_cpr(body.question):
+        where = aed.one_line(user.lat, user.lng)
+        answer += f"\n\n📍 {where}" if where else "\n\n📍 在「物資」分頁定位後，再問一次就會告訴您最近的 AED。"
+    return {"answer": answer, "sources": result.get("sources", [])[:3],
             "has_answer": bool(result.get("has_answer")), "mode": result.get("mode", "ai")}
