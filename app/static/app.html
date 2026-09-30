@@ -202,6 +202,10 @@ dialog h2{font-size:21px;margin-bottom:8px}
     $('today').className = 'status ' + s[0]; $('today-title').textContent = s[1]; $('today-sub').textContent = s[2];
     $('hello').textContent = me.name ? me.name + '，你好' : '鄰里守望';
     $('emergency').hidden = !me.emergency;
+    // 橫幅看對象說話：長者要回報平安，志工去看附近還沒回的人，其他人先顧好自己
+    $('emergency').textContent = me.safety ? '🚨 社區緊急模式中：請按「我平安」回報；有危險請按「需要幫忙」或撥 119'
+      : me.is_volunteer ? '🚨 社區緊急模式中：志工請在 LINE 傳「附近點名」，看附近還沒回報平安的長者'
+      : '🚨 社區緊急模式中：先確認自身安全，有危險請按「需要幫忙」或撥 119';
     $('volunteer-card').hidden = !me.is_volunteer;
     renderSosTasks(me.sos_tasks || []);
     $('my-sos').hidden = !me.my_sos;
