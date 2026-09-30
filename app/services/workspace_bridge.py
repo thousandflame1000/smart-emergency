@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.models.alert import Alert
@@ -40,6 +41,8 @@ def _location(row, fallback=None):
     return {"lat": None, "lng": None}
 
 
+CLOSED_VISIBLE_DAYS = 7      # 已完成／已取消的需求在即時現況上保留幾天
+CHECKIN_HISTORY_DAYS = 30    # 即時現況看的打卡範圍（脆弱度只看 7 天，最近一次打卡通常在幾天內）
 CARE_RELATION_ZH = {"family": "家屬", "volunteer": "志工", "neighbor": "鄰居", "other": "聯絡人"}
 
 
@@ -60,10 +63,17 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
         resource_q = resource_q.filter(CommunityResource.zone_id == zone_id)
         need_q = need_q.filter(CommunityNeed.zone_id == zone_id)
     resources = resource_q.all()
-    needs = need_q.order_by(CommunityNeed.created_at.desc(), CommunityNeed.id).all()
+    # 即時現況每 30 秒重抓一次：只帶還在進行的需求和最近結案的，不把好幾年的歷史都畫上地圖
+    recent = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=CLOSED_VISIBLE_DAYS)
+    needs = need_q.filter(or_(CommunityNeed.status.in_(("open", "suggested", "matched")),
+                              CommunityNeed.created_at >= recent)).order_by(
+        CommunityNeed.created_at.desc(), CommunityNeed.id).all()
     points = db.query(ResourcePoint).filter(ResourcePoint.is_active.is_(True)).all()
     care = db.query(CareRelation).filter(CareRelation.is_active.is_(True)).all()
-    checkins = db.query(DailyCheckin).order_by(DailyCheckin.date.desc(), DailyCheckin.created_at.desc(), DailyCheckin.id).all()
+    # 最近一次打卡與 7 天脆弱度只需要近期的紀錄；整年的打卡不用每 30 秒全撈一次
+    checkin_since = datetime.now(UTC).date() - timedelta(days=CHECKIN_HISTORY_DAYS)
+    checkins = db.query(DailyCheckin).filter(DailyCheckin.date >= checkin_since).order_by(
+        DailyCheckin.date.desc(), DailyCheckin.created_at.desc(), DailyCheckin.id).all()
     alerts = Counter(str(a.elderly_id) for a in db.query(Alert).filter(Alert.status == "sent").all())
     contacts = Counter(str(c.elderly_id) for c in care)
     cutoff = datetime.now(UTC).date() - timedelta(days=dispatch.VULNERABILITY_LOOKBACK_DAYS)

@@ -372,3 +372,25 @@ def test_resources_api_auto_resolves_zone_when_not_specified(api, db):
     resource_id = created.json()["id"]
     listed = api.get("/api/resources/", params={"available_only": False}).json()
     assert any(r["id"] == resource_id and r["zone_id"] == zone["id"] for r in listed)
+
+
+def test_live_snapshot_leaves_out_old_closed_requests_and_old_check_ins(db):
+    """即時現況每 30 秒重抓：還在進行的需求一定在，好幾個月前結案的不再畫上地圖。"""
+    from datetime import date, datetime, timedelta
+    from app.models.checkin import DailyCheckin
+    from app.models.need import CommunityNeed
+    from app.models.user import User
+    from app.services.workspace_bridge import operational_snapshot
+    elder = User(name="阿嬤", roles=["elderly"]); db.add(elder); db.commit()
+    long_ago = datetime.utcnow() - timedelta(days=90)
+    open_old = CommunityNeed(requester_id=elder.id, need_type="water", status="open", created_at=long_ago)
+    done_old = CommunityNeed(requester_id=elder.id, need_type="food", status="fulfilled", created_at=long_ago)
+    done_new = CommunityNeed(requester_id=elder.id, need_type="food", status="fulfilled")
+    db.add_all([open_old, done_old, done_new,
+                DailyCheckin(elderly_id=elder.id, date=date.today() - timedelta(days=90), status="ok")])
+    db.commit()
+    ids = {n["id"] for n in operational_snapshot(db)["graph"]["nodes"]}
+    assert f"db:need:{open_old.id}" in ids and f"db:need:{done_new.id}" in ids
+    assert f"db:need:{done_old.id}" not in ids
+    person = next(n for n in operational_snapshot(db)["graph"]["nodes"] if n["id"] == f"db:person:{elder.id}")
+    assert person["properties"]["checkin"] is None, "三個月前的打卡不算「最近一次」"
