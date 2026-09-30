@@ -5,10 +5,21 @@
    sosAlarm.check(list, onView)：list 是目前未處理的求救 [{id, name, address, reported_at}]。
    第一次呼叫只記下現有的，若有未處理的就安靜顯示橫幅（不響鈴）；之後出現新的 id 才響。
    sosAlarm.before 設成某個元素時，橫幅插在它前面、把內容往下推（外框用）；
-   沒設就浮在畫面底部，不蓋住上方的選單與按鈕。 */
+   沒設就浮在畫面底部，不蓋住上方的選單與按鈕。
+   還沒有人受理、這台電腦也還沒人按「查看／知道了」時，每分鐘再響一次（人剛好離開座位也不會漏掉）；
+   按過就安靜，重新整理頁面也記得（同一個分頁）。 */
 (function () {
   var known = null, banner = null, flashTimer = null, baseTitle = document.title;
   var ALARM_TITLE = '🚨 新的緊急求救';
+  var current = [], lastBeep = 0, acked = loadAcked();
+
+  function loadAcked() {
+    try { return new Set(JSON.parse(sessionStorage.getItem('sosAcked') || '[]')); } catch (e) { return new Set(); }
+  }
+  function ack() {
+    current.forEach(function (i) { acked.add(i.id); });
+    try { sessionStorage.setItem('sosAcked', JSON.stringify(Array.from(acked))); } catch (e) { /* 無痕模式等存不了就只記在這頁 */ }
+  }
 
   function since(iso) {
     if (!iso) return '';
@@ -74,12 +85,12 @@
     sub.textContent = [first.address, '通報 ' + since(first.reported_at)].filter(Boolean).join(' · ');
     txt.appendChild(sub);
     var view = document.createElement('button'); view.type = 'button'; view.className = 'view'; view.textContent = '查看';
-    view.onclick = function () { askPermission(); hide(); onView(first); };
+    view.onclick = function () { askPermission(); ack(); hide(); onView(first); };
     var dismiss = document.createElement('button'); dismiss.type = 'button'; dismiss.className = 'dismiss'; dismiss.textContent = '知道了';
-    dismiss.onclick = function () { askPermission(); hide(); };
+    dismiss.onclick = function () { askPermission(); ack(); hide(); };
     banner.append(txt, view, dismiss);
     if (before) before.parentNode.insertBefore(banner, before); else document.body.appendChild(banner);
-    if (fresh) { beep(); flash(true); desktop(items, first, onView); }
+    if (fresh) { beep(); lastBeep = Date.now(); flash(true); desktop(items, first, onView); }
   }
 
   // 後台分頁在背景（調度者在用別的程式）時，瀏覽器會延後計時器，紅條也看不到：跳桌面通知。
@@ -96,21 +107,32 @@
     } catch (e) { /* 手機瀏覽器等不支援時，紅條與聲音照常 */ }
   }
 
+  function remind() {
+    var waiting = current.filter(function (i) { return !acked.has(i.id); });
+    if (!banner || !waiting.length || Date.now() - lastBeep < window.sosAlarm.remindMs) return;
+    beep(); lastBeep = Date.now();
+    banner.classList.remove('new'); void banner.offsetWidth; banner.classList.add('new');  // 橫幅再閃一次
+  }
+
   window.sosAlarm = {
     before: null,
     since: since,
+    remindMs: 60000,
     check: function (list, onView) {
       list = list || [];
+      current = list;
       var ids = list.map(function (i) { return i.id; });
+      acked = new Set(Array.from(acked).filter(function (id) { return ids.indexOf(id) >= 0; }));  // 已受理或結案的不用再記
       if (known === null) {
         known = new Set(ids);
-        if (list.length) show(list, false, onView);
+        if (list.length) { show(list, false, onView); lastBeep = Date.now(); }
         return;
       }
       var added = list.filter(function (i) { return !known.has(i.id); });
       known = new Set(ids);
       if (added.length) show(added, true, onView);
       else if (!list.length) hide();
+      else remind();
     }
   };
 })();
