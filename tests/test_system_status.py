@@ -116,3 +116,17 @@ def test_outdated_line_menu_is_spotted(monkeypatch):
         api = SimpleNamespace(get_rich_menu_list=lambda builder=builder: menus_from(builder))
         monkeypatch.setattr(rich_menu, "_apis", lambda api=api: (api, None))
         assert system_status._menu_check()["level"] == level
+
+
+def test_people_without_line_are_not_counted_as_delivery_failures(db):
+    """沒有手機的長者收不到 LINE 是常態，不是系統故障：提醒改用電話，但不亮紅燈。"""
+    from app.services.outbox import NO_DESTINATION
+    db.add(OutboxMessage(aggregate_type="CommunityNeed", aggregate_id="1", channel="LINE", destination="",
+                         message_type="TEXT", payload={}, status="DEAD", last_error=NO_DESTINATION))
+    db.commit()
+    item = _by_key(db)["outbox"]
+    assert item["level"] == "warn" and "沒有綁定 LINE" in item["detail"]
+    db.add(OutboxMessage(aggregate_type="alert", aggregate_id="2", channel="LINE", destination="U-x",
+                         message_type="TEXT", payload={}, status="DEAD", last_error="401 invalid token"))
+    db.commit()
+    assert _by_key(db)["outbox"]["level"] == "error"

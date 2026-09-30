@@ -28,6 +28,9 @@ def _utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
 
 
+NO_DESTINATION = "LINE destination is missing"  # 對方沒綁 LINE：記下「沒送到」，但不是系統故障
+
+
 class OutboxDeliveryError(Exception):
     pass
 
@@ -188,7 +191,7 @@ class OutboxService:
             available_at=now,
             locked_at=now if immediate and has_destination else None,
             locked_by="inline" if immediate and has_destination else None,
-            last_error=None if has_destination else "LINE destination is missing",
+            last_error=None if has_destination else NO_DESTINATION,
         )
         self.db.add(message)
         self.db.flush()

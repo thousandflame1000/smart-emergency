@@ -7,6 +7,7 @@ import os
 import time
 from datetime import datetime, timedelta
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -135,13 +136,20 @@ def checks(db: Session) -> list[dict]:
     out.extend(_coverage(db))
 
     since = now_utc() - timedelta(hours=24)
-    failed = (db.query(OutboxMessage).filter(OutboxMessage.status.in_(("FAILED", "DEAD")),
-                                             OutboxMessage.created_at >= since))
+    recent = db.query(OutboxMessage).filter(OutboxMessage.status.in_(("FAILED", "DEAD")), OutboxMessage.created_at >= since)
+    from app.services.outbox import NO_DESTINATION
+    # 對方沒綁 LINE 不是系統故障（例如沒有手機的長者）：分開算，只提醒要改用電話，不亮紅燈
+    no_line = recent.filter(OutboxMessage.last_error == NO_DESTINATION).count()
+    failed = recent.filter(or_(OutboxMessage.last_error.is_(None), OutboxMessage.last_error != NO_DESTINATION))
     failed_count = failed.count()
     last = failed.order_by(OutboxMessage.created_at.desc()).first()
-    out.append(_item("outbox", "通知送達（24 小時）", "ok" if failed_count == 0 else "error",
-                     "全部送出" if failed_count == 0 else f"{failed_count} 則失敗：{(last.last_error or '')[:100]}",
-                     "多半是 LINE 權杖失效或對方封鎖官方帳號；先看上方 LINE 狀態。"))
+    if failed_count:
+        out.append(_item("outbox", "通知送達（24 小時）", "error", f"{failed_count} 則失敗：{(last.last_error or '')[:100]}",
+                         "多半是 LINE 權杖失效或對方封鎖官方帳號；先看上方 LINE 狀態。"))
+    else:
+        out.append(_item("outbox", "通知送達（24 小時）", "warn" if no_line else "ok",
+                         f"全部送出；{no_line} 則因對方沒有綁定 LINE 無法傳送" if no_line else "全部送出",
+                         "這些人沒有綁 LINE（例如沒有手機的長者），要改用電話聯絡或請家屬協助。"))
 
     webhook_failed = (db.query(WebhookEvent).filter(WebhookEvent.status.in_(("FAILED", "DEAD")),
                                                     WebhookEvent.received_at >= since).count())
