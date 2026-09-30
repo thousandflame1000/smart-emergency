@@ -63,7 +63,8 @@ def test_common_misconfigurations_turn_red_with_a_fix(db, monkeypatch):
     db.commit()
     monkeypatch.setattr(line_notify, "_get_api", lambda: (_ for _ in ()).throw(RuntimeError("401")))
     items = _by_key(db)
-    for key in ("auth", "admins", "outbox", "line"):
+    assert items["auth"]["level"] == "ok" and items["auth"]["detail"] == "開放，不用登入", "預設開放不用登入"
+    for key in ("admins", "outbox", "line"):
         assert items[key]["level"] == "error" and items[key]["hint"], key
     assert "401 invalid token" in items["outbox"]["detail"]
     demo_auth.reset_cache()

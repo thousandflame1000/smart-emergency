@@ -1451,15 +1451,12 @@ async function toggleMode() {
   } catch (e) { toast('danger', e.message); }
 }
 
-// ── 部署安全提醒：正式環境沒設 DEMO_PASSWORD 時，整個後台對外公開 ──
+// ── 用 LINE 登入時顯示登入者；預設開放不用登入，不再顯示警告 ──
 async function loadSecurityBanner() {
   try {
     const s = await fetch('/api/system/security').then(r => r.json());
     const el = document.getElementById('security-banner');
-    if (s.public_admin) {
-      el.innerHTML = '⚠️ <strong>後台未設登入</strong>：設 <code>ADMIN_LINE_LOGIN=true</code> 或 <code>DEMO_PASSWORD</code>';
-      el.classList.remove('is-hidden');
-    } else if (s.admin) {
+    if (s.admin) {
       el.className = 'notice';
       el.innerHTML = '🔐 已用 LINE 登入：<strong>' + esc(s.admin) + '</strong>　<a href="/admin/logout" target="_top">登出</a>';
       el.classList.remove('is-hidden');

@@ -101,10 +101,10 @@ def checks(db: Session) -> list[dict]:
     out.append(_item("scheduler", "排程（打卡、未回應、自動派遣）", "ok" if running else ("error" if production else "warn"),
                      "執行中" if running else "未執行", "重新部署服務；排程停止時不會發打卡也不會升級通知。"))
 
+    # 預設開放不用登入（使用者決定）；要上鎖再設 ADMIN_LINE_LOGIN=true 或 DEMO_PASSWORD
     mode = auth_mode()
-    auth_detail = {"open": "未設保護，任何人都能開後台", "password": "展演密碼保護", "line-admin": "LINE 管理員登入"}[mode]
-    out.append(_item("auth", "後台登入保護", "ok" if mode != "open" else ("error" if production else "warn"), auth_detail,
-                     "在 Railway 設 ADMIN_LINE_LOGIN=true：管理員在 LINE 按「開啟後台」一鍵登入，不用密碼（也可改設 DEMO_PASSWORD）。"))
+    auth_detail = {"open": "開放，不用登入", "password": "展演密碼保護", "line-admin": "LINE 管理員登入"}[mode]
+    out.append(_item("auth", "後台登入", "ok", auth_detail))
 
     line = _line_check()
     out.append(line)
