@@ -107,7 +107,7 @@ async function refreshOperations(options={}){
     loadRollcall();
     // 單獨開啟工作區時自己響鈴；嵌在外框裡由外框響，避免同一筆響兩次
     if(!document.documentElement.classList.contains('embed')&&window.sosAlarm)
-      sosAlarm.check(openSos().map(n=>({id:n.id,name:n.label.split(' · ')[0],address:n.properties.address,reported_at:n.properties.reported_at})),item=>showSos(item.id));
+      sosAlarm.check(openSos().filter(n=>!n.properties.responder).map(n=>({id:n.id,name:n.label.split(' · ')[0],address:n.properties.address,reported_at:n.properties.reported_at})),item=>showSos(item.id));
     if(!options.silent)message(`現況已更新：${snapshot.counts.elders} 位長者、${snapshot.counts.volunteers} 位志工、${snapshot.counts.demands} 筆需求、${snapshot.counts.supplies} 筆物資`);
   })();
   try{return await operationRequest;}finally{operationRequest=null;for(const id of ['sync-db','layer-db'])$(id).disabled=false;}
