@@ -79,7 +79,9 @@ function changed() { state.dirty=true; state.editVersion++; state.report=null; i
 function historySnapshot(){return {graph:structuredClone(state.graph),baseline:state.baseline};}
 function checkpoint() { state.undo.push(historySnapshot()); if(state.undo.length>25)state.undo.shift(); state.redo=[]; }
 function mutate(fn) { checkpoint(); fn(); changed(); render(); }
-function updateHistory() { $('undo').disabled=!state.undo.length; $('redo').disabled=!state.redo.length; }
+function updateHistory() { $('undo').disabled=!state.undo.length; $('redo').disabled=!state.redo.length;
+  // 即時現況還沒動過時，復原／重做／刪除工作區都沒有意義，先收起來，版面留給現況
+  document.body.classList.toggle('live-clean',!!state.live&&!state.dirty); }
 function undo(redo=false) { const from=redo?state.redo:state.undo, to=redo?state.undo:state.redo; if(!from.length)return;
   to.push(historySnapshot()); const previous=from.pop();state.graph=previous.graph;state.baseline=previous.baseline;state.selected=null; changed(); render(); }
 async function discardConfirmed() { return (!state.dirty && !inventoryDrafts.size) || await askConfirm('離開這個工作區？','目前有未儲存或待寫回的變更，離開後會遺失。','離開'); }
@@ -253,7 +255,8 @@ function render() {
   $('layers').querySelectorAll('[data-layer-add]').forEach(button=>button.onclick=()=>openImport(button.dataset.layerAdd));
   $('layers').querySelectorAll('input').forEach(input=>input.onchange=()=>{input.checked?state.hidden.delete(input.dataset.kind):state.hidden.add(input.dataset.kind);render();});
   const m=state.report?.metrics||{};
-  $('metrics').innerHTML=[['緊急求救',sosCount,sosCount>0],['一般待處理',liveNeeds.filter(n=>n.properties.status==='open'&&n.properties.need_type!=='sos').length,false],['物資回報',supplyCount,false],['人員',counts.person||0,false],['事件',counts.incident||0,false],['可用物資',state.graph.nodes.filter(nodeHasSupply).length,false],['未連結物件',m.unlinked_objects??'—',(m.unlinked_objects??0)>0]].map(([label,value,alert])=>`<div class="metric ${alert?'alert':''}"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
+  // 求救與待處理需求已經在上方狀態列，這裡不重複；關聯分析跑過才顯示「未連結物件」
+  $('metrics').innerHTML=[...(state.live?[]:[['緊急求救',sosCount,sosCount>0]]),['物資回報',supplyCount,false],['人員',counts.person||0,false],['事件',counts.incident||0,false],['可用物資',state.graph.nodes.filter(nodeHasSupply).length,false],...(m.unlinked_objects!=null?[['未連結物件',m.unlinked_objects,m.unlinked_objects>0]]:[])].map(([label,value,alert])=>`<div class="metric ${alert?'alert':''}"><span>${label}</span><strong>${escapeHtml(value)}</strong></div>`).join('');
   renderObjects();renderSelection();renderCanvas();updateHistory();renderOperations();
   $('empty').hidden=state.graph.nodes.length>0;
   $('connect-state').hidden=$('mode').value!=='connect';
