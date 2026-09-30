@@ -71,7 +71,10 @@ def timeline(db: Session, since: datetime) -> list[dict]:
     for s in db.query(SafetyCheck).filter(SafetyCheck.responded_at >= since, SafetyCheck.status.in_(("help", "unwell"))).all():
         rows.append((_naive(s.responded_at), "點名回報：" + ("需要協助" if s.status == "help" else "不舒服"),
                      s.user.name if s.user else "", s.marked_by or "本人"))
-    for a in db.query(AdminAudit).filter(AdminAudit.created_at >= since, AdminAudit.path.like("/api/dashboard/mode%")).all():
+    mode_switches = db.query(AdminAudit).filter(AdminAudit.created_at >= since, or_(
+        AdminAudit.path.like("/api/dashboard/mode%"),  # 後台按鈕
+        AdminAudit.path.in_(("啟動緊急模式", "解除緊急模式")))).all()  # 管理員在 LINE 上確認
+    for a in mode_switches:
         rows.append((_naive(a.created_at), describe(a.method, a.path), "", actor_name(a.actor_label)))
     rows.sort(key=lambda r: r[0], reverse=True)
     return [{"time": _local(t), "what": what, "who": who, "by": by} for t, what, who, by in rows[:TIMELINE_LIMIT]]

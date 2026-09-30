@@ -259,10 +259,16 @@ def set_mode(request: Request, mode: str, db: Session = Depends(get_db)):
     """
     if mode not in ("normal", "emergency"):
         raise ApiError(422, "mode 只能是 normal 或 emergency。")
+    switch_mode(db, mode)
+    return {"mode": mode, "message": f"已切換為{'緊急' if mode == 'emergency' else '日常'}模式"}
 
+
+def switch_mode(db: Session, mode: str) -> bool:
+    """切換模式；後台按鈕與管理員在 LINE 上確認後都走這裡。回傳是否真的有變。
+
+    變成緊急模式時開新一輪點名；有變化才廣播（背景執行緒，不讓呼叫端等幾百則推播）。"""
     cfg = db.query(SystemConfig).filter(SystemConfig.key == "mode").first()
     old_mode = cfg.value if cfg else "normal"
-
     if cfg:
         cfg.value = mode
     else:
@@ -271,13 +277,10 @@ def set_mode(request: Request, mode: str, db: Session = Depends(get_db)):
     if mode == "emergency" and old_mode != "emergency":
         from app.services import rollcall
         rollcall.start(db)
-
-    # 模式有變化才廣播
     if old_mode != mode:
         import threading
         threading.Thread(target=broadcast_mode_change, args=(mode,), daemon=True).start()
-
-    return {"mode": mode, "message": f"已切換為{'緊急' if mode == 'emergency' else '日常'}模式"}
+    return old_mode != mode
 
 
 @router.post("/users")

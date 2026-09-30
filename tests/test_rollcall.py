@@ -221,3 +221,31 @@ def test_roll_call_follows_up_automatically_and_reports_to_admins(db, line_outbo
 
 def test_no_follow_up_outside_an_emergency(db):
     assert rollcall.auto_follow_up(db) == 0
+
+
+def test_admin_can_switch_emergency_mode_from_line_with_confirmation(db, line_outbox):
+    """災害時管理員可能只有手機：LINE 上也能切模式，但要先確認，而且會記進操作紀錄與時間軸。"""
+    from app.models.admin_audit import AdminAudit
+    from app.routers.linebot import _get_mode
+    mk(db, "管理員", ["admin"], "U-boss3")
+    mk(db, "阿嬤", ["elderly"], "U-granny3")
+    mk(db, "居民", ["elderly"], "U-plain3")
+    say("U-plain3", "緊急模式")
+    assert "僅限管理員" in replies(line_outbox)[-1]
+    say("U-boss3", "緊急模式")
+    assert replies(line_outbox)[-1] == "啟動緊急模式？"
+    press("U-boss3", "action=admin_mode&m=cancel")
+    assert "已取消" in replies(line_outbox)[-1] and _get_mode(db) == "normal"
+    press("U-boss3", "action=admin_mode&m=emergency")
+    assert "已啟動緊急模式" in replies(line_outbox)[-1]
+    db.expire_all()
+    assert _get_mode(db) == "emergency" and rollcall.current_round(db)
+    press("U-boss3", "action=admin_mode&m=emergency")
+    assert "已經是緊急模式" in replies(line_outbox)[-1]
+    say("U-boss3", "解除緊急模式")
+    assert replies(line_outbox)[-1] == "解除緊急模式？"
+    press("U-boss3", "action=admin_mode&m=normal")
+    db.expire_all()
+    assert _get_mode(db) == "normal"
+    logged = [a.path for a in db.query(AdminAudit).filter(AdminAudit.method == "LINE").all()]
+    assert logged == ["啟動緊急模式", "解除緊急模式"], "取消與重複按的不記"

@@ -30,7 +30,8 @@ from app.services.rich_menu import liff_url
 logger = logging.getLogger(__name__)
 
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
-ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救", "點名"}
+ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救", "點名",
+                  "緊急模式", "啟動緊急模式", "解除緊急模式"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
 RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "我的紀錄",
                      "我的資料", "個人資料", "修改資料", "刪除我的帳號", "刪除帳號"}
@@ -277,6 +278,29 @@ def admin_rollcall(event, db: Session, user: User) -> None:
     _say(event, "\n".join(lines))
 
 
+def admin_mode_confirm(event, db: Session, text: str) -> None:
+    """災害發生時管理員可能只有手機：在 LINE 上也能切模式，但會廣播給所有人，所以先確認一次。"""
+    from app.routers.linebot import _get_mode
+    emergency = _get_mode(db) == "emergency"
+    if text == "解除緊急模式" or (text == "緊急模式" and emergency):
+        if not emergency:
+            _say(event, "目前是日常模式，不用解除。")
+            return
+        _flex(event, "解除緊急模式？", bubble("🟢 解除緊急模式？", "#13795b",
+              ["社區恢復日常模式，所有 LINE 使用者會收到解除通知。", "災時點名會結束。"],
+              [{"label": "確定解除", "data": "action=admin_mode&m=normal", "color": "#13795b"},
+               {"label": "取消", "data": "action=admin_mode&m=cancel"}]))
+        return
+    if emergency:
+        _say(event, "目前已經是緊急模式。傳「點名」看長者回報，傳「解除緊急模式」恢復日常。")
+        return
+    _flex(event, "啟動緊急模式？", bubble("🚨 啟動緊急模式？", "#c0392b",
+          ["所有 LINE 使用者都會收到緊急通知。", "長者會收到「請回報是否平安」，志工會收到附近點名提醒。",
+           "物資每 30 分鐘自動媒合，派遣仍需人工核准。"],
+          [{"label": "確定啟動", "data": "action=admin_mode&m=emergency", "color": "#c0392b"},
+           {"label": "取消", "data": "action=admin_mode&m=cancel"}]))
+
+
 def admin_overview(event, db: Session, user: User) -> None:
     stats = _admin_snapshot(db)
     roll = _rollcall_line(db)
@@ -316,6 +340,7 @@ def decision_center(event, db: Session, user: User) -> None:
              "高風險個案先由緊急求救與待派需求進入處置。"],
             [{"label": "待審志工", "text": "待審"},
              {"label": "開啟後台", "text": "後台"},
+             {"label": "🚨 緊急模式", "text": "緊急模式"},
              {"label": "操作說明", "text": "幫助"}],
         ),
     ]))
@@ -422,7 +447,8 @@ def admin_login_link(event, user: User) -> None:
 
 # LINE 上會改資料的管理動作，寫進後台「操作紀錄」
 AUDITED_ADMIN_ACTIONS = {"admin_match": "派遣", "admin_confirm": "核准派遣", "admin_decline": "退回建議",
-                         "admin_revoke": "撤銷任務", "admin_sos": "求救已處理", "admin_app": "審核志工"}
+                         "admin_revoke": "撤銷任務", "admin_sos": "求救已處理", "admin_app": "審核志工",
+                         "admin_mode": "切換模式"}
 
 
 def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> bool:
@@ -471,6 +497,19 @@ def _admin_postback(event, db: Session, user: User, action: str, data: dict) -> 
         _say(event, "⚠️ " + result["error"] if result.get("error") else
              ("這筆求救單已經處理過了。" if result.get("already_resolved") else "✅ 已標記為聯繫處理，當事人已收到通知。"))
         return not result.get("error")
+    elif action == "admin_mode":
+        mode = data.get("m", "")
+        if mode not in ("emergency", "normal"):
+            _say(event, "已取消，模式沒有變。")
+            return False
+        from app.routers.dashboard import switch_mode
+        changed = switch_mode(db, mode)
+        if mode == "emergency":
+            _say(event, "🚨 已啟動緊急模式，正在通知所有人。長者會收到點名；傳「點名」看回報。" if changed
+                 else "目前已經是緊急模式。")
+        else:
+            _say(event, "🟢 已解除緊急模式，已通知所有人。" if changed else "目前已經是日常模式。")
+        return changed
     elif action == "admin_app":
         from fastapi import HTTPException
         from app.services.volunteer_application import decide
@@ -867,6 +906,8 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
             admin_sos_list(event, db, user)
         elif text == "點名":
             admin_rollcall(event, db, user)
+        elif text in ("緊急模式", "啟動緊急模式", "解除緊急模式"):
+            admin_mode_confirm(event, db, text)
         else:
             admin_login_link(event, user)
     elif text == "邀請家人":
@@ -890,13 +931,17 @@ def handle_postback(event, db: Session, user: User, action: str, data: dict) -> 
             _say(event, "此功能僅限管理員使用。如果您負責社區調度，請聯絡現有管理員把您加入。")
             return True
         ok = _admin_postback(event, db, user, action, data)
+        if action == "admin_mode" and not ok:
+            return True  # 取消或模式本來就是這樣：沒有改東西，不記
         if action in AUDITED_ADMIN_ACTIONS:
             from app.services import admin_audit
             target = data.get("need_id") or data.get("id") or ""
             if action == "admin_app":
                 target = f"{'核准' if data.get('d') == 'approve' else '婉拒'} {target}"
-            admin_audit.record({"id": str(user.id), "name": user.name}, "LINE",
-                               f"{AUDITED_ADMIN_ACTIONS[action]} {target}".strip(), 200 if ok else 409)
+            label = f"{AUDITED_ADMIN_ACTIONS[action]} {target}".strip()
+            if action == "admin_mode":
+                label = "啟動緊急模式" if data.get("m") == "emergency" else "解除緊急模式"
+            admin_audit.record({"id": str(user.id), "name": user.name}, "LINE", label, 200 if ok else 409)
         return True
     if action == "cancel_needs":
         cancel_my_needs(event, db, user)
