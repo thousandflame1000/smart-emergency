@@ -220,17 +220,17 @@ def welfare_check(db: Session, elder: User, family: User, *, on_site: bool = Fal
 
 def _tell_family(db: Session, need: CommunityNeed, text: str) -> None:
     """家屬請人去看看的案子，受理與結案時要讓提出的家屬知道。"""
-    from app.models.dispatch_event import DispatchEvent
-    from app.services.line_notify import send_text
+    import hashlib
     import json
+    from app.models.dispatch_event import DispatchEvent
+    from app.services.outbox import send_text_reliably
     event = db.query(DispatchEvent).filter(DispatchEvent.need_id == str(need.id),
                                            DispatchEvent.action == "welfare_check_requested").first()
     uid = json.loads(event.details_json or "{}").get("family_line_uid") if event else None
     if uid:
-        try:
-            send_text(uid, text)
-        except Exception:
-            logger.warning("tell family about welfare check failed", exc_info=True)
+        digest = hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
+        send_text_reliably(aggregate_type="CommunityNeed", aggregate_id=str(need.id), destination=uid,
+                           content=text, dedupe_key=f"welfare-family:{need.id}:{digest}")
 
 
 def finish(db: Session, need_id: str, user: User) -> dict:

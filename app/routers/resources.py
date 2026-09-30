@@ -467,7 +467,7 @@ def assign_sos(need_id: str, user_id: str, db: Session = Depends(get_db),
     """後台指派處理人（受理）。對方綁了 LINE 就推任務卡：電話、導航、處理完成。"""
     from app.models.user import User
     from app.services import sos
-    from app.services.line_notify import push_flex_message
+    from app.services.outbox import send_flex_reliably
     person = db.query(User).filter(User.id == user_id, User.is_active.is_(True)).first()
     if person is None or not (person.has_role("volunteer") or person.has_role("admin")):
         raise HTTPException(400, "只能指派志工或管理員")
@@ -476,13 +476,12 @@ def assign_sos(need_id: str, user_id: str, db: Session = Depends(get_db),
         raise HTTPException(404, result["error"])
     if not result.get("ok"):
         raise HTTPException(409, result["message"])
-    pushed = False
-    if person.line_uid and not result.get("already_mine"):
-        try:
-            push_flex_message(person.line_uid, "由您處理這筆求救", sos.responder_card(result["need"]))
-            pushed = True
-        except Exception:
-            pushed = False
+    pushed = bool(person.line_uid)
+    if pushed and not result.get("already_mine"):
+        # 可靠送達：LINE 暫時失敗會由寄件佇列重試
+        send_flex_reliably(aggregate_type="CommunityNeed", aggregate_id=need_id, destination=person.line_uid,
+                           alt="由您處理這筆求救", contents=sos.responder_card(result["need"]),
+                           dedupe_key=f"sos-assign:{need_id}:{person.id}")
     note = "已傳 LINE 任務卡給對方" if pushed else "對方沒有綁定 LINE，請電話通知"
     return {"message": f"已指派 {person.name} 處理；{note}", "need_id": need_id}
 
