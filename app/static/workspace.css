@@ -270,3 +270,14 @@ dialog::backdrop { background: #152a2266; } .dialog-heading { display: flex; ali
 .role-legend { display:flex; flex-wrap:wrap; gap:4px 12px; margin:2px 0 6px 26px; font-size:12px; color:var(--muted); }
 .role-legend span { display:inline-flex; align-items:center; gap:5px; }
 .role-legend .swatch { display:inline-block; width:10px; height:10px; border-radius:50%; }
+
+/* 投影機常見 1280×720：上方各列收緊、指標改成一行，把高度留給地圖（寬螢幕不受影響） */
+@media (max-height: 820px) and (min-width: 821px) {
+  header { min-height: 52px; padding: 6px 18px; }
+  .toolbar { padding: 6px 18px; }
+  .operations-bar { padding: 5px 18px; }
+  .metrics { min-height: 0; }
+  .metric { display: flex; align-items: baseline; gap: 8px; padding: 5px 16px; min-width: 0; }
+  .metric strong { font-size: 16px; }
+  footer { min-height: 28px; padding: 4px 18px; }
+}
