@@ -216,7 +216,10 @@ def test_roll_call_follows_up_automatically_and_reports_to_admins(db, line_outbo
     assert rollcall.auto_follow_up(db) == 0, "同一個時間點只做一次"
     row = db.query(SystemConfig).filter(SystemConfig.key == rollcall.ROUND_KEY).one()
     row.value = (now_utc() - timedelta(minutes=95)).isoformat(); db.commit()
-    assert rollcall.auto_follow_up(db) == 2, "新的一輪（換了啟動時間）兩個時間點都到了"
+    line_outbox.sent.clear()
+    assert rollcall.auto_follow_up(db) == 1, "新的一輪兩個時間點同時到期：只跑最後一個"
+    assert sent_to(line_outbox, "U-no2") == ["🚨 請回報是否平安"], "長者不會連收兩張一樣的卡"
+    assert rollcall.auto_follow_up(db) == 0
 
 
 def test_no_follow_up_outside_an_emergency(db):

@@ -119,11 +119,14 @@ def auto_follow_up(db: Session | None = None) -> int:
         started = datetime.fromisoformat(round_id)
         minutes = (now_utc() - started).total_seconds() / 60
         done = 0
-        for step in FOLLOW_UP_MINUTES:
-            key = f"rollcall_followup:{round_id}:{step}"
-            if minutes < step or db.query(SystemConfig).filter(SystemConfig.key == key).first():
-                continue
-            db.add(SystemConfig(key=key, value=now_utc().isoformat()))
+        due = [step for step in FOLLOW_UP_MINUTES if minutes >= step and not db.query(SystemConfig).filter(
+            SystemConfig.key == f"rollcall_followup:{round_id}:{step}").first()]
+        # 排程延遲或重啟後好幾個時間點同時到期：只跑最後一個，前面的記成已做，長者不會連收兩張一樣的卡
+        for step in due[:-1]:
+            db.add(SystemConfig(key=f"rollcall_followup:{round_id}:{step}", value="skipped"))
+        db.commit()
+        for step in due[-1:]:
+            db.add(SystemConfig(key=f"rollcall_followup:{round_id}:{step}", value=now_utc().isoformat()))
             db.commit()
             asked = len(ask(db, only_pending=True))
             info = board(db)
