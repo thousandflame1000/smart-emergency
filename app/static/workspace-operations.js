@@ -52,7 +52,9 @@ function renderOperationTasks(){
   const query=$('search').value.toLowerCase();
   // 求救先處理等最久的；其他需求依優先級，同級再看誰先通報
   const byAge=(a,b)=>String(a.properties.reported_at||'').localeCompare(String(b.properties.reported_at||''));
-  const tasks=operationalNodes().filter(n=>taskInStage(n,operationStage)&&(n.label+' '+n.id+' '+n.properties.description).toLowerCase().includes(query)).sort((a,b)=>operationStage==='sos'?byAge(a,b):(b.properties.urgency-a.properties.urgency)||byAge(a,b));
+  // 求救：沒人受理 → 已受理在路上 → 已到場，同一組裡等最久的在前
+  const sosRank=n=>!n.properties.responder?0:n.properties.on_scene_at?2:1;
+  const tasks=operationalNodes().filter(n=>taskInStage(n,operationStage)&&(n.label+' '+n.id+' '+n.properties.description).toLowerCase().includes(query)).sort((a,b)=>operationStage==='sos'?(sosRank(a)-sosRank(b))||byAge(a,b):(b.properties.urgency-a.properties.urgency)||byAge(a,b));
   $('operation-tasks').innerHTML=tasks.map(n=>{
     const sos=isSos(n),where=n.lat===null?'位置未知':(n.properties.address||n.properties.location_source),since=sinceText(n.properties.reported_at);
     const meta=sos?[n.properties.responder?(n.properties.on_scene_at?'已到場：':'處理中：')+n.properties.responder:'未受理',since&&'通報 '+since,where]:[n.properties.quantity_text||'數量未填',where,since];
