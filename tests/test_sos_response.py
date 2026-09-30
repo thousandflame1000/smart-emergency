@@ -303,3 +303,13 @@ def test_admin_sos_list_puts_untaken_first(db, line_outbox):
     card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1].contents.to_dict()
     titles = [json.dumps(b, ensure_ascii=False) for b in card["contents"]]
     assert "晚到的阿嬤" in titles[0] and "陳阿公" in titles[1]
+
+
+def test_workspace_sos_shows_the_nearest_aed(db, line_outbox, monkeypatch):
+    from app.services import aed
+    from app.services.workspace_bridge import operational_snapshot
+    monkeypatch.setattr(aed, "aeds", lambda: (aed.Aed("活動中心", "大廳", 23.6652, 121.4181, "00:00-23:59",
+                                                     "00:00-23:59", "00:00-23:59", "", None),))
+    need, *_ = _world(db)
+    node = next(n for n in operational_snapshot(db)["graph"]["nodes"] if n["id"] == f"db:need:{need.id}")
+    assert node["properties"]["nearest_aed"].startswith("最近的 AED：活動中心")

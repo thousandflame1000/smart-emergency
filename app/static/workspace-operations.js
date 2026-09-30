@@ -141,7 +141,8 @@ function renderOperationalSelection(item,isNode){
   // 求救不是物資需求：不顯示數量、優先級，狀態說「待處理」而不是「待媒合」
   if(p.db==='need'&&p.need_type==='sos')fields.push(['狀態',p.status==='open'?(p.responder?'處理中':'待受理'):(NEED_STATUS[p.status]||p.status)],
     ['處理人',p.responder?p.responder+'，'+reportedText(p.acknowledged_at)+'受理':'尚未有人受理'],
-    ...(p.on_scene_at?[['到場',reportedText(p.on_scene_at)]]:p.responder?[['到場','還在路上']]:[]),['通報時間',reportedText(p.reported_at)],['狀況',p.description||'未說明'],['定位依據',p.location_source]);
+    ...(p.on_scene_at?[['到場',reportedText(p.on_scene_at)]]:p.responder?[['到場','還在路上']]:[]),
+    ...(p.nearest_aed?[['AED',p.nearest_aed.replace(/^最近的 AED：/,'')]]:[]),['通報時間',reportedText(p.reported_at)],['狀況',p.description||'未說明'],['定位依據',p.location_source]);
   else if(p.db==='need')fields.push(['狀態',NEED_STATUS[p.status]||p.status],['通報時間',reportedText(p.reported_at)],['優先級',p.urgency],['登記數量',p.quantity_text||'未知'],['需求',p.description||'未填'],['定位依據',p.location_source]);
   // 原始經緯度是系統內部表示（而且會露出浮點誤差），摘要只講定位結果；
   // 要精確數值的人是在編輯，那邊本來就有緯度／經度欄位。

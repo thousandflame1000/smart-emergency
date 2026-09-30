@@ -41,6 +41,14 @@ def _location(row, fallback=None):
     return {"lat": None, "lng": None}
 
 
+def _aed_for(need, requester) -> str | None:
+    """未結案求救旁邊最近的 AED（一行文字）；調度者打電話時可以直接告訴對方去哪裡拿。"""
+    from app.services.aed import one_line
+    lat = need.lat if need.lat is not None else requester.lat
+    lng = need.lng if need.lng is not None else requester.lng
+    return one_line(lat, lng)
+
+
 CLOSED_VISIBLE_DAYS = 7      # 已完成／已取消的需求在即時現況上保留幾天
 CHECKIN_HISTORY_DAYS = 30    # 即時現況看的打卡範圍（脆弱度只看 7 天，最近一次打卡通常在幾天內）
 CARE_RELATION_ZH = {"family": "家屬", "volunteer": "志工", "neighbor": "鄰居", "other": "聯絡人"}
@@ -137,6 +145,7 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
     # 未結案求救的到場時間（一個查詢）：工作區要分得出「有人受理但還在路上」和「人已經到了」
     from app.models.dispatch_event import DispatchEvent
     open_sos = [str(n.id) for n in needs if n.need_type == "sos" and n.status == "open"]
+    open_sos_ids = set(open_sos)
     on_scene = {str(e.need_id): e.created_at for e in db.query(DispatchEvent).filter(
         DispatchEvent.action == "sos_on_scene", DispatchEvent.need_id.in_(open_sos)).all()} if open_sos else {}
     for need in needs:
@@ -157,6 +166,7 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
                       "responder": need.responder.name if need.responder_id and need.responder else None,
                       "acknowledged_at": need.acknowledged_at.replace(tzinfo=UTC).isoformat() if need.acknowledged_at else None,
                       "on_scene_at": on_scene[str(need.id)].replace(tzinfo=UTC).isoformat() if str(need.id) in on_scene else None,
+                      "nearest_aed": _aed_for(need, requester) if str(need.id) in open_sos_ids else None,
                       "location_source": "需求登記" if need.lat is not None and need.lng is not None else "登記人位置"}
         nodes[node_id] = Node(id=node_id, label=f"{requester.name} · {_item(need.need_type)}", kind="custom",
                              **_location(need, requester), quantity=0, available=pending or need.need_type == "sos",
