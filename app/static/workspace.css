@@ -105,6 +105,14 @@ footer { min-height: 35px; display: flex; gap: 16px; align-items: center; justif
 .task-text { min-width:0; overflow-wrap:anywhere; } .task-text small { display:block; color:var(--muted); margin-top:3px; font-size:11px; }
 .task-priority { color:#995411; background:#fff3d6; padding:3px; font-size:10px; min-width:28px; text-align:center; }
 .task-priority.urgent { background:#ffe8e4; color:#a52d20; }
+/* 求救等太久：5 分鐘黃條、10 分鐘整列轉紅 */
+.object-list button.late { box-shadow: inset 3px 0 0 #d98a1c; }
+.object-list button.overdue { background: #fff1ef; box-shadow: inset 4px 0 0 #b3261e; }
+.object-list button.overdue small { color: #a52d20; font-weight: 600; }
+.contact-list { display: grid; gap: 6px; margin: 4px 0 10px; }
+.contact-list h2 { margin: 0 0 2px; }
+.contact-list a.call { justify-content: flex-start; white-space: normal; text-align: left; border-color: #9fcdb3; background: #f1faf4; color: var(--ink); }
+.contact-list a.call small { display: block; color: var(--muted); }
 .resource-state { margin-left:auto; color:var(--accent); font-size:11px; white-space:nowrap; }
 .resource-state.unavailable { color:var(--muted); }
 .candidate-summary { margin:12px 0; padding:10px; border-left:3px solid #d7a324; background:#fff9e8; }

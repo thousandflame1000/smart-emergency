@@ -7,6 +7,16 @@ const INVENTORY_FIELDS={name:'名稱',quantity:'數量／單位',lat:'位置',ln
   capacity:'容量',phone:'電話',operating_hours:'開放時間'};
 const POINT_TYPE_LABELS={shelter:'避難收容所',community:'里民活動中心',hospital:'醫療院所',fire_station:'消防分隊',
   police:'警察局/派出所',store:'物資分發點',warehouse:'物資倉庫',clinic:'衛生所',government:'公所／政府機關',other:'其他'};
+const CARE_RELATIONS={family:'家屬',volunteer:'志工',neighbor:'鄰居',other:'聯絡人'};
+// 求救通報後幾分鐘還沒處理要變色：5 分鐘黃、10 分鐘紅
+const SOS_LATE_MIN=5,SOS_OVERDUE_MIN=10;
+const isSos=n=>n.properties.need_type==='sos';
+function minutesSince(iso){return iso?(Date.now()-new Date(iso))/60000:0;}
+function sinceText(iso){return iso&&window.sosAlarm?sosAlarm.since(iso):'';}
+function reportedText(iso){if(!iso)return'未知';const d=new Date(iso);return(minutesSince(iso)>=1440?d.toLocaleDateString('zh-TW')+' ':'')+d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})+'（'+sinceText(iso)+'）';}
+function ageClass(n){if(!isSos(n)||n.properties.status!=='open')return'';const m=minutesSince(n.properties.reported_at);return m>=SOS_OVERDUE_MIN?'overdue':m>=SOS_LATE_MIN?'late':'';}
+function openSos(){return operationalNodes().filter(n=>isSos(n)&&n.properties.status==='open');}
+function showSos(id){operationStage='sos';setCatalog('tasks');renderOperations();focusOperational(id);}
 const inventoryDrafts=new Map(), operationEvents=new Map();
 let operationOwners=[], operationRequest=null, operationStage='open', catalogTab='objects', inventoryReview=null;
 
@@ -34,8 +44,14 @@ function renderOperations(){
 }
 function renderOperationTasks(){
   const query=$('search').value.toLowerCase();
-  const tasks=operationalNodes().filter(n=>taskInStage(n,operationStage)&&(n.label+' '+n.id+' '+n.properties.description).toLowerCase().includes(query)).sort((a,b)=>b.properties.urgency-a.properties.urgency);
-  $('operation-tasks').innerHTML=tasks.map(n=>`<button data-task="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''}"><span class="task-priority ${n.properties.need_type==='sos'?'urgent':''}">${n.properties.need_type==='sos'?'SOS':'P'+n.properties.urgency}</span><span class="task-text">${escapeHtml(n.label)}<small>${escapeHtml(n.properties.quantity_text||'數量未填')} · ${n.lat===null?'位置未知':escapeHtml(n.properties.address||n.properties.location_source)}</small></span></button>`).join('')||'<p class="muted">此狀態沒有需求</p>';
+  // 求救先處理等最久的；其他需求依優先級，同級再看誰先通報
+  const byAge=(a,b)=>String(a.properties.reported_at||'').localeCompare(String(b.properties.reported_at||''));
+  const tasks=operationalNodes().filter(n=>taskInStage(n,operationStage)&&(n.label+' '+n.id+' '+n.properties.description).toLowerCase().includes(query)).sort((a,b)=>operationStage==='sos'?byAge(a,b):(b.properties.urgency-a.properties.urgency)||byAge(a,b));
+  $('operation-tasks').innerHTML=tasks.map(n=>{
+    const sos=isSos(n),where=n.lat===null?'位置未知':(n.properties.address||n.properties.location_source),since=sinceText(n.properties.reported_at);
+    const meta=sos?[since&&'通報 '+since,where]:[n.properties.quantity_text||'數量未填',where,since];
+    return `<button data-task="${escapeHtml(n.id)}" class="${state.selected?.id===n.id?'selected':''} ${ageClass(n)}"><span class="task-priority ${sos?'urgent':''}">${sos?'SOS':'P'+n.properties.urgency}</span><span class="task-text">${escapeHtml(n.label)}<small>${escapeHtml(meta.filter(Boolean).join(' · '))}</small></span></button>`;
+  }).join('')||'<p class="muted">此狀態沒有需求</p>';
   $('operation-tasks').querySelectorAll('button').forEach(b=>b.onclick=()=>focusOperational(b.dataset.task));
   if(catalogTab==='tasks')$('object-count').textContent=tasks.length+' 筆';
 }
@@ -86,6 +102,9 @@ async function refreshOperations(options={}){
     const edges=state.graph.edges.filter(e=>!e.id.startsWith('db:edge:')&&ids.has(e.source)&&ids.has(e.target)).concat(snapshot.graph.edges,bound.edges);
     mutate(()=>{state.graph={nodes,edges};if(state.selected&&!ids.has(state.selected.id))state.selected=null;});
     if(preserveLiveClean){state.undo=[];state.dirty=false;state.baseline=null;$('save-state').textContent='即時資料 · 自動更新';updateHistory();}
+    // 單獨開啟工作區時自己響鈴；嵌在外框裡由外框響，避免同一筆響兩次
+    if(!document.documentElement.classList.contains('embed')&&window.sosAlarm)
+      sosAlarm.check(openSos().map(n=>({id:n.id,name:n.label.split(' · ')[0],address:n.properties.address,reported_at:n.properties.reported_at})),item=>showSos(item.id));
     if(!options.silent)message(`現況已更新：${snapshot.counts.elders} 位長者、${snapshot.counts.volunteers} 位志工、${snapshot.counts.demands} 筆需求、${snapshot.counts.supplies} 筆物資`);
   })();
   try{return await operationRequest;}finally{operationRequest=null;for(const id of ['sync-db','layer-db'])$(id).disabled=false;}
@@ -108,14 +127,20 @@ function renderOperationalSelection(item,isNode){
   if(p.db==='resource')fields.push(['擁有者',p.owner],['登記數量',p.quantity_text||'未知'],['可用狀態',item.available?'可用':'保留中或不可用']);
   if(p.db==='point')fields.push(['收容容量',p.capacity??'未知'],['目前人數',p.current_load??'未知'],['庫存','未提供'],
     ['電話',p.base_values?.phone||'未提供'],['開放時間',p.base_values?.operating_hours||'未提供']);
-  if(p.db==='need')fields.push(['狀態',NEED_STATUS[p.status]||p.status],['優先級',p.urgency],['登記數量',p.quantity_text||'未知'],['需求',p.description||'未填'],['定位依據',p.location_source]);
+  // 求救不是物資需求：不顯示數量、優先級，狀態說「待處理」而不是「待媒合」
+  if(p.db==='need'&&p.need_type==='sos')fields.push(['狀態',p.status==='open'?'待處理':(NEED_STATUS[p.status]||p.status)],['通報時間',reportedText(p.reported_at)],['狀況',p.description||'未說明'],['定位依據',p.location_source]);
+  else if(p.db==='need')fields.push(['狀態',NEED_STATUS[p.status]||p.status],['通報時間',reportedText(p.reported_at)],['優先級',p.urgency],['登記數量',p.quantity_text||'未知'],['需求',p.description||'未填'],['定位依據',p.location_source]);
   // 原始經緯度是系統內部表示（而且會露出浮點誤差），摘要只講定位結果；
   // 要精確數值的人是在編輯，那邊本來就有緯度／經度欄位。
   if(isNode)fields.push(['地址',p.address||p.base_values?.address||'未提供'],['地圖定位',item.lat===null?'未定位':'已定位']);
+  // 求助者的狀況放在同一個面板，處理時不用切頁找
+  const who=p.db==='need'?nodeById(p.requester_id)?.properties:null;
+  const profile=who?[['脆弱度',who.vulnerability??'未評估'],['最近打卡',who.checkin?(CHECKIN_STATUS[who.checkin.status]||who.checkin.status)+' · '+who.checkin.date:'尚無紀錄'],['未解除警報',who.active_alerts]]:[];
   const related=isNode?state.graph.edges.filter(e=>e.id.startsWith('db:edge:')&&(e.source===item.id||e.target===item.id)):[];
-  el.innerHTML=`<div class="object-heading"><strong>${escapeHtml(item.label)}</strong><span class="source-label">${escapeHtml(isNode?item.source:item.provenance)}</span></div><dl class="object-facts">${fields.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>${p.quantity_verified===false?'<p class="error">數量或單位待確認，未納入分配試算。</p>':''}
+  el.innerHTML=`<div class="object-heading"><strong>${escapeHtml(item.label)}</strong><span class="source-label">${escapeHtml(isNode?item.source:item.provenance)}</span></div><dl class="object-facts">${fields.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')}</dl>${p.quantity_verified===false&&p.need_type!=='sos'?'<p class="error">數量或單位待確認，未納入分配試算。</p>':''}
+    ${p.db==='need'?'<div id="need-contacts" class="contact-list"></div>':''}
     ${p.db==='need'&&p.need_type!=='sos'&&['open','suggested'].includes(p.status)?'<div id="need-candidate-summary" class="candidate-summary muted">候選載入中…</div>':''}
-    <div id="operational-actions" class="actions"></div>${related.length?'<h2>關聯物件</h2><div class="related-objects">'+related.map(e=>{const other=e.source===item.id?e.target:e.source;return `<button data-related="${escapeHtml(other)}"><span>${escapeHtml(e.label)}</span>${escapeHtml(nodeById(other)?.label||other)}</button>`;}).join('')+'</div>':''}
+    <div id="operational-actions" class="actions"></div>${profile.length?'<h2>求助者狀況</h2><dl class="object-facts">'+profile.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')+'</dl>':''}${related.length?'<h2>關聯物件</h2><div class="related-objects">'+related.map(e=>{const other=e.source===item.id?e.target:e.source;return `<button data-related="${escapeHtml(other)}"><span>${escapeHtml(e.label)}</span>${escapeHtml(nodeById(other)?.label||other)}</button>`;}).join('')+'</div>':''}
     ${p.db==='need'?'<h2 class="event-heading">任務紀錄</h2><div id="operation-events" class="muted">讀取中</div>':''}<p class="muted">${p.observed_at?escapeHtml(new Date(p.observed_at).toLocaleString('zh-TW')):''}</p><details><summary>來源識別碼</summary><pre>${escapeHtml(item.id)}</pre></details>`;
   el.querySelectorAll('[data-related]').forEach(b=>b.onclick=()=>focusOperational(b.dataset.related));
   const actions=$('operational-actions');
@@ -143,15 +168,18 @@ function renderOperationalSelection(item,isNode){
   }
 }
 // 電話只在管理員點開時讀取、只放在畫面上，不寫進工作區快照或匯出檔。
+// 求助者本人在前，家屬照通知順序排；求救時第一件事就是打電話。
 async function loadNeedContact(node){
   try{
     const c=await resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/contact');
-    const digits=(c.phone||'').replace(/[^0-9+]/g,'');
-    if(state.selected?.id!==node.id||!$('operational-actions')||digits.length<7)return;
-    const a=document.createElement('a');a.className='icon-button';a.href='tel:'+digits;
-    a.innerHTML='<i data-lucide="phone"></i>';a.append(`撥打 ${c.name||'求助者'}（${c.phone}）`);
-    $('operational-actions').prepend(a);icons();
-  }catch(e){/* 沒有電話就不顯示按鈕 */}
+    const box=$('need-contacts');
+    if(state.selected?.id!==node.id||!box)return;
+    const people=[{name:c.name||'求助者',relation:'本人',phone:c.phone}].concat(c.contacts||[]);
+    const links=people.map(x=>{const digits=(x.phone||'').replace(/[^0-9+]/g,'');if(digits.length<7)return'';
+      return `<a class="icon-button call" href="tel:${escapeHtml(digits)}"><i data-lucide="phone"></i><span>${escapeHtml(x.name)}<small>${escapeHtml(CARE_RELATIONS[x.relation]||x.relation||'聯絡人')} · ${escapeHtml(x.phone)}</small></span></a>`;}).filter(Boolean);
+    box.innerHTML=links.length?'<h2>聯絡</h2>'+links.join(''):(isSos(node)?'<p class="error">求助者與家屬都沒有登記電話，請派人到場確認。</p>':'');
+    icons();
+  }catch(e){/* 讀不到就不顯示 */}
 }
 const operationCandidates=new Map();
 async function loadOperationCandidates(node,proposeButton=null){
@@ -307,5 +335,9 @@ function initOperations(){
   run('review-inventory',reviewInventory);run('apply-inventory',applyInventory);
   $('close-inventory').onclick=()=>$('inventory-dialog').close();$('close-inventory-review').onclick=()=>$('inventory-review-dialog').close();
   $('discard-inventory').onclick=()=>{inventoryDrafts.clear();updateInventoryCount();$('inventory-review-dialog').close();};
-  window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==parent)return;if(event.data?.workspaceVisible){map.invalidateSize();if(cy)cy.resize();if(state.live&&!state.dirty&&!inventoryDrafts.size)refreshOperations({silent:true}).catch(e=>message(e.message,true));}if(event.data?.operationStage in OPERATION_STAGES){operationStage=event.data.operationStage;setCatalog('tasks');renderOperations();}});
+  window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==parent)return;if(event.data?.workspaceVisible){map.invalidateSize();if(cy)cy.resize();if(state.live&&!state.dirty&&!inventoryDrafts.size)refreshOperations({silent:true}).catch(e=>message(e.message,true));}if(event.data?.operationStage in OPERATION_STAGES){operationStage=event.data.operationStage;setCatalog('tasks');renderOperations();}
+    // 外框的求救橫幅按「查看」：先更新現況（新求救可能還不在畫面上），再跳到那一筆
+    if(event.data?.focusNeed){const id=event.data.focusNeed;(state.live&&!state.dirty&&!inventoryDrafts.size?refreshOperations({silent:true}):Promise.resolve()).catch(()=>{}).then(()=>{if(nodeById(id))showSos(id);});}});
+  // 「幾分鐘前」與逾時顏色每 30 秒重畫一次，資料沒變也要走
+  setInterval(()=>{if(catalogTab==='tasks')renderOperationTasks();},30000);
 }

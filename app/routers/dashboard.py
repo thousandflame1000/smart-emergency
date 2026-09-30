@@ -1,4 +1,5 @@
 import logging
+from datetime import UTC
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -50,6 +51,8 @@ def get_summary(db: Session = Depends(get_db)):
 
     mode_cfg = db.query(SystemConfig).filter(SystemConfig.key == "mode").first()
     mode     = mode_cfg.value if mode_cfg else "normal"
+    sos = (db.query(CommunityNeed).filter(CommunityNeed.status == "open", CommunityNeed.need_type == "sos")
+           .order_by(CommunityNeed.created_at, CommunityNeed.id).limit(20).all())
 
     return {
         "date": str(today),
@@ -58,6 +61,11 @@ def get_summary(db: Session = Depends(get_db)):
         "active_alerts": active_alerts,
         "open_needs": open_needs,
         "available_resources": avail_res,
+        # 未處理的一鍵求救，最早的在前；外框靠 id 判斷有沒有新的進來
+        "open_sos": [{"id": str(n.id), "name": n.requester.name if n.requester else "",
+                      "address": n.address or (n.requester.address if n.requester else "") or "",
+                      "reported_at": n.created_at.replace(tzinfo=UTC).isoformat() if n.created_at else None}
+                     for n in sos],
     }
 
 

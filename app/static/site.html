@@ -95,6 +95,7 @@ button { font:inherit; }
   <div class="views" id="views"><iframe id="view" title="內容"></iframe></div>
 </div>
 
+<script src="/static/sos-alarm.js"></script>
 <script>
 (function () {
   var DASH = '/view/dashboard', CONSOLE = '/view/console';
@@ -178,7 +179,10 @@ button { font:inherit; }
     document.title = item.label + '｜鄰里守望';
     document.getElementById('mobile-title').textContent = item.label;
   }
-  function activate(target,item){if(target.contentWindow)target.contentWindow.postMessage(item.page?{navigate:item.page}:{workspaceVisible:true},location.origin);}
+  // 求救橫幅按「查看」時要交給工作區的那一筆；工作區第一次載入時訊息可能還沒人收，載入完成會再送一次
+  var pendingSos = null;
+  function activate(target,item){if(!target.contentWindow)return;target.contentWindow.postMessage(item.page?{navigate:item.page}:{workspaceVisible:true},location.origin);
+    if(item.id==='workspace'&&pendingSos){target.contentWindow.postMessage({focusNeed:pendingSos},location.origin);var sent=pendingSos;setTimeout(function(){if(pendingSos===sent)pendingSos=null;},10000);}}
   window.addEventListener('hashchange',function(){go(location.hash.slice(1));});
   window.addEventListener('message',function(e){if(e.origin!==location.origin||!Object.keys(frames).some(function(k){return frames[k].contentWindow===e.source;}))return;if(e.data&&buttons[e.data.navigate])go(e.data.navigate);});
   window.addEventListener('DOMContentLoaded',function(){if(window.lucide)lucide.createIcons();});
@@ -191,7 +195,12 @@ button { font:inherit; }
       mobilePill.classList.toggle('emergency', emergency);
       document.getElementById('emergency-banner').hidden = !emergency;
       var count = document.getElementById('workspace-count');
-      if (count) { count.hidden = !s.open_needs; count.textContent = s.open_needs || ''; var ws = count.parentNode; if (ws) ws.title = '事件處置工作區' + (s.open_needs ? '（待處理需求 ' + s.open_needs + ' 筆）' : ''); }
+      var sos = s.open_sos || [];
+      if (count) { count.hidden = !s.open_needs; count.textContent = s.open_needs || ''; count.classList.toggle('nav-alert', sos.length > 0); var ws = count.parentNode; if (ws) ws.title = '事件處置工作區' + (s.open_needs ? '（待處理需求 ' + s.open_needs + ' 筆' + (sos.length ? '，其中緊急求救 ' + sos.length + ' 筆' : '') + '）' : ''); }
+      // 不管現在在哪一頁，有新的求救就響鈴；按「查看」直接跳到工作區那一筆。
+      // 紅條放在緊急模式橫幅那一層、把內容往下推，手機上才不會蓋住選單按鈕
+      if (window.sosAlarm) sosAlarm.before = document.getElementById('emergency-banner');
+      if (window.sosAlarm) sosAlarm.check(sos, function (item) { pendingSos = 'db:need:' + item.id; go('workspace'); });
       document.getElementById('mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       document.getElementById('mobile-mode-text').textContent = emergency ? '緊急模式' : '日常模式';
       pill.setAttribute('aria-label', emergency ? '目前為緊急模式，按下可解除' : '目前為日常模式，按下可啟動緊急模式');
@@ -218,7 +227,6 @@ button { font:inherit; }
   pill.addEventListener('click', toggleMode);
   mobilePill.addEventListener('click', toggleMode);
   loadMode();
-  setInterval(loadMode, 60000);
   // 系統狀態有「需處理」時在選單上亮紅色數字；LINE 檢查有快取，5 分鐘一次夠了。
   function loadStatusBadge() {
     fetch('/api/system/status').then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {

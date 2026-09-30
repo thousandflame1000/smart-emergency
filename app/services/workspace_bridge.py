@@ -135,6 +135,7 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
                       "description": need.description or "", "address": need.address or requester.address or "",
                       "urgency": need.urgency, "quantity_text": need.quantity or "",
                       "quantity_verified": quantity is not None, "version": row_version(need), "observed_at": stamp,
+                      "reported_at": need.created_at.replace(tzinfo=UTC).isoformat() if need.created_at else None,
                       "location_source": "需求登記" if need.lat is not None and need.lng is not None else "登記人位置"}
         nodes[node_id] = Node(id=node_id, label=f"{requester.name} · {_item(need.need_type)}", kind="custom",
                              **_location(need, requester), quantity=0, available=pending or need.need_type == "sos",

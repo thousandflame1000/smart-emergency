@@ -684,8 +684,45 @@ def test_console_needs_no_login_by_default_even_with_a_bound_admin(db, monkeypat
 
 def test_need_contact_returns_requester_phone(db, webclient):
     vol, req, adm, res, need = world(db)
-    assert webclient.get(f"/api/resources/needs/{need.id}/contact").json() == {"name": "王奶奶", "phone": "0912345678"}
+    assert webclient.get(f"/api/resources/needs/{need.id}/contact").json() == {
+        "name": "王奶奶", "phone": "0912345678", "contacts": []}
     assert webclient.get("/api/resources/needs/nope/contact").status_code == 404
+
+
+def test_need_contact_lists_family_in_notify_order(db, webclient):
+    """處理求救時第一件事是打電話：本人之外，家屬照通知順序排，停用的關係不列。"""
+    from app.models.care_relation import CareRelation
+    vol, req, adm, res, need = world(db)
+    son = mk(db, "兒子", ["family"], "U-son", phone="0922000111")
+    daughter = mk(db, "女兒", ["family"], "U-dau", phone="0933000222")
+    old = mk(db, "前看護", ["family"], "U-old", phone="0944000333")
+    db.add_all([CareRelation(elderly_id=req.id, contact_id=son.id, relation="family", notify_order=2),
+                CareRelation(elderly_id=req.id, contact_id=daughter.id, relation="family", notify_order=1),
+                CareRelation(elderly_id=req.id, contact_id=old.id, relation="other", notify_order=3, is_active=False)])
+    db.commit()
+    contacts = webclient.get(f"/api/resources/needs/{need.id}/contact").json()["contacts"]
+    assert [(c["name"], c["phone"]) for c in contacts] == [("女兒", "0933000222"), ("兒子", "0922000111")]
+
+
+def test_summary_lists_open_sos_oldest_first(db, webclient):
+    """外框靠這份清單判斷有沒有新的求救進來，要響鈴。"""
+    from datetime import datetime, timedelta
+    vol, req, adm, res, need = world(db)
+    now = datetime.utcnow()
+    first = CommunityNeed(requester_id=req.id, need_type="sos", status="open", address="巷口", created_at=now - timedelta(minutes=9))
+    later = CommunityNeed(requester_id=vol.id, need_type="sos", status="open", created_at=now - timedelta(minutes=1))
+    done = CommunityNeed(requester_id=req.id, need_type="sos", status="fulfilled", created_at=now)
+    db.add_all([later, first, done]); db.commit()
+    sos = webclient.get("/api/dashboard/summary").json()["open_sos"]
+    assert [(i["id"], i["name"], i["address"]) for i in sos] == [(str(first.id), "王奶奶", "巷口"), (str(later.id), "志工甲", "")]
+    assert sos[0]["reported_at"].endswith("+00:00"), "通報時間要帶時區，瀏覽器才算得對幾分鐘前"
+
+
+def test_workspace_needs_carry_their_report_time(db):
+    from app.services.workspace_bridge import operational_snapshot
+    vol, req, adm, res, need = world(db)
+    node = next(n for n in operational_snapshot(db)["graph"]["nodes"] if n["id"] == f"db:need:{need.id}")
+    assert node["properties"]["reported_at"].endswith("+00:00")
 
 
 def test_need_contact_needs_an_admin_login(db, enforced, webclient):

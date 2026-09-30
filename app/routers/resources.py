@@ -425,12 +425,18 @@ def list_need_dispatch_events(
 @router.get("/needs/{need_id}/contact")
 def need_contact(need_id: str, db: Session = Depends(get_db),
                  _principal: dict | None = Depends(require_admin)):
-    """求助者的姓名與電話，只在管理員點開這筆需求時才讀，不放進工作區快照。"""
+    """求助者與家屬的姓名、電話，只在管理員點開這筆需求時才讀，不放進工作區快照。"""
+    from app.models.care_relation import CareRelation
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if need is None:
         raise HTTPException(404, "找不到這筆需求")
     requester = need.requester
-    return {"name": requester.name if requester else None, "phone": requester.phone if requester else None}
+    relations = (db.query(CareRelation).filter(CareRelation.elderly_id == need.requester_id,
+                                               CareRelation.is_active.is_(True))
+                 .order_by(CareRelation.notify_order).all()) if requester else []
+    return {"name": requester.name if requester else None, "phone": requester.phone if requester else None,
+            "contacts": [{"name": r.contact.name, "relation": r.relation, "phone": r.contact.phone}
+                         for r in relations if r.contact and r.contact.is_active]}
 
 
 @router.post("/needs/{need_id}/resolve_sos")
