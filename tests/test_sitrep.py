@@ -7,7 +7,7 @@ from app.models.config import SystemConfig
 from app.models.need import CommunityNeed
 from app.services import rollcall, sitrep
 from app.timeutil import now_utc
-from tests.test_line_hardening import mk, press
+from tests.test_line_hardening import mk, press, replies, say
 
 
 def test_emergency_report_counts_roll_call_sos_and_needs(db, line_outbox):
@@ -125,3 +125,25 @@ def test_duty_log_goes_into_the_timeline_and_is_not_crowded_out(db):
     assert c.post("/api/dashboard/sitrep/log", json={"text": "   "}).status_code == 422
     assert c.post("/api/dashboard/sitrep/log", json={"text": "字" * 301}).status_code == 422
     assert db.query(DutyLog).count() == 1
+
+
+def test_admin_and_field_staff_log_duty_notes_from_line(db, line_outbox):
+    from app.models.duty_log import DutyLog
+    mk(db, "王組長", ["admin"], "U-boss")
+    mk(db, "陳幹事", ["field_staff"], "U-staff")
+    mk(db, "林阿嬤", ["elderly"], "U-elder")
+
+    say("U-boss", "紀事：李奶奶跌倒，家屬已送醫")          # 提到跌倒也只是紀事，不能變成求救
+    say("U-staff", "紀事 光復國小收容所 停電")
+    assert replies(line_outbox)[-2:] == ["📝 已記入值班紀事", "📝 已記入值班紀事"]
+    assert [(n.text, n.author) for n in db.query(DutyLog).order_by(DutyLog.author).all()] == [
+        ("光復國小收容所 停電", "基層員工：陳幹事"), ("李奶奶跌倒，家屬已送醫", "管理員：王組長")]
+    assert db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").count() == 0
+
+    say("U-boss", "紀事")
+    assert "後面接內容" in replies(line_outbox)[-1]
+    say("U-boss", "紀事 " + "字" * 301)
+    assert "最多 300 字" in replies(line_outbox)[-1]
+    say("U-boss", "紀事本放哪裡")                          # 沒有分隔就不是指令
+    say("U-elder", "紀事 今天很好")                        # 居民不能寫值班紀事
+    assert db.query(DutyLog).count() == 2

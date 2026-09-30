@@ -46,6 +46,9 @@ BIND_RE = re.compile(r"^綁定\s*(\d{6})$")
 JOIN_RE = re.compile(r"^加入\s*(\d{8})$")
 # 打錯位數或夾雜非數字時用這個攔下來，好告訴對方正確格式。
 NEAR_CODE_RE = re.compile(r"^(綁定|加入)\s*([0-9A-Za-z\-]{1,16})$")
+# 「紀事 鄉公所來電…」：管理員、基層員工在外面也能記值班紀事；「紀事本」這類詞不算
+DUTY_NOTE_RE = re.compile(r"^紀事(?:[\s：:]+(.*))?$", re.S)
+DUTY_NOTE_MAX = 300
 JOIN_TTL = timedelta(days=7)
 JOIN_TTL_ADMIN = timedelta(minutes=30)
 MAX_CODE_FAILURES = 5
@@ -935,8 +938,28 @@ def my_records_link(event, user: User) -> None:
                                   [{"label": "開啟我的紀錄", "uri": form_url("me", user.line_uid)}]))
 
 
+def duty_note(event, db: Session, user: User, text: str | None) -> None:
+    from app.models.duty_log import DutyLog
+    from app.services import admin_audit
+    text = " ".join((text or "").split())
+    if not text:
+        _say(event, "在「紀事」後面接內容，例如：紀事 鄉公所來電，台9線坍方")
+        return
+    if len(text) > DUTY_NOTE_MAX:
+        _say(event, f"紀事最多 {DUTY_NOTE_MAX} 字，這則有 {len(text)} 字，請分成幾則傳。")
+        return
+    db.add(DutyLog(text=text, author=f"{'管理員' if is_admin(user) else '基層員工'}：{user.name}"))
+    db.commit()
+    admin_audit.record({"id": str(user.id), "name": user.name}, "LINE", "記錄值班紀事", 200)
+    _say(event, "📝 已記入值班紀事")
+
+
 # ── 入口 ────────────────────────────────────────────────────────────────────
 def handle_text(event, db: Session, user: User, text: str) -> bool:
+    note = DUTY_NOTE_RE.match(text)
+    if note and (is_admin(user) or is_field_staff(user)):
+        duty_note(event, db, user, note.group(1))
+        return True
     m = BIND_RE.match(text)
     if m:
         bind_family(event, db, user, m.group(1))
