@@ -131,12 +131,26 @@ dialog h2{font-size:21px;margin-bottom:8px}
 
   function el(tag, text, cls) { var n = document.createElement(tag); if (text != null) n.textContent = text; if (cls) n.className = cls; return n; }
   function toast(text) { var t = $('toast'); t.textContent = text; t.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(function () { t.hidden = true; }, 4500); }
-  function api(path, body) {
+  // App 開著放好幾個小時，登入會過期（3 小時）；這時按「需要幫忙」不能就失敗了。
+  // 遇到 401 先用 LINE 重新確認身分，再把同一個動作送一次。
+  function api(path, body, retried) {
     return fetch(path, body === undefined ? { credentials: 'same-origin' } :
       { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) {
+        if (r.status === 401 && !retried && path !== '/app/api/session') return reauth().then(function () { return api(path, body, true); });
         if (!r.ok) throw new Error(d.detail && typeof d.detail === 'string' ? d.detail : (d.error || '連線失敗，請稍後再試'));
         return d; }); });
+  }
+  var liffReady = false;  // liff.init 成功後才能拿新的身分憑證；用簽章連結開的（沒有 LIFF）就請他從 LINE 重開
+  function reauth() {
+    if (liffReady && liff.isLoggedIn() && liff.getIDToken()) {
+      return api('/app/api/session', { id_token: liff.getIDToken() }, true).catch(function () {
+        // LINE 的身分憑證也過期了：重新載入 App 讓 LINE 重新登入
+        toast('重新連線中，請再按一次'); setTimeout(function () { location.reload(); }, 1200);
+        return new Promise(function () {});
+      });
+    }
+    return Promise.reject(new Error('請從 LINE 重新打開 App。有生命危險請直接撥 119'));
   }
   function fail(text) { $('loading').hidden = false; $('loading').textContent = text; }
 
@@ -302,6 +316,7 @@ dialog h2{font-size:21px;margin-bottom:8px}
     fail('請從 LINE 打開鄰里守望。');
   } else {
     liff.init({ liffId: LIFF_ID }).then(function () {
+      liffReady = true;
       if (!liff.isLoggedIn()) { liff.login({ redirectUri: location.href }); return; }
       return start({ id_token: liff.getIDToken() });
     }).catch(function (e) { fail('無法確認身分：' + (e.message || e) + '\n請從 LINE 重新打開。'); });
