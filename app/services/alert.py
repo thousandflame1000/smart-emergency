@@ -29,19 +29,24 @@ def send_alerts_for_checkin(checkin_id, alert_type: str, db: Session) -> int:
 def notify_admins(db: Session, text: str, buttons: list[dict] | None = None) -> int:
     """推播給所有綁了 LINE 的管理員。一鍵求助之前只通知照護聯絡人，長者沒有
     聯絡人時完全沒有任何人知道，管理員只能靠自己盯著後台。"""
+    import uuid
     from app.models.user import User
-    from app.services.line_notify import push_flex_message, send_text
+    from app.services.outbox import send_flex_reliably, send_text_reliably
     sent = 0
     card = None
     if buttons:
         from app.services.line_ops import bubble
         card = bubble("📣 需要您處理", "#c0392b", text.split("\n"), buttons)
-    for admin in db.query(User).filter(User.role_filter("admin"), User.line_uid != None).all():
+    batch = uuid.uuid4().hex
+    for admin in db.query(User).filter(User.role_filter("admin"), User.line_uid != None).all():  # noqa: E711
+        # 先存進寄件佇列再推，LINE 暫時失敗會重試；求救與升級通知不能推一次失敗就沒了
         try:
             if card:
-                push_flex_message(admin.line_uid, text.split("\n")[0][:300], card)
+                send_flex_reliably(aggregate_type="Admin", aggregate_id=str(admin.id), destination=admin.line_uid,
+                                   alt=text.split("\n")[0][:300], contents=card, dedupe_key=f"admin:{batch}:{admin.id}")
             else:
-                send_text(admin.line_uid, text)
+                send_text_reliably(aggregate_type="Admin", aggregate_id=str(admin.id), destination=admin.line_uid,
+                                   content=text, dedupe_key=f"admin:{batch}:{admin.id}")
             sent += 1
         except Exception as e:
             logger.error(f"[alert] 通知管理員失敗（{admin.name}）：{e}")

@@ -124,11 +124,13 @@ def nearby_unanswered(db: Session, volunteer: User, limit: int = 5) -> list[dict
 
 def ask(db: Session, only_pending: bool = False) -> list[str]:
     """推點名卡給長者；only_pending 時只推還沒回的（「再問一次」）。回傳真的推出去的 LINE uid。"""
-    from app.services.line_notify import push_flex_message
+    import uuid
     from app.services.line_ops import bubble
+    from app.services.outbox import send_flex_reliably
     round_id = current_round(db)
     if not round_id:
         return []
+    batch = "remind:" + uuid.uuid4().hex if only_pending else "ask"
     answered = {str(r.user_id) for r in db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id).all()}
     card = bubble("🚨 請回報是否平安", "#c0392b", PROMPT.split("\n")[2:],
                   [{"label": "✅ 我平安", "data": "action=safe", "color": "#13795b"},
@@ -138,9 +140,7 @@ def ask(db: Session, only_pending: bool = False) -> list[str]:
     for u in elders(db):
         if not u.line_uid or (only_pending and str(u.id) in answered):
             continue
-        try:
-            push_flex_message(u.line_uid, "🚨 請回報是否平安", card)
-            sent.append(u.line_uid)
-        except Exception:
-            logger.warning("roll call push failed for %s", u.id, exc_info=True)
+        send_flex_reliably(aggregate_type="SafetyCheck", aggregate_id=round_id, destination=u.line_uid,
+                           alt="🚨 請回報是否平安", contents=card, dedupe_key=f"rollcall:{round_id}:{u.id}:{batch}")
+        sent.append(u.line_uid)
     return sent

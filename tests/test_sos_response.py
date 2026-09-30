@@ -185,3 +185,28 @@ def test_admin_sos_card_carries_triage_details(db, line_outbox, monkeypatch):
     message = [m for kind, to, m in line_outbox.sent if kind == "push" and to == "U-admin"][-1]
     card = json.dumps(message.contents.to_dict(), ensure_ascii=False)
     assert "脆弱度" in card and "已通知附近 2 位志工" in card and "最近的 AED：活動中心" in card
+
+
+def test_a_failed_nearby_alert_is_retried_from_the_outbox(db, line_outbox, monkeypatch):
+    """LINE 暫時出錯時，附近志工的求救卡不能就這樣沒了：存在寄件佇列，排程重送。"""
+    from datetime import timedelta
+    from app.models.outbox import OutboxMessage
+    from app.services.outbox import OutboxWorker
+    real_push = line_outbox.push_message
+    calls = {"n": 0}
+
+    def flaky(request):
+        calls["n"] += 1
+        if request.to == "U-near" and calls.get("failed") is None:
+            calls["failed"] = True
+            raise RuntimeError("LINE 503")
+        real_push(request)
+    monkeypatch.setattr(line_outbox, "push_message", flaky)
+    need, *_ = _world(db)
+    assert not sent_to(line_outbox, "U-near"), "第一次推送失敗"
+    row = db.query(OutboxMessage).filter(OutboxMessage.dedupe_key.like(f"sos-nearby:{need.id}:%"),
+                                         OutboxMessage.destination == "U-near").one()
+    assert row.status == "FAILED" and row.message_type == "FLEX"
+    worker = OutboxWorker(db, worker_id="retry-test")
+    sent = worker.process_next(now=row.available_at + timedelta(seconds=1))
+    assert sent.status == "SENT" and sent_to(line_outbox, "U-near") == [ALERT]

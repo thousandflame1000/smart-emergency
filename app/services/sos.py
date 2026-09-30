@@ -64,8 +64,8 @@ def nearby_volunteers(db: Session, need: CommunityNeed) -> list[tuple[User, floa
 
 def alert_nearby(db: Session, need: CommunityNeed) -> int:
     """推「附近有人需要幫忙」給附近志工。先不給電話，按了「我過去」才給，減少個資外流。"""
-    from app.services.line_notify import push_flex_message
     from app.services.line_ops import bubble
+    from app.services.outbox import send_flex_reliably
     requester = need.requester
     sent = 0
     for volunteer, km in nearby_volunteers(db, need):
@@ -79,11 +79,10 @@ def alert_nearby(db: Session, need: CommunityNeed) -> int:
                        *([_aed_line(need)] if _aed_line(need) else []),
                        "能過去看看的話請按「我過去」；第一位按的人負責，其他人會收到通知。",
                        "有生命危險請直接撥 119。"], buttons)
-        try:
-            push_flex_message(volunteer.line_uid, "🆘 附近有人需要幫忙", card)
-            sent += 1
-        except Exception:
-            logger.warning("nearby SOS alert failed for %s", volunteer.id, exc_info=True)
+        # 先存進寄件佇列再推，LINE 暫時失敗會重試；已排入就算通知到了
+        send_flex_reliably(aggregate_type="CommunityNeed", aggregate_id=str(need.id), destination=volunteer.line_uid,
+                           alt="🆘 附近有人需要幫忙", contents=card, dedupe_key=f"sos-nearby:{need.id}:{volunteer.id}")
+        sent += 1
     return sent
 
 

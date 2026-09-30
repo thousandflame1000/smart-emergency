@@ -69,6 +69,13 @@ class LineOutboxDispatcher:
             if contact_id and contact_id not in notified:
                 alert.notified_users = notified + [contact_id]
             return
+        if message.message_type == "FLEX":
+            from app.services.line_notify import push_flex_message
+            payload = message.payload or {}
+            if not payload.get("contents"):
+                raise OutboxDeliveryError("Flex notification content is missing")
+            push_flex_message(message.destination, str(payload.get("alt") or "通知"), payload["contents"])
+            return
         if message.message_type == "TEXT":
             from app.services.line_notify import send_text
             content = str((message.payload or {}).get("text") or "")
@@ -231,6 +238,17 @@ class OutboxService:
             dedupe_key=dedupe_key,
         )
 
+    def enqueue_flex(self, *, aggregate_type: str, aggregate_id: str, destination: str, alt: str,
+                     contents: dict, dedupe_key: str) -> OutboxMessage:
+        return self._enqueue_line(
+            aggregate_type=aggregate_type,
+            aggregate_id=aggregate_id,
+            destination=destination,
+            message_type="FLEX",
+            payload={"alt": alt, "contents": contents},
+            dedupe_key=dedupe_key,
+        )
+
     def enqueue_legacy_task(
         self,
         need: CommunityNeed,
@@ -311,6 +329,40 @@ def send_text_reliably(
         try:
             from app.services.line_notify import send_text
             send_text(message.destination, content)
+        except Exception as exc:
+            return finish_inline_delivery(db, message_id, exc)
+        return finish_inline_delivery(db, message_id)
+    finally:
+        db.close()
+
+
+def send_flex_reliably(
+    *,
+    aggregate_type: str,
+    aggregate_id: str,
+    destination: str | None,
+    alt: str,
+    contents: dict,
+    dedupe_key: str,
+) -> bool:
+    """跟 send_text_reliably 一樣：先存進寄件佇列再推；LINE 暫時失敗時由排程重試。
+
+    求救、點名這類卡片漏送的代價很高，不能推一次失敗就算了。回傳是否已當場送達。"""
+    db = SessionLocal()
+    try:
+        existing = db.query(OutboxMessage).filter(OutboxMessage.dedupe_key == dedupe_key).first()
+        if existing:
+            return existing.status == "SENT"
+        message = OutboxService(db).enqueue_flex(aggregate_type=aggregate_type, aggregate_id=aggregate_id,
+                                                 destination=destination or "", alt=alt, contents=contents,
+                                                 dedupe_key=dedupe_key)
+        message_id = str(message.id)
+        db.commit()
+        if message.status != "PROCESSING":
+            return False
+        try:
+            from app.services.line_notify import push_flex_message
+            push_flex_message(message.destination, alt, contents)
         except Exception as exc:
             return finish_inline_delivery(db, message_id, exc)
         return finish_inline_delivery(db, message_id)
