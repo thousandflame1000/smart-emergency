@@ -99,6 +99,17 @@ def line_outbox(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def wait_for_broadcasts(line_outbox):
+    """切換模式會在背景執行緒廣播；測試結束前等它跑完，不然會延續到下一個測試
+    （那時假的 LINE 已拿掉、資料表也重建了）。依賴 line_outbox，確保在它拆掉前先等。"""
+    yield
+    import threading
+    for thread in threading.enumerate():
+        if "broadcast_mode_change" in thread.name:
+            thread.join(timeout=10)
+
+
+@pytest.fixture(autouse=True)
 def no_real_geocoding(monkeypatch):
     """Nominatim is a real network call with a 1s throttle; tests must never hit it.
     Individual tests can override with monkeypatch.setattr(places, "search_places", ...)."""
