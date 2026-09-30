@@ -61,8 +61,15 @@ def actor_name(label: str | None) -> str:
     return label
 
 
-def timeline(db: Session, since: datetime) -> list[dict]:
-    """這段期間發生的事，新的在前：求救、受理、轉報 119、點名的求助與不舒服、派遣、模式切換、值班紀事。"""
+def full_time(dt: datetime) -> str:
+    """匯出用：台灣時間含年份與秒，試算表排序不會亂。"""
+    return (_naive(dt) + TAIPEI).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def timeline(db: Session, since: datetime, limit: int | None = TIMELINE_LIMIT, fmt=_local) -> list[dict]:
+    """這段期間發生的事，新的在前：求救、受理、轉報 119、點名的求助與不舒服、派遣、模式切換、值班紀事。
+
+    報告頁只列最近 limit 筆系統事件（值班紀事全列）；匯出 CSV 時 limit=None 全部列出。"""
     from app.models.admin_audit import AdminAudit
     from app.models.duty_log import DutyLog
     from app.models.safety_check import SafetyCheck
@@ -86,9 +93,9 @@ def timeline(db: Session, since: datetime) -> list[dict]:
     for a in mode_switches:
         rows.append((_naive(a.created_at), describe(a.method, a.path), "", actor_name(a.actor_label)))
     # 人記的紀事不跟系統事件搶名額：事件再多，值班寫下的決策也不能被擠出報告
-    rows = sorted(rows, key=lambda r: r[0], reverse=True)[:TIMELINE_LIMIT]
+    rows = sorted(rows, key=lambda r: r[0], reverse=True)[:limit]
     merged = sorted([(r, False) for r in rows] + [(n, True) for n in notes], key=lambda x: x[0][0], reverse=True)
-    return [{"time": _local(t), "what": what, "who": who, "by": by, "note": note}
+    return [{"time": fmt(t), "what": what, "who": who, "by": by, "note": note}
             for (t, what, who, by), note in merged]
 
 

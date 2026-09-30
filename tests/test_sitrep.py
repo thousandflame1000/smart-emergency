@@ -147,3 +147,25 @@ def test_admin_and_field_staff_log_duty_notes_from_line(db, line_outbox):
     say("U-boss", "紀事本放哪裡")                          # 沒有分隔就不是指令
     say("U-elder", "紀事 今天很好")                        # 居民不能寫值班紀事
     assert db.query(DutyLog).count() == 2
+
+
+def test_full_timeline_exports_as_csv_oldest_first(db):
+    import csv
+    import io
+    from app.main import app
+    from app.models.dispatch_event import DispatchEvent
+    c = TestClient(app)
+    now = now_utc().replace(tzinfo=None)
+    db.add_all([DispatchEvent(action="task_report", actor_label="manager", created_at=now + timedelta(seconds=i))
+                for i in range(sitrep.TIMELINE_LIMIT + 5)])
+    db.commit()
+    c.post("/api/dashboard/sitrep/log", json={"text": "鄉公所來電"})
+    r = c.get("/api/dashboard/sitrep/timeline.csv")
+    assert r.status_code == 200 and r.text.startswith("\ufeff") and "timeline.csv" in r.headers["content-disposition"]
+    rows = list(csv.reader(io.StringIO(r.text.lstrip("\ufeff"))))
+    assert rows[0] == ["時間", "類別", "事件", "當事人", "操作者／地點"]
+    body = rows[1:]
+    assert len(body) == sitrep.TIMELINE_LIMIT + 6, "報告頁只列 60 筆，匯出要全部"
+    assert [r[0] for r in body] == sorted(r[0] for r in body) and len(body[0][0]) == len("2026-10-01 20:12:33")
+    assert [r[1:] for r in body if r[1] == "值班紀事"] == [["值班紀事", "鄉公所來電", "", "後台"]]
+    assert sum(r[1] == "系統紀錄" for r in body) == sitrep.TIMELINE_LIMIT + 5

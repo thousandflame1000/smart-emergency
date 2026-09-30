@@ -27,6 +27,7 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
 .tag.red { background:#ffe8e4; color:var(--red); } .tag.amber { background:#fff3d6; color:var(--amber); } .tag.green { background:#e2f2e9; color:var(--green); } .tag.grey { background:#eceff1; color:#37474f; }
 .muted { color:var(--muted); } .empty { color:var(--muted); font-size:14px; margin:6px 0 0; }
 .table-wrap { overflow-x:auto; } .table-wrap table { min-width:560px; }
+h2 .export { float:right; font-size:13px; font-weight:400; color:#13795b; }
 .note-form { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
 .note-form label { font-weight:600; font-size:14px; }
 .note-form input { flex:1 1 240px; min-width:0; padding:8px 10px; border:1px solid var(--line); border-radius:6px; font:inherit; }
@@ -34,7 +35,7 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
 .note-form button:disabled { opacity:.6; cursor:default; }
 .note-status { width:100%; margin:0; font-size:13px; color:var(--muted); } .note-status.error { color:var(--red); }
 tr.note td { background:#f3f8ff; } tr.note td:nth-child(2) { font-weight:600; }
-@media print { body { background:#fff; } .actions, .note-section { display:none; } section { break-inside:avoid; border-color:#bbb; } main { padding:0; } }
+@media print { body { background:#fff; } .actions, .note-section, .export { display:none; } section { break-inside:avoid; border-color:#bbb; } main { padding:0; } }
 </style>
 </head>
 <body>
@@ -91,7 +92,7 @@ tr.note td { background:#f3f8ff; } tr.note td:nth-child(2) { font-weight:600; }
           return '<tr><td>' + esc(r.name) + '</td><td><span class="tag ' + (full ? 'red' : high ? 'amber' : 'green') + '">' + r.load + '／' + (r.capacity || '—') + (full ? '・已滿' : '') + '</span></td><td>' + esc(r.address || '—') + '</td></tr>'; }).join('') +
         '</tbody></table></div>' : '') +
       '<p class="empty">另可查詢內政部公告的全國避難收容處所 5,928 處。</p></section>';
-    html += '<section><h2>時間軸（新的在前）</h2>' + (d.timeline.length ? '<div class="table-wrap"><table><thead><tr><th>時間</th><th>事件</th><th>當事人</th><th>操作者／地點</th></tr></thead><tbody>' +
+    html += '<section><h2>時間軸（新的在前）<a class="export" href="/api/dashboard/sitrep/timeline.csv" download>匯出完整 CSV</a></h2>' + (d.timeline.length ? '<div class="table-wrap"><table><thead><tr><th>時間</th><th>事件</th><th>當事人</th><th>操作者／地點</th></tr></thead><tbody>' +
       d.timeline.map(function (t) { return '<tr' + (t.note ? ' class="note"' : '') + '><td>' + esc(t.time) + '</td><td>' + (t.note ? '<span class="tag grey">紀事</span> ' : '') + esc(t.what) + '</td><td>' + esc(t.who || '—') + '</td><td>' + esc(t.by || '—') + '</td></tr>'; }).join('') +
       '</tbody></table></div>' : '<p class="empty">這段期間還沒有事件。</p>') + '</section>';
     document.getElementById('report').innerHTML = html;
