@@ -242,3 +242,15 @@ def test_responder_reports_arrival_once(db, line_outbox):
     db.expire_all()
     assert sitrep.build(db)["sos"]["median_arrive_min"] is not None
     assert "處理人到場" in {t["what"] for t in sitrep.build(db)["timeline"]}
+
+
+def test_workspace_knows_when_the_responder_is_on_scene(db, line_outbox):
+    from app.services.workspace_bridge import operational_snapshot
+    need, *_ = _world(db)
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    node = lambda: next(n for n in operational_snapshot(db)["graph"]["nodes"] if n["id"] == f"db:need:{need.id}")  # noqa: E731
+    db.expire_all()
+    assert node()["properties"]["on_scene_at"] is None
+    press("U-mid", f"action=sos_arrived&need_id={need.id}")
+    db.expire_all()
+    assert node()["properties"]["on_scene_at"].endswith("+00:00")

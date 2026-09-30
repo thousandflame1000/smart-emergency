@@ -134,6 +134,11 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
                              logistics=[LogisticsRecord(id=node_id, role="supply", item=_item(resource.resource_type),
                                          unit=quantity[1], quantity=quantity[0], source="平台物資登記")] if quantity else [])
         relation("owner:" + str(resource.id), owner_id, node_id, "持有", "supplies")
+    # 未結案求救的到場時間（一個查詢）：工作區要分得出「有人受理但還在路上」和「人已經到了」
+    from app.models.dispatch_event import DispatchEvent
+    open_sos = [str(n.id) for n in needs if n.need_type == "sos" and n.status == "open"]
+    on_scene = {str(e.need_id): e.created_at for e in db.query(DispatchEvent).filter(
+        DispatchEvent.action == "sos_on_scene", DispatchEvent.need_id.in_(open_sos)).all()} if open_sos else {}
     for need in needs:
         person_id = person(need.requester_id)
         if not person_id:
@@ -151,6 +156,7 @@ def operational_snapshot(db: Session, zone_id: str | None = None) -> dict:
                       "reported_at": need.created_at.replace(tzinfo=UTC).isoformat() if need.created_at else None,
                       "responder": need.responder.name if need.responder_id and need.responder else None,
                       "acknowledged_at": need.acknowledged_at.replace(tzinfo=UTC).isoformat() if need.acknowledged_at else None,
+                      "on_scene_at": on_scene[str(need.id)].replace(tzinfo=UTC).isoformat() if str(need.id) in on_scene else None,
                       "location_source": "需求登記" if need.lat is not None and need.lng is not None else "登記人位置"}
         nodes[node_id] = Node(id=node_id, label=f"{requester.name} · {_item(need.need_type)}", kind="custom",
                              **_location(need, requester), quantity=0, available=pending or need.need_type == "sos",
