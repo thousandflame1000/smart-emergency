@@ -55,6 +55,9 @@ MAX_CODE_FAILURES = 5
 FAILURE_WINDOW = timedelta(hours=1)
 INVITE_TTL = timedelta(hours=24)
 CHECKIN_ZH = {"pending": "⏳ 還沒回覆", "ok": "✅ 已回報平安", "help_needed": "🆘 求助中", "no_response": "⚠️ 長時間未回應"}
+# 緊急模式時家屬看的是這次災害的點名，早上的打卡不代表災後平安
+ROLLCALL_FAMILY_ZH = {"pending": "⏳ 還沒回報這次是否平安", "ok": "✅ 這次已回報平安", "unwell": "⚠️ 回報身體不舒服",
+                      "help": "🆘 需要協助（求救處理中）", "helped": "✅ 求救已處理完成"}
 
 
 # ── 共用卡片元件 ─────────────────────────────────────────────────────────────
@@ -850,22 +853,41 @@ def elder_status(event, db: Session, user: User) -> None:
     if not relations:
         _say(event, "您還沒有綁定的長輩。請長輩傳「邀請家人」取得綁定碼，再傳「綁定 碼」給我。")
         return
+    from app.models.safety_check import SafetyCheck
+    from app.services import rollcall
+    round_id = rollcall.current_round(db)
     bubbles = []
     for rel in relations[:10]:
         elder = rel.elderly
-        checkin = db.query(DailyCheckin).filter(DailyCheckin.elderly_id == elder.id,
-                                                DailyCheckin.date == today_tw()).first()
-        status = CHECKIN_ZH.get(checkin.status, checkin.status) if checkin else "今天還沒有打卡紀錄"
         buttons = []
         if tel_uri(elder.phone):
             buttons.append({"label": f"📞 撥打 {elder.phone}"[:20], "uri": tel_uri(elder.phone),
                             "color": "#2471a3"})
-        if checkin and checkin.status != "ok":
-            buttons.append({"label": "✅ 我確認他平安", "data": f"action=confirm_safe&checkin_id={checkin.id}"})
+        if round_id:
+            reply = db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id,
+                                                 SafetyCheck.user_id == elder.id).first()
+            state = reply.status if reply else "pending"
+            if state == "help" and rollcall.helped_ids(db, round_id, [str(elder.id)]):
+                state = "helped"
+            status, good = ROLLCALL_FAMILY_ZH[state], state in ("ok", "helped")
+            if state in ("pending", "unwell"):
+                # 家屬電話聯絡到了就能代為回報，不必等早上的打卡紀錄
+                buttons.append({"label": "✅ 我確認他平安", "data": f"action=rc_family&elder_id={elder.id}"})
+        else:
+            checkin = db.query(DailyCheckin).filter(DailyCheckin.elderly_id == elder.id,
+                                                    DailyCheckin.date == today_tw()).first()
+            status = CHECKIN_ZH.get(checkin.status, checkin.status) if checkin else "今天還沒有打卡紀錄"
+            if checkin and checkin.status == "help_needed" and not db.query(CommunityNeed).filter(
+                    CommunityNeed.requester_id == elder.id, CommunityNeed.need_type == "sos",
+                    CommunityNeed.status == "open").count():
+                status = "✅ 今天的求助已結案"  # 結案後不能整天掛著「求助中」
+            good = checkin is not None and (checkin.status == "ok" or status.startswith("✅"))
+            if checkin and not good:
+                buttons.append({"label": "✅ 我確認他平安", "data": f"action=confirm_safe&checkin_id={checkin.id}"})
         buttons.append({"label": "👀 請附近志工去看看", "data": f"action=family_check&elder_id={elder.id}"})
-        bubbles.append(bubble(f"👴 {elder.name}", "#148f77" if checkin and checkin.status == "ok" else "#c2610a",
+        bubbles.append(bubble(f"👴 {elder.name}", "#148f77" if good else "#c2610a",
                               [status, f"地址：{elder.address or '未填'}"], buttons))
-    _flex(event, "長輩今日狀況", carousel(bubbles))
+    _flex(event, "長輩這次災害的狀況" if round_id else "長輩今日狀況", carousel(bubbles))
 
 
 # ── 居民：我的需求 ───────────────────────────────────────────────────────────

@@ -385,3 +385,61 @@ def test_people_who_answered_a_roll_call_or_took_an_sos_can_still_be_deleted(db,
     elder = db.query(User).filter(User.line_uid == "U-answered").one()
     delete_user_data(db, elder)
     assert db.query(SafetyCheck).count() == 0 and db.query(User).filter(User.line_uid == "U-answered").count() == 0
+
+
+def _last_card(line_outbox):
+    import json
+    message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    return json.dumps(message.contents.to_dict(), ensure_ascii=False)
+
+
+def test_family_sees_this_disasters_roll_call_not_this_mornings_check_in(db, line_outbox):
+    """早上打卡平安，災害發生後還沒回報：家屬不能看到「已回報平安」；家屬聯絡到人可以直接代為回報。"""
+    from app.services import checkin as checkin_svc
+    elder = mk(db, "阿公", ["elderly"], "U-gpa")
+    kid = mk(db, "女兒", ["family"], "U-kid")
+    mk(db, "路人", ["family"], "U-stranger")
+    db.add(CareRelation(elderly_id=elder.id, contact_id=kid.id, relation="family")); db.commit()
+    checkin_svc.record_ok(db, elder)
+    say("U-kid", "長輩狀況")
+    assert "已回報平安" in _last_card(line_outbox)
+
+    _emergency(db)
+    say("U-kid", "長輩狀況")
+    card = _last_card(line_outbox)
+    assert "還沒回報這次是否平安" in card and f"action=rc_family&elder_id={elder.id}" in card
+
+    press("U-stranger", f"action=rc_family&elder_id={elder.id}")
+    assert "照護聯絡人" in replies(line_outbox)[-1] and _status(db)["阿公"] == "pending"
+    press("U-kid", f"action=rc_family&elder_id={elder.id}")
+    assert replies(line_outbox)[-1] == "✅ 已回報 阿公 這次平安，社區看得到。"
+    person = rollcall.board(db)["people"][0]
+    assert (person["status"], person["via"], person["marked_by"]) == ("ok", "family", "女兒")
+    say("U-kid", "長輩狀況")
+    card = _last_card(line_outbox)
+    assert "這次已回報平安" in card and "rc_family" not in card
+
+
+def test_family_sees_a_closed_sos_as_handled(db, line_outbox):
+    from app.models.need import CommunityNeed
+    elder = mk(db, "阿嬤", ["elderly"], "U-gma", lat=23.66, lng=121.42)
+    kid = mk(db, "兒子", ["family"], "U-son")
+    db.add(CareRelation(elderly_id=elder.id, contact_id=kid.id, relation="family")); db.commit()
+    db.add(DailyCheckin(elderly_id=elder.id, date=today_tw(), status="pending")); db.commit()
+    press("U-gma", "action=confirm_sos")
+    say("U-son", "長輩狀況")
+    assert "求助中" in _last_card(line_outbox)
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    from app.services.dispatch import resolve_sos
+    resolve_sos(str(need.id), db)
+    say("U-son", "長輩狀況")
+    assert "今天的求助已結案" in _last_card(line_outbox)
+
+    _emergency(db)
+    press("U-gma", "action=confirm_sos")
+    say("U-son", "長輩狀況")
+    assert "需要協助（求救處理中）" in _last_card(line_outbox)
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.status == "open").one()
+    resolve_sos(str(need.id), db)
+    say("U-son", "長輩狀況")
+    assert "求救已處理完成" in _last_card(line_outbox)

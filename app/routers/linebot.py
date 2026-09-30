@@ -1698,11 +1698,34 @@ def _handle_postback(event: PostbackEvent, db):
     elif action == "rc_mark":
         _handle_rollcall_mark(event, db, user, data.get("user_id", ""), data.get("s", ""))
 
+    elif action == "rc_family":
+        _handle_family_safe(event, db, user, data.get("elder_id", ""))
+
     elif line_ops.handle_postback(event, db, user, action or "", data):
         pass
 
     elif action in ("task_delivered", "task_decline", "task_accept"):
         _handle_task_button(event, db, user, action, data.get("need_id", ""))
+
+
+def _handle_family_safe(event, db, user, elder_id: str) -> None:
+    """災時家屬聯絡到長輩後，代為回報這次點名平安。"""
+    from app.models.care_relation import CareRelation
+    from app.services import rollcall
+    try:
+        elder = db.query(User).filter(User.id == elder_id).first() if elder_id else None
+    except Exception:  # 格式不是合法 UUID
+        elder = None
+    allowed = elder is not None and (user.has_role("admin") or db.query(CareRelation).filter(
+        CareRelation.elderly_id == elder.id, CareRelation.contact_id == user.id,
+        CareRelation.is_active == True).first())  # noqa: E712
+    if not allowed:
+        _say(event, "只有這位長者的照護聯絡人或管理員可以確認平安。")
+        return
+    if not rollcall.note(db, elder, "ok", via="family", marked_by=user.name):
+        _say(event, "目前沒有進行中的災時點名。")
+        return
+    _say(event, f"✅ 已回報 {elder.name} 這次平安，社區看得到。")
 
 
 def _handle_family_check(event, db, user, elder_id: str) -> None:
