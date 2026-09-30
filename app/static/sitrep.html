@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<title>災情摘要｜鄰里守望</title>
+<style>
+:root { --ink:#17201c; --muted:#5f6c65; --line:#d9e2dc; --red:#b3261e; --amber:#8a4b0f; --green:#13603f; --paper:#fff; --bg:#f4f7f5; }
+* { box-sizing:border-box; }
+body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,"Microsoft JhengHei","Noto Sans TC",sans-serif; }
+main { max-width:900px; margin:0 auto; padding:20px 16px 40px; }
+header { display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:10px; margin-bottom:14px; }
+h1 { margin:0; font-size:22px; } h2 { margin:0 0 10px; font-size:16px; }
+.meta { color:var(--muted); font-size:13px; }
+.actions button { padding:8px 14px; border:1px solid var(--line); border-radius:6px; background:var(--paper); font:inherit; cursor:pointer; }
+.actions .primary { background:#13795b; border-color:#13795b; color:#fff; }
+section { background:var(--paper); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:12px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:8px; }
+.stat { border:1px solid var(--line); border-radius:6px; padding:8px 10px; }
+.stat span { display:block; color:var(--muted); font-size:12px; } .stat b { font-size:22px; }
+.stat.red b { color:var(--red); } .stat.amber b { color:var(--amber); } .stat.green b { color:var(--green); }
+table { width:100%; border-collapse:collapse; font-size:14px; margin-top:10px; }
+th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+th { color:var(--muted); font-weight:600; font-size:12px; }
+.tag { padding:1px 6px; border-radius:4px; font-size:12px; white-space:nowrap; }
+.tag.red { background:#ffe8e4; color:var(--red); } .tag.amber { background:#fff3d6; color:var(--amber); } .tag.green { background:#e2f2e9; color:var(--green); } .tag.grey { background:#eceff1; color:#37474f; }
+.muted { color:var(--muted); } .empty { color:var(--muted); font-size:14px; margin:6px 0 0; }
+.table-wrap { overflow-x:auto; }
+@media print { body { background:#fff; } .actions { display:none; } section { break-inside:avoid; border-color:#bbb; } main { padding:0; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>災情摘要</h1><div class="meta" id="meta">讀取中…</div></div>
+    <div class="actions"><button type="button" id="reload">重新整理</button> <button type="button" class="primary" onclick="print()">列印／存成 PDF</button></div>
+  </header>
+  <div id="report"></div>
+</main>
+<script>
+(function () {
+  function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function stat(label, value, tone) { return '<div class="stat ' + (tone || '') + '"><span>' + esc(label) + '</span><b>' + esc(value == null ? '—' : value) + '</b></div>'; }
+  var TONE = { '未受理': 'red', '處理中': 'amber', '已結案': 'green', '已取消': 'grey', '需要協助': 'red', '還沒回': 'grey' };
+  function render(d) {
+    document.getElementById('meta').textContent = d.mode + '・' + d.period + '・產出於 ' + d.generated_at;
+    var html = '';
+    if (d.rollcall) {
+      var c = d.rollcall.counts;
+      html += '<section><h2>災時點名（長者 ' + d.rollcall.total + ' 位）</h2><div class="grid">' +
+        stat('平安', c.ok, 'green') + stat('不舒服', c.unwell, 'amber') + stat('需要協助', c.help, 'red') + stat('還沒回', c.pending) + '</div>' +
+        (d.rollcall.follow_up.length ? '<div class="table-wrap"><table><thead><tr><th>需追蹤</th><th>狀態</th><th>脆弱度</th><th>電話</th><th>地址</th></tr></thead><tbody>' +
+          d.rollcall.follow_up.map(function (p) { return '<tr><td>' + esc(p.name) + '</td><td><span class="tag ' + (TONE[p.status_label] || '') + '">' + esc(p.status_label) + '</span></td><td>' + esc(p.vulnerability) + '</td><td>' + esc(p.phone || '—') + '</td><td>' + esc(p.address || '—') + '</td></tr>'; }).join('') +
+          '</tbody></table></div>' : '<p class="empty">全部長者都已回報。</p>') + '</section>';
+    }
+    var s = d.sos;
+    html += '<section><h2>一鍵求救</h2><div class="grid">' + stat('總數', s.total) + stat('未受理', s.waiting, s.waiting ? 'red' : '') +
+      stat('處理中', s.in_progress, 'amber') + stat('已結案', s.closed, 'green') +
+      stat('受理中位數（分）', s.median_ack_min) + stat('結案中位數（分）', s.median_close_min) + '</div>' +
+      (s.rows.length ? '<div class="table-wrap"><table><thead><tr><th>通報</th><th>當事人</th><th>狀態</th><th>處理人</th><th>地點</th></tr></thead><tbody>' +
+        s.rows.map(function (r) { return '<tr><td>' + esc(r.reported) + '</td><td>' + esc(r.name) + '</td><td><span class="tag ' + (TONE[r.state] || '') + '">' + esc(r.state) + (r.waiting_min != null ? '・等 ' + r.waiting_min + ' 分' : '') + '</span></td><td>' + esc(r.responder || '—') + '</td><td>' + esc(r.address || '—') + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' : '<p class="empty">這段期間沒有求救。</p>') + '</section>';
+    var n = d.needs, types = Object.keys(n.by_type);
+    html += '<section><h2>物資需求（' + n.total + ' 筆）</h2><div class="grid">' +
+      Object.keys(n.by_status).map(function (k) { return stat(k, n.by_status[k]); }).join('') + '</div>' +
+      (types.length ? '<div class="table-wrap"><table><thead><tr><th>品項</th><th>筆數</th><th>處理中</th><th>已完成</th></tr></thead><tbody>' +
+        types.map(function (t) { var r = n.by_type[t]; return '<tr><td>' + esc(t) + '</td><td>' + r.total + '</td><td>' + r.open + '</td><td>' + r.done + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' : '') + '</section>';
+    html += '<section><h2>派遣與資源</h2><div class="grid">' + stat('已派遣', d.dispatch.dispatched) + stat('志工接單', d.dispatch.accepted) +
+      stat('已送達', d.dispatch.delivered, 'green') + stat('可動員志工', d.volunteers) +
+      stat('登記收容所', d.shelters.count) + stat('收容人數／容量', d.shelters.load + '／' + d.shelters.capacity) + '</div>' +
+      '<p class="empty">另可查詢內政部公告的全國避難收容處所 5,928 處。</p></section>';
+    document.getElementById('report').innerHTML = html;
+  }
+  function load() {
+    fetch('/api/dashboard/sitrep').then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+      .then(render).catch(function () { document.getElementById('meta').textContent = '讀取失敗，請按重新整理'; });
+  }
+  document.getElementById('reload').onclick = load;
+  // 在外框裡切回這一頁時重新產出，報告永遠是當下的狀況
+  window.addEventListener('message', function (e) { if (e.origin === location.origin && e.data && e.data.workspaceVisible) load(); });
+  load();
+})();
+</script>
+</body>
+</html>

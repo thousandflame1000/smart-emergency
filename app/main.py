@@ -129,6 +129,11 @@ def console_view():
     return FileResponse(os.path.join(os.path.dirname(__file__), "static", "admin.html"), headers=_NO_CACHE)
 
 
+@app.get("/view/sitrep", include_in_schema=False)
+def sitrep_view():
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "sitrep.html"), headers=_NO_CACHE)
+
+
 @app.get("/view/dashboard", include_in_schema=False)
 def dashboard_view():
     return FileResponse(os.path.join(os.path.dirname(__file__), "static", "index.html"), headers=_NO_CACHE)

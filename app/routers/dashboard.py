@@ -33,6 +33,13 @@ def _get_user_or_404(db, user_id: str, what: str = "使用者") -> User:
     return user
 
 
+@router.get("/sitrep")
+def get_sitrep(db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
+    """災情摘要：往上回報公所或應變中心用；有點名名單與電話，限管理員。"""
+    from app.services.sitrep import build
+    return build(db)
+
+
 @router.get("/summary")
 def get_summary(db: Session = Depends(get_db)):
     """今日狀況總覽"""

@@ -102,6 +102,7 @@ button { font:inherit; }
   var NAV = [
     { sec: '事件處置' },
     { id: 'workspace', label: '事件處置工作區', icon: 'network', view: '/workspace', page: null },
+    { id: 'sitrep', label: '災情摘要', icon: '📄', view: '/view/sitrep', page: null },
     { sec: '照護現況' },
     { id: 'overview', label: '總覽', icon: '📊', view: DASH, page: 'overview' },
     { id: 'elders', label: '長者狀態', icon: '👴', view: DASH, page: 'elderly' },
@@ -120,7 +121,7 @@ button { font:inherit; }
   var frame = document.getElementById('view'), nav = document.getElementById('nav'), buttons = {}, frames = {}, currentId = null;
   var sidebar = document.getElementById('sidebar'), navToggle = document.getElementById('nav-toggle');
   var navScrim = document.getElementById('nav-scrim'), navClose = document.getElementById('nav-close');
-  var iconNames={overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',status:'activity',workspace:'siren',ai:'messages-square',kb:'book-open'};
+  var iconNames={sitrep:'file-text',overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',status:'activity',workspace:'siren',ai:'messages-square',kb:'book-open'};
 
   function setNav(open) {
     sidebar.classList.toggle('open', open);
