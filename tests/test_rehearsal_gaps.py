@@ -161,8 +161,8 @@ def test_live_needs_and_nearby_points_bind_to_the_workspace_incident(db):
     merged, _ = merge_database(GraphDocument(nodes=[flood]), db)
     bound = {e.target: e.label for e in merged.edges if e.source == "s:flood"}
     labels = {n.id: n.label for n in merged.nodes}
-    assert sorted(labels[t] for t in bound) == ["光復國小", "光復居民 · 緊急求助", "台中居民 · 飲用水"]
-    assert "緊急求助" in bound.values() and "範圍內資源點" in bound.values()
+    assert sorted(labels[t] for t in bound) == ["光復國小", "光復居民 · 緊急求救", "台中居民 · 飲用水"]
+    assert "緊急求救" in bound.values() and "範圍內資源點" in bound.values()
 
     # 沒有事件物件的工作區（即時營運現況）也不讓需求散落。
     merged, counts = merge_database(GraphDocument(), db)

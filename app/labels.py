@@ -75,7 +75,7 @@ NEED_TYPE_ZH = {
     "vehicle": "交通工具",
     "tool": "工具",
     "other": "其他物資",
-    "sos": "緊急求助",
+    "sos": "緊急求救",
 }
 
 NEED_TYPE_EMOJI = {

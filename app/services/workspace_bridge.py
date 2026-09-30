@@ -21,7 +21,7 @@ from app.services.workspace_inventory import editable_values, row_version
 
 PREFIX = "db:"
 ITEM_ZH = {"water": "飲用水", "demo_water": "飲用水", "food": "食物", "first_aid": "急救用品", "shelter": "庇護所",
-           "vehicle": "交通工具", "tool": "工具", "other": "其他物資", "sos": "緊急求助"}
+           "vehicle": "交通工具", "tool": "工具", "other": "其他物資", "sos": "緊急求救"}
 DEMAND_STATUSES = ("open", "suggested")
 
 
@@ -244,7 +244,7 @@ def bind_to_incidents(nodes: list[Node]) -> tuple[list[Node], list[Edge]]:
         incident, _ = nearest(need)
         sos = need.properties.get("need_type") == "sos"
         edges.append(Edge(id=f"db:edge:event:{need.id}", source=incident.id, target=need.id,
-                          label="緊急求助" if sos else "事件需求", kind="related", directed=True,
+                          label="緊急求救" if sos else "事件需求", kind="related", directed=True,
                           provenance="平台資料庫", properties={"db": True, "binding": "incident"}))
     for point in (n for n in nodes if n.properties.get("db") == "point"):
         incident, km = nearest(point)

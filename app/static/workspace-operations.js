@@ -87,7 +87,7 @@ function bindToIncidents(nodes){
   if(!incidents.length)return{nodes:extra,edges};
   const nearest=node=>{const placed=incidents.filter(located);if(!located(node)||!placed.length)return[incidents[0],null];let best=placed[0],d=km(node,best);for(const i of placed.slice(1)){const x=km(node,i);if(x<d){best=i;d=x;}}return[best,d];};
   const edge=(incident,node,label)=>({id:'db:edge:event:'+node.id,source:incident.id,target:node.id,label,kind:'related',directed:true,status:'active',provenance:'平台資料庫',properties:{db:true,binding:'incident'}});
-  for(const need of needs)edges.push(edge(nearest(need)[0],need,need.properties.need_type==='sos'?'緊急求助':'事件需求'));
+  for(const need of needs)edges.push(edge(nearest(need)[0],need,need.properties.need_type==='sos'?'緊急求救':'事件需求'));
   for(const point of nodes.filter(n=>n.properties.db==='point')){const[incident,d]=nearest(point);if(d!==null&&d<=20)edges.push(edge(incident,point,'範圍內資源點'));}
   return{nodes:extra,edges};
 }
