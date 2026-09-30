@@ -230,7 +230,7 @@ async function assignSos(node,userId,label){
   }catch(e){message(e.message,true);}
 }
 // ── 災時點名：緊急模式時誰平安、誰需要協助、誰還沒回；還沒回的依脆弱度排序，給志工照順序上門 ──
-let rollcallData=null,rollcallById=new Map();
+let rollcallData=null,rollcallById=new Map(),rollcallFilter='';
 // 地圖與面板用：這位長者這一輪點名的狀態（沒有點名時是 null）
 function rollcallOf(node){return rollcallData?.active&&node?.properties?.db==='user'?rollcallById.get(node.id.replace('db:person:',''))||null:null;}
 const ROLLCALL_CLASS={help:'urgent',pending:'pending',unwell:'warn',ok:'ok'};
@@ -251,13 +251,18 @@ function renderRollcall(){
   if(!d.active){box.innerHTML='<p class="muted">日常模式沒有點名。啟動緊急模式時，系統會自動用 LINE 問每位長者是否平安，回報結果會出現在這裡。</p>';$('object-count').textContent='';return;}
   $('object-count').textContent=d.total+' 位長者';
   const c=d.counts;
-  box.innerHTML=`<div class="rollcall-summary"><span class="rc ok">平安 <b>${c.ok}</b></span><span class="rc warn">不舒服 <b>${c.unwell}</b></span><span class="rc urgent">需要協助 <b>${c.help}</b></span><span class="rc pending">還沒回 <b>${c.pending}</b></span></div>
+  // 人數格子兼篩選：點一下只看那一類，再點一次看全部；左上的搜尋也會過濾姓名與地址
+  const chip=(key,cls,label)=>`<button type="button" class="rc ${cls}${rollcallFilter===key?' on':''}" data-rc-filter="${key}" aria-pressed="${rollcallFilter===key}">${label} <b>${c[key]}</b></button>`;
+  const query=$('search').value.trim().toLowerCase();
+  const shown=d.people.filter(p=>(!rollcallFilter||p.status===rollcallFilter)&&(!query||(p.name+' '+p.address).toLowerCase().includes(query)));
+  box.innerHTML=`<div class="rollcall-summary">${chip('ok','ok','平安')}${chip('unwell','warn','不舒服')}${chip('help','urgent','需要協助')}${chip('pending','pending','還沒回')}</div>
     <div class="rollcall-actions"><button id="rollcall-remind" type="button"${c.pending?'':' disabled'}><i data-lucide="bell-ring"></i>再問一次還沒回的人</button></div>
-    <div class="rollcall-list">${d.people.map(p=>{
+    <div class="rollcall-list">${shown.length?'':'<p class="muted">這個條件下沒有人</p>'}${shown.map(p=>{
       const meta=[p.status==='pending'?'脆弱度 '+p.vulnerability:(p.marked_by?p.marked_by+'確認':'本人回報')+(p.responded_at?' · '+sinceText(p.responded_at):''),p.address||'地址未填',p.line?'':'未綁 LINE'].filter(Boolean).join(' · ');
       const call=p.phone?`<a class="icon-button" href="tel:${escapeHtml(p.phone.replace(/[^0-9+]/g,''))}" title="撥打 ${escapeHtml(p.phone)}" aria-label="撥打 ${escapeHtml(p.name)}"><i data-lucide="phone"></i></a>`:'';
       const mark=p.status==='ok'?'':`<button type="button" data-rc-ok="${escapeHtml(p.id)}" title="電話或上門確認後標記平安">標記平安</button>`;
       return `<div class="rollcall-row"><button type="button" class="rc-person" data-rc-focus="${escapeHtml(p.id)}"><span class="rc-chip ${ROLLCALL_CLASS[p.status]}">${escapeHtml(p.status_label)}</span><span class="task-text">${escapeHtml(p.name)}<small>${escapeHtml(meta)}</small></span></button>${call}${mark}</div>`;}).join('')}</div>`;
+  box.querySelectorAll('[data-rc-filter]').forEach(b=>b.onclick=()=>{rollcallFilter=rollcallFilter===b.dataset.rcFilter?'':b.dataset.rcFilter;renderRollcall();});
   box.querySelectorAll('[data-rc-focus]').forEach(b=>b.onclick=()=>focusOperational('db:person:'+b.dataset.rcFocus));
   box.querySelectorAll('[data-rc-ok]').forEach(b=>b.onclick=()=>markRollcall(b.dataset.rcOk,b));
   const remind=$('rollcall-remind');if(remind)remind.onclick=remindRollcall;

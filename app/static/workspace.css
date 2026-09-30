@@ -118,7 +118,8 @@ footer { min-height: 35px; display: flex; gap: 16px; align-items: center; justif
 .tab-count { margin-left:4px; padding:0 6px; border-radius:9px; background:#b3261e; color:#fff; font-size:11px; line-height:17px; }
 /* 災時點名 */
 .rollcall-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:6px 0 8px; }
-.rollcall-summary .rc { display:flex; justify-content:space-between; padding:6px 8px; border-radius:5px; font-size:12px; }
+.rollcall-summary .rc { display:flex; justify-content:space-between; padding:6px 8px; border-radius:5px; font-size:12px; border:1px solid transparent; min-height:auto; }
+.rollcall-summary .rc.on { border-color: currentColor; box-shadow: inset 0 0 0 1px currentColor; }
 .rollcall-summary .rc b { font-size:15px; }
 .rc.ok, .rc-chip.ok { background:#e2f2e9; color:#13603f; } .rc.warn, .rc-chip.warn { background:#fff3d6; color:#8a4b0f; }
 .rc.urgent, .rc-chip.urgent { background:#ffe8e4; color:#a52d20; } .rc.pending, .rc-chip.pending { background:#eceff1; color:#37474f; }
