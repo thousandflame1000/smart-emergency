@@ -197,3 +197,27 @@ def test_double_tap_on_the_roll_call_does_not_fail(db):
     _emergency(db)
     assert rollcall.note(db, elder, "ok") and rollcall.note(db, elder, "ok")
     assert _status(db) == {"阿嬤": "ok"}
+
+
+def test_roll_call_follows_up_automatically_and_reports_to_admins(db, line_outbox):
+    from datetime import timedelta
+    from app.timeutil import now_utc
+    mk(db, "管理員", ["admin"], "U-boss2")
+    mk(db, "回了", ["elderly"], "U-yes2")
+    mk(db, "沒回", ["elderly"], "U-no2")
+    db.add(SystemConfig(key="mode", value="emergency")); db.commit()
+    start = now_utc() - timedelta(minutes=35)
+    db.add(SystemConfig(key=rollcall.ROUND_KEY, value=start.isoformat())); db.commit()
+    press("U-yes2", "action=safe")
+    line_outbox.sent.clear()
+    assert rollcall.auto_follow_up(db) == 1, "30 分鐘的追蹤"
+    assert sent_to(line_outbox, "U-no2") == ["🚨 請回報是否平安"] and not sent_to(line_outbox, "U-yes2")
+    assert any("點名 30 分鐘" in t and "還沒回 1" in t for t in sent_to(line_outbox, "U-boss2"))
+    assert rollcall.auto_follow_up(db) == 0, "同一個時間點只做一次"
+    row = db.query(SystemConfig).filter(SystemConfig.key == rollcall.ROUND_KEY).one()
+    row.value = (now_utc() - timedelta(minutes=95)).isoformat(); db.commit()
+    assert rollcall.auto_follow_up(db) == 2, "新的一輪（換了啟動時間）兩個時間點都到了"
+
+
+def test_no_follow_up_outside_an_emergency(db):
+    assert rollcall.auto_follow_up(db) == 0

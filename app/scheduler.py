@@ -93,6 +93,15 @@ def start_scheduler() -> None:
         replace_existing=True,
     )
 
+    # 災時點名：啟動後 30、90 分鐘自動再問還沒回的長者，並向管理員報告
+    from app.services.rollcall import auto_follow_up
+    _scheduler.add_job(
+        single_instance_job("rollcall_follow_up", auto_follow_up),
+        IntervalTrigger(minutes=5),
+        id="rollcall_follow_up",
+        replace_existing=True,
+    )
+
     # 緊急模式：每 30 分鐘自動媒合物資
     from app.services.dispatch import auto_dispatch
     _scheduler.add_job(

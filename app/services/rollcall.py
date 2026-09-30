@@ -100,6 +100,44 @@ def board(db: Session) -> dict:
 
 
 NEARBY_KM = 2.0
+FOLLOW_UP_MINUTES = (30, 90)   # 啟動後這幾個時間點自動再問還沒回的人，並向管理員報告進度
+
+
+def auto_follow_up(db: Session | None = None) -> int:
+    """排程每 5 分鐘呼叫：到了追蹤時間點就自動「再問一次」，並把進度推給管理員。
+
+    每個時間點只做一次（記在 SystemConfig），回傳這次做了幾個時間點。"""
+    from datetime import datetime
+    from app.database import SessionLocal
+    from app.services.alert import notify_admins
+    own = db is None
+    db = db or SessionLocal()
+    try:
+        round_id = current_round(db)
+        if not round_id:
+            return 0
+        started = datetime.fromisoformat(round_id)
+        minutes = (now_utc() - started).total_seconds() / 60
+        done = 0
+        for step in FOLLOW_UP_MINUTES:
+            key = f"rollcall_followup:{round_id}:{step}"
+            if minutes < step or db.query(SystemConfig).filter(SystemConfig.key == key).first():
+                continue
+            db.add(SystemConfig(key=key, value=now_utc().isoformat()))
+            db.commit()
+            asked = len(ask(db, only_pending=True))
+            info = board(db)
+            c = info["counts"]
+            worst = [p["name"] for p in info["people"] if p["status"] in ("help", "pending")][:3]
+            notify_admins(db, f"📋 點名 {step} 分鐘：平安 {c['ok']}｜需要協助 {c['help']}｜不舒服 {c['unwell']}｜還沒回 {c['pending']}\n"
+                              + (f"最需要先確認：{'、'.join(worst)}\n" if worst else "")
+                              + (f"已自動再問 {asked} 位還沒回的長者。" if asked else "還沒回的長者都沒有綁 LINE，請電話或派志工上門。"),
+                          buttons=[{"label": "📋 看點名", "text": "點名"}])
+            done += 1
+        return done
+    finally:
+        if own:
+            db.close()
 
 
 def nearby_unanswered(db: Session, volunteer: User, limit: int = 5) -> list[dict]:
