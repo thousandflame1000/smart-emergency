@@ -148,7 +148,10 @@ def build(db: Session) -> dict:
                                 for s in ("open", "suggested", "matched", "fulfilled", "cancelled")}},
         "dispatch": {"dispatched": count("confirm_dispatch", "manual_dispatch", "auto_match_facility"),
                      "accepted": count("task_accept"), "delivered": count("task_delivered")},
-        "shelters": {"count": len(shelters), "capacity": capacity, "load": load},
+        "shelters": {"count": len(shelters), "capacity": capacity, "load": load,
+                     "rows": sorted(({"name": p.name, "load": p.current_load or 0, "capacity": p.capacity,
+                                      "address": p.address or ""} for p in shelters),
+                                    key=lambda r: -((r["load"] / r["capacity"]) if r["capacity"] else 0))},
         "volunteers": volunteers,
         "timeline": timeline(db, since),
     }

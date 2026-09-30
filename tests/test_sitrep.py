@@ -73,3 +73,12 @@ def test_timeline_lists_what_happened_newest_first(db, line_outbox):
     events = [t["what"] for t in sitrep.build(db)["timeline"]]
     assert {"轉報 119", "受理求救", "點名回報：需要協助", "通報求救", "啟動緊急模式"} <= set(events)
     assert sitrep.actor_name("admin:王小明") == "管理員：王小明" and sitrep.actor_name("manager") == "後台"
+
+
+def test_report_lists_each_shelter_fullest_first(db):
+    from app.models.resource_point import ResourcePoint
+    db.add_all([ResourcePoint(name="空的", point_type="shelter", capacity=100, current_load=5),
+                ResourcePoint(name="快滿", point_type="shelter", capacity=10, current_load=9)])
+    db.commit()
+    rows = sitrep.build(db)["shelters"]["rows"]
+    assert [r["name"] for r in rows] == ["快滿", "空的"]

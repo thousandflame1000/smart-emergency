@@ -70,6 +70,10 @@ th { color:var(--muted); font-weight:600; font-size:12px; }
     html += '<section><h2>派遣與資源</h2><div class="grid">' + stat('已派遣', d.dispatch.dispatched) + stat('志工接單', d.dispatch.accepted) +
       stat('已送達', d.dispatch.delivered, 'green') + stat('可動員志工', d.volunteers) +
       stat('登記收容所', d.shelters.count) + stat('收容人數／容量', d.shelters.load + '／' + d.shelters.capacity) + '</div>' +
+      (d.shelters.rows.length ? '<div class="table-wrap"><table><thead><tr><th>收容所</th><th>人數／容量</th><th>地址</th></tr></thead><tbody>' +
+        d.shelters.rows.map(function (r) { var full = r.capacity && r.load >= r.capacity, high = r.capacity && r.load >= r.capacity * 0.8;
+          return '<tr><td>' + esc(r.name) + '</td><td><span class="tag ' + (full ? 'red' : high ? 'amber' : 'green') + '">' + r.load + '／' + (r.capacity || '—') + (full ? '・已滿' : '') + '</span></td><td>' + esc(r.address || '—') + '</td></tr>'; }).join('') +
+        '</tbody></table></div>' : '') +
       '<p class="empty">另可查詢內政部公告的全國避難收容處所 5,928 處。</p></section>';
     html += '<section><h2>時間軸（新的在前）</h2>' + (d.timeline.length ? '<div class="table-wrap"><table><thead><tr><th>時間</th><th>事件</th><th>當事人</th><th>操作者／地點</th></tr></thead><tbody>' +
       d.timeline.map(function (t) { return '<tr><td>' + esc(t.time) + '</td><td>' + esc(t.what) + '</td><td>' + esc(t.who || '—') + '</td><td>' + esc(t.by || '—') + '</td></tr>'; }).join('') +
