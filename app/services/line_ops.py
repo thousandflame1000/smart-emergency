@@ -116,16 +116,21 @@ def my_tasks(event, db: Session, user: User) -> None:
     if not is_volunteer(user):
         _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
         return
+    from app.services.sos import responder_card
     tasks = dispatch.list_my_tasks(user, db)
-    if not tasks:
+    # 自己受理、還沒結案的求救排最前面：卡片被聊天洗掉時，從這裡找回電話、導航、已到場與處理完成
+    sos_cards = [responder_card(n) for n in db.query(CommunityNeed).filter(
+        CommunityNeed.need_type == "sos", CommunityNeed.status == "open",
+        CommunityNeed.responder_id == str(user.id)).order_by(CommunityNeed.created_at).all()]
+    if not tasks and not sos_cards:
         _say(event, "您目前沒有進行中的任務。點選單的「接單」可以挑需求，管理員派單時也會直接通知您。")
         return
-    bubbles = [build_task_bubble(
+    bubbles = sos_cards + [build_task_bubble(
         user.line_uid, t["description"], t["address"], t["resource_name"], need_id=t["need_id"],
         distance_km=t["dist_km"], dest_lat=t["lat"], dest_lng=t["lng"], accepted=t["accepted"],
         requester_phone=t.get("requester_phone"),
     ) for t in tasks]
-    _flex(event, f"您有 {len(tasks)} 個進行中的任務", carousel(bubbles))
+    _flex(event, f"您有 {len(bubbles)} 個進行中的任務", carousel(bubbles))
 
 
 def _resident_center_cards(user: User) -> list[dict]:

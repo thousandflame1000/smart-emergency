@@ -276,3 +276,17 @@ def test_no_arrival_reminder_once_the_responder_is_there(db, line_outbox):
     need.acknowledged_at = now_utc().replace(tzinfo=None) - timedelta(minutes=60)
     db.commit()
     assert sos.escalate_unacknowledged(db) == 0
+
+
+def test_my_tasks_brings_back_the_sos_card(db, line_outbox):
+    """處理人卡片被聊天洗掉時，傳「我的任務」要找得回來。"""
+    from tests.test_line_hardening import say
+    need, *_ = _world(db)
+    press("U-mid", f"action=sos_go&need_id={need.id}")
+    say("U-mid", "我的任務")
+    message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    card = json.dumps(message.contents.to_dict(), ensure_ascii=False)
+    assert message.alt_text == "您有 1 個進行中的任務" and f"action=sos_done&need_id={need.id}" in card
+    press("U-mid", f"action=sos_done&need_id={need.id}")
+    say("U-mid", "我的任務")
+    assert "沒有進行中的任務" in replies(line_outbox)[-1]
