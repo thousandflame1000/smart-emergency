@@ -300,6 +300,13 @@ def send_alert_message(
             "type": "button", "style": "secondary", "height": "sm",
             "action": {"type": "uri", "label": f"📞 撥打 {elderly_name}"[:20], "uri": tel_uri(phone)},
         })
+    if alert_type in ("no_response_1h", "no_response_3h") and getattr(elderly, "id", None):
+        # 家屬也聯絡不到時，不用自己開車回去：請住附近的志工先去看看
+        flex["footer"]["contents"].append({
+            "type": "button", "style": "secondary", "height": "sm",
+            "action": {"type": "postback", "label": "👀 請附近志工去看看",
+                       "data": f"action=family_check&elder_id={elderly.id}"},
+        })
     if alert_type in ("no_response_3h", "help_needed") and getattr(elderly, "lat", None) is not None:
         flex["footer"]["contents"].append({
             "type": "button", "style": "link", "height": "sm",

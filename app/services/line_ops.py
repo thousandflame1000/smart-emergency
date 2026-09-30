@@ -738,6 +738,7 @@ def elder_status(event, db: Session, user: User) -> None:
                             "color": "#2471a3"})
         if checkin and checkin.status != "ok":
             buttons.append({"label": "✅ 我確認他平安", "data": f"action=confirm_safe&checkin_id={checkin.id}"})
+        buttons.append({"label": "👀 請附近志工去看看", "data": f"action=family_check&elder_id={elder.id}"})
         bubbles.append(bubble(f"👴 {elder.name}", "#148f77" if checkin and checkin.status == "ok" else "#c2610a",
                               [status, f"地址：{elder.address or '未填'}"], buttons))
     _flex(event, "長輩今日狀況", carousel(bubbles))

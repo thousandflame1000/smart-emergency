@@ -141,6 +141,7 @@ def take(db: Session, need_id: str, user: User, *, via: str) -> dict:
         notify_admins(db, f"🙋 {role} {user.name} 已受理 {elder} 的求救（{via}）。")
     except Exception:
         logger.warning("notify admins about SOS acknowledgement failed", exc_info=True)
+    _tell_family(db, need, f"🙋 {role} {user.name} 已經要去看 {elder}，有消息會再通知您。")
     return {"ok": True, "need": need}
 
 
@@ -182,6 +183,53 @@ def escalate_unacknowledged(db: Session | None = None) -> int:
             db.close()
 
 
+def welfare_check(db: Session, elder: User, family: User) -> dict:
+    """家屬聯絡不到長輩：請附近志工去看看。
+
+    沒有智慧型手機、或昏倒按不了求救的長者，靠家屬發現「怎麼都沒接電話」。走跟一鍵求救同一條路
+    （附近志工、後台響鈴、受理、結案），所以不另外做一套；誰提出的記在事件紀錄，受理與結案時通知他。"""
+    from app.services.alert import notify_admins
+    from app.services.dispatch import _log_dispatch_event
+    from app.services.zones import resolve_zone_for_point
+    existing = db.query(CommunityNeed).filter(CommunityNeed.requester_id == elder.id, CommunityNeed.need_type == "sos",
+                                              CommunityNeed.status == "open").first()
+    if existing:
+        return {"existing": True, "responder": existing.responder.name if existing.responder_id and existing.responder else None}
+    need = CommunityNeed(requester_id=elder.id, need_type="sos", urgency=5,
+                         description=f"家屬 {family.name} 聯絡不到，請附近志工去看看",
+                         address=elder.address, lat=elder.lat, lng=elder.lng,
+                         zone_id=resolve_zone_for_point(db, elder.lat, elder.lng))
+    db.add(need)
+    db.commit()
+    db.refresh(need)
+    _log_dispatch_event(db, "welfare_check_requested", need=need, actor_id=str(family.id),
+                        actor_label=f"家屬:{family.name}", new_status="open", outcome="requested",
+                        details={"family_line_uid": family.line_uid})
+    db.commit()
+    nearby = alert_nearby(db, need)
+    buttons = [{"label": "🙋 我來處理", "data": f"action=sos_take&need_id={need.id}", "color": "#c0392b"}]
+    if tel_uri(elder.phone):
+        buttons.insert(0, {"label": f"📞 撥打 {elder.name}"[:20], "uri": tel_uri(elder.phone)})
+    admins = notify_admins(db, f"👀 家屬 {family.name} 聯絡不到 {elder.name}，請人去看看。\n"
+                               f"地點：{elder.address or '未填'}", buttons=buttons)
+    return {"nearby": nearby, "admins": admins, "need": need}
+
+
+def _tell_family(db: Session, need: CommunityNeed, text: str) -> None:
+    """家屬請人去看看的案子，受理與結案時要讓提出的家屬知道。"""
+    from app.models.dispatch_event import DispatchEvent
+    from app.services.line_notify import send_text
+    import json
+    event = db.query(DispatchEvent).filter(DispatchEvent.need_id == str(need.id),
+                                           DispatchEvent.action == "welfare_check_requested").first()
+    uid = json.loads(event.details_json or "{}").get("family_line_uid") if event else None
+    if uid:
+        try:
+            send_text(uid, text)
+        except Exception:
+            logger.warning("tell family about welfare check failed", exc_info=True)
+
+
 def finish(db: Session, need_id: str, user: User) -> dict:
     """處理人回報處理完成：結案並讓管理員知道。只有處理人本人或管理員可以結。"""
     from app.services.alert import notify_admins
@@ -195,10 +243,11 @@ def finish(db: Session, need_id: str, user: User) -> dict:
     result = resolve_sos(str(need.id), db, actor_label=f"{role}:{user.name}")
     if result.get("error") or result.get("already_resolved"):
         return result
+    elder = need.requester.name if need.requester else "居民"
     if role == "志工":
-        elder = need.requester.name if need.requester else "居民"
         try:
             notify_admins(db, f"✅ 志工 {user.name} 回報 {elder} 的求救已處理完成。")
         except Exception:
             logger.warning("notify admins about SOS finish failed", exc_info=True)
+    _tell_family(db, need, f"✅ {role} {user.name} 回報：{elder} 的狀況已處理完成。")
     return result

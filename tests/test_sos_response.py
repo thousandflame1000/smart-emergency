@@ -123,3 +123,43 @@ def test_console_assigns_a_responder_who_gets_the_card(db, line_outbox):
     assert client.get("/api/dashboard/summary").json()["open_sos"][0]["responder"] == "遠志工"
     bad = client.post(f"/api/resources/needs/{need.id}/assign_sos?user_id={elder.id}")
     assert bad.status_code == 400
+
+
+def test_family_can_ask_nearby_volunteers_to_check_on_an_elder(db, line_outbox):
+    """長輩沒有手機或昏倒按不了求救：家屬按「請附近志工去看看」，走同一條求救流程。"""
+    from app.models.care_relation import CareRelation
+    elder = mk(db, "獨居阿公", ["elderly"], None, lat=23.6650, lng=121.4180, address="大進村 5 號", phone="038701111")
+    kid = mk(db, "兒子", ["family"], "U-kid")
+    mk(db, "路人", ["elderly"], "U-stranger")
+    mk(db, "近志工", ["volunteer"], "U-near", lat=23.6690, lng=121.4180)
+    mk(db, "管理員", ["admin"], "U-admin")
+    db.add(CareRelation(elderly_id=elder.id, contact_id=kid.id, relation="family")); db.commit()
+    press("U-stranger", f"action=family_check&elder_id={elder.id}")
+    assert "只有這位長輩的照護聯絡人" in replies(line_outbox)[-1]
+    press("U-kid", f"action=family_check&elder_id={elder.id}")
+    assert "已請附近 1 位志工與社區管理員去看看 獨居阿公" in replies(line_outbox)[-1]
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    assert "家屬 兒子 聯絡不到" in need.description and need.lat == 23.6650
+    assert sent_to(line_outbox, "U-near") == [ALERT]
+    assert any("聯絡不到 獨居阿公" in t for t in sent_to(line_outbox, "U-admin"))
+    press("U-kid", f"action=family_check&elder_id={elder.id}")
+    assert "已經有人在處理" in replies(line_outbox)[-1], "重複按不會開第二張單"
+    press("U-near", f"action=sos_go&need_id={need.id}")
+    assert any("近志工 已經要去看 獨居阿公" in t for t in sent_to(line_outbox, "U-kid"))
+    press("U-near", f"action=sos_done&need_id={need.id}")
+    assert any("獨居阿公 的狀況已處理完成" in t for t in sent_to(line_outbox, "U-kid"))
+
+
+def test_the_check_on_button_is_on_family_cards(db, line_outbox):
+    from app.models.care_relation import CareRelation
+    from app.services.line_notify import send_alert_message
+    elder = mk(db, "阿嬤", ["elderly"], None)
+    kid = mk(db, "女兒", ["family"], "U-dau")
+    db.add(CareRelation(elderly_id=elder.id, contact_id=kid.id, relation="family")); db.commit()
+    from tests.test_line_hardening import say
+    say("U-dau", "長輩狀況")
+    card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    assert f"action=family_check&elder_id={elder.id}" in json.dumps(card.contents.to_dict(), ensure_ascii=False)
+    send_alert_message("U-dau", "阿嬤", "no_response_3h", "c1", elderly=elder)
+    pushed = [m for kind, to, m in line_outbox.sent if kind == "push" and to == "U-dau"][-1]
+    assert "family_check" in json.dumps(pushed.contents.to_dict(), ensure_ascii=False)

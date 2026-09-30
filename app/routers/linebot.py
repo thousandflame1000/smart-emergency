@@ -1561,11 +1561,36 @@ def handle_postback(event: PostbackEvent):
     elif action in ("sos_go", "sos_take", "sos_done"):
         _handle_sos_button(event, db, user, action, data.get("need_id", ""))
 
+    elif action == "family_check":
+        _handle_family_check(event, db, user, data.get("elder_id", ""))
+
     elif line_ops.handle_postback(event, db, user, action or "", data):
         pass
 
     elif action in ("task_delivered", "task_decline", "task_accept"):
         _handle_task_button(event, db, user, action, data.get("need_id", ""))
+
+
+def _handle_family_check(event, db, user, elder_id: str) -> None:
+    """家屬按「請附近志工去看看」：只有這位長輩的照護聯絡人或管理員可以按。"""
+    from app.models.care_relation import CareRelation
+    from app.services import sos
+    elder = db.query(User).filter(User.id == elder_id).first() if elder_id else None
+    allowed = elder is not None and (user.has_role("admin") or db.query(CareRelation).filter(
+        CareRelation.elderly_id == elder.id, CareRelation.contact_id == user.id,
+        CareRelation.is_active.is_(True)).first())
+    if not allowed:
+        _say(event, "只有這位長輩的照護聯絡人或管理員可以請人去探視。")
+        return
+    result = sos.welfare_check(db, elder, user)
+    if result.get("existing"):
+        who = result.get("responder")
+        _say(event, f"已經有人在處理 {elder.name} 的狀況了" + (f"（{who}）" if who else "，正在找人過去") +
+             "，有消息會通知您。情況危急請直接撥 119。")
+        return
+    told = [f"附近 {result['nearby']} 位志工" if result["nearby"] else "", "社區管理員" if result["admins"] else ""]
+    _say(event, f"👀 已請{'與'.join(t for t in told if t) or '管理員'}去看看 {elder.name}。\n"
+         "有人受理、處理完成時都會通知您。情況危急請直接撥 119。")
 
 
 def _handle_sos_button(event, db, user, action: str, need_id: str) -> None:
