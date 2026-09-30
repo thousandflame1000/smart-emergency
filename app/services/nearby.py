@@ -133,7 +133,7 @@ def nearby_cards(db: Session, user, emergency: bool) -> tuple[str, dict] | None:
         buttons = [{"label": "🧭 導航", "uri": f"https://www.google.com/maps/dir/?api=1&destination={p.lat},{p.lng}"}]
         if tel_uri(p.phone):
             buttons.append({"label": f"📞 {p.phone}"[:20], "uri": tel_uri(p.phone)})
-        cards.append(bubble(f"{i}. {p.name}", color, _details(p, row["km"]), buttons))
+        cards.append(bubble(f"{i}. {p.name}", color, _details(p, row["km"]), buttons, large=True))
     alt = ("🚨 最近的應變據點：" if emergency else "📦 最近的物資據點：") + "、".join(r["point"].name for r in rows)
     return alt[:400], carousel(cards)
 

@@ -1087,7 +1087,7 @@ def _reply_aeds(event, user) -> None:
             buttons.append({"label": f"📞 {a.phone}"[:20], "uri": tel_uri(a.phone)})
         cards.append(bubble(f"{i}. {a.name}"[:40], "#b3261e",
                             [f"放在：{a.place or '未註明'}", f"約 {aed.distance_text(row['km'])}（直線）", row["hours"],
-                             *([a.note] if a.note else [])], buttons))
+                             *([a.note] if a.note else [])], buttons, large=True))
     reply_flex_message(event.reply_token, "最近的 AED：" + "、".join(r["aed"].name for r in rows),
                        carousel(cards), location_prompt=True)
 

@@ -52,21 +52,24 @@ CHECKIN_ZH = {"pending": "⏳ 還沒回覆", "ok": "✅ 已回報平安", "help_
 
 
 # ── 共用卡片元件 ─────────────────────────────────────────────────────────────
-def bubble(title: str, color: str, lines: list[str], buttons: list[dict] | None = None) -> dict:
-    """buttons: {"label", "data"} postback、{"label", "uri"} 連結、{"label", "text"} 訊息。"""
+def bubble(title: str, color: str, lines: list[str], buttons: list[dict] | None = None, large: bool = False) -> dict:
+    """buttons: {"label", "data"} postback、{"label", "uri"} 連結、{"label", "text"} 訊息。
+
+    large：長者會看的卡片（點名、查詢物資、AED）用大一號的字與按鈕；管理員與志工的卡片資訊多，維持精簡。"""
     footer = []
     for i, b in enumerate(buttons or []):
         action = ({"type": "uri", "label": b["label"][:20], "uri": b["uri"]} if "uri" in b else
                   {"type": "postback", "label": b["label"][:20], "data": f"cmd={b['text']}"} if "text" in b else
                   {"type": "postback", "label": b["label"][:20], "data": b["data"]})
-        footer.append({"type": "button", "height": "sm", "style": "primary" if i == 0 else "secondary",
+        footer.append({"type": "button", "height": "md" if large else "sm", "style": "primary" if i == 0 else "secondary",
                        **({"color": b.get("color", "#1b7a44")} if i == 0 else {}), "action": action})
     out = {
-        "type": "bubble", "size": "kilo",
+        "type": "bubble", "size": "mega" if large else "kilo",
         "header": {"type": "box", "layout": "vertical", "backgroundColor": color,
-                   "contents": [{"type": "text", "text": title, "color": "#ffffff", "weight": "bold"}]},
-        "body": {"type": "box", "layout": "vertical", "spacing": "sm",
-                 "contents": [{"type": "text", "text": t, "wrap": True, "size": "sm"} for t in lines]},
+                   "contents": [{"type": "text", "text": title, "color": "#ffffff", "weight": "bold", "wrap": True,
+                                 **({"size": "lg"} if large else {})}]},
+        "body": {"type": "box", "layout": "vertical", "spacing": "md" if large else "sm",
+                 "contents": [{"type": "text", "text": t, "wrap": True, "size": "md" if large else "sm"} for t in lines]},
     }
     if footer:
         out["footer"] = {"type": "box", "layout": "vertical", "spacing": "sm", "contents": footer}

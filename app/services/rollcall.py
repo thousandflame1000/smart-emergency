@@ -173,7 +173,7 @@ def ask(db: Session, only_pending: bool = False) -> list[str]:
     card = bubble("🚨 請回報是否平安", "#c0392b", PROMPT.split("\n")[2:],
                   [{"label": "✅ 我平安", "data": "action=safe", "color": "#13795b"},
                    {"label": "🆘 需要幫忙", "text": "需要幫忙", "color": "#c0392b"},
-                   {"label": "📦 查詢物資", "text": "查詢物資"}])
+                   {"label": "📦 查詢物資", "text": "查詢物資"}], large=True)
     sent = []
     for u in elders(db):
         if not u.line_uid or (only_pending and str(u.id) in answered):
