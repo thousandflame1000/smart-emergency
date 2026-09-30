@@ -249,6 +249,26 @@ MAX_ALERT_PTS = 10.0
 ISOLATION_PTS = {0: 6.0, 1: 3.0}   # 主動關懷聯絡人數 → 孤立加權
 
 
+def vulnerability_scorer(db: Session):
+    """一次算好所有人的脆弱度（三個查詢），回傳 user_id -> 分數 的函式。
+
+    跟 _vulnerability_pts 同一套規則；點名看板要一次列出全部長者，逐一呼叫會變成 N×3 個查詢。"""
+    from collections import Counter
+    cutoff = _utcnow_naive().date() - timedelta(days=VULNERABILITY_LOOKBACK_DAYS)
+    risks = Counter(str(row[0]) for row in db.query(DailyCheckin.elderly_id).filter(
+        DailyCheckin.date >= cutoff, DailyCheckin.status.in_(["no_response", "help_needed"])).all())
+    alerts = Counter(str(row[0]) for row in db.query(Alert.elderly_id).filter(Alert.status == "sent").all())
+    contacts = Counter(str(row[0]) for row in db.query(CareRelation.elderly_id).filter(
+        CareRelation.is_active == True).all())  # noqa: E712
+
+    def score(user_id) -> float:
+        key = str(user_id)
+        return (min(risks[key] * PTS_PER_RISK_CHECKIN, MAX_CHECKIN_PTS)
+                + min(alerts[key] * PTS_PER_ACTIVE_ALERT, MAX_ALERT_PTS)
+                + ISOLATION_PTS.get(contacts[key], 0.0))
+    return score
+
+
 def _vulnerability_pts(requester_id, db: Session) -> float:
     """
     平時照顧、災時派遣的串接點。這裡只計算需求者的脆弱度訊號，

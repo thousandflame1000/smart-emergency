@@ -69,12 +69,13 @@ def elders(db: Session) -> list[User]:
 
 def board(db: Session) -> dict:
     """點名看板：人數與名單。還沒回的依脆弱度由高到低，需要協助的排在最前面。"""
-    from app.services.dispatch import _vulnerability_pts
+    from app.services.dispatch import vulnerability_scorer
     round_id = current_round(db)
     if not round_id:
         return {"active": False}
     replies = {str(r.user_id): r for r in db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id).all()}
     rank = {"help": 0, "pending": 1, "unwell": 2, "ok": 3}
+    vulnerability = vulnerability_scorer(db)
     people = []
     for u in elders(db):
         reply = replies.get(str(u.id))
@@ -85,7 +86,7 @@ def board(db: Session) -> dict:
             "status_label": STATUS_LABEL[status], "via": reply.via if reply else None,
             "marked_by": reply.marked_by if reply else None,
             "responded_at": reply.responded_at.isoformat() + "+00:00" if reply and reply.responded_at else None,
-            "vulnerability": round(_vulnerability_pts(u.id, db), 1),
+            "vulnerability": round(vulnerability(u.id), 1),
         })
     people.sort(key=lambda p: (rank[p["status"]], -p["vulnerability"], p["name"]))
     counts = {key: sum(p["status"] == key for p in people) for key in STATUS_LABEL}

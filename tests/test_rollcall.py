@@ -114,3 +114,24 @@ def test_admins_see_the_roll_call_on_line(db, line_outbox):
     card = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
     import json
     assert "災時點名" in json.dumps(card.contents.to_dict(), ensure_ascii=False)
+
+
+def test_bulk_vulnerability_matches_the_per_person_score(db):
+    """點名看板一次算全部人的脆弱度，結果要跟派遣用的逐人計算一樣。"""
+    from datetime import timedelta
+    from app.models.alert import Alert
+    from app.services.dispatch import _vulnerability_pts, vulnerability_scorer
+    lonely = mk(db, "獨居", ["elderly"], "U-lonely")
+    cared = mk(db, "有人顧", ["elderly"], "U-cared")
+    kid1, kid2 = mk(db, "子一", ["family"], "U-k1"), mk(db, "子二", ["family"], "U-k2")
+    db.add_all([CareRelation(elderly_id=cared.id, contact_id=kid1.id, relation="family"),
+                CareRelation(elderly_id=cared.id, contact_id=kid2.id, relation="family")])
+    for days in (1, 2, 20):
+        db.add(DailyCheckin(elderly_id=lonely.id, date=today_tw() - timedelta(days=days), status="no_response"))
+    db.commit()
+    checkin = db.query(DailyCheckin).filter(DailyCheckin.elderly_id == lonely.id).first()
+    db.add(Alert(elderly_id=lonely.id, checkin_id=checkin.id, alert_type="no_response_3h", status="sent")); db.commit()
+    score = vulnerability_scorer(db)
+    for person in (lonely, cared, kid1):
+        assert score(person.id) == _vulnerability_pts(person.id, db), person.name
+    assert score(lonely.id) > score(cared.id)
