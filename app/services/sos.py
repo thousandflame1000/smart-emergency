@@ -89,16 +89,17 @@ def alert_nearby(db: Session, need: CommunityNeed) -> int:
     from app.services.line_ops import bubble
     from app.services.outbox import send_flex_reliably
     requester = need.requester
+    navigate, aed_line = _navigate(need), _aed_line(need)
     sent = 0
     for volunteer, km in nearby_volunteers(db, need):
         distance = f"{km * 1000:.0f} 公尺" if km < 1 else f"{km:.1f} 公里"
         buttons = [{"label": "🏃 我過去", "data": f"action=sos_go&need_id={need.id}", "color": "#c0392b"}]
-        if _navigate(need):
-            buttons.append({"label": "🧭 導航", "uri": _navigate(need)})
+        if navigate:
+            buttons.append({"label": "🧭 導航", "uri": navigate})
         card = bubble("🆘 附近有人需要幫忙", "#c0392b",
                       [f"{requester.name if requester else '一位居民'}按下了一鍵求救",
                        f"地點：{need.address or '見導航'}（離您約 {distance}）",
-                       *([_aed_line(need)] if _aed_line(need) else []),
+                       *([aed_line] if aed_line else []),
                        "能過去看看的話請按「我過去」；第一位按的人負責，其他人會收到通知。",
                        "有生命危險請直接撥 119。"], buttons)
         # 先存進寄件佇列再推，LINE 暫時失敗會重試；已排入就算通知到了
@@ -112,18 +113,19 @@ def responder_card(need: CommunityNeed) -> dict:
     """受理後給處理人的卡片：電話、導航、處理完成。"""
     from app.services.line_ops import bubble
     requester = need.requester
+    navigate, aed_line = _navigate(need), _aed_line(need)
     buttons = []
     if requester and tel_uri(requester.phone):
         buttons.append({"label": f"📞 撥打 {requester.name}"[:20], "uri": tel_uri(requester.phone), "color": "#c0392b"})
-    if _navigate(need):
-        buttons.append({"label": "🧭 導航", "uri": _navigate(need)})
+    if navigate:
+        buttons.append({"label": "🧭 導航", "uri": navigate})
     buttons.append({"label": "📍 已到場", "data": f"action=sos_arrived&need_id={need.id}"})
     buttons.append({"label": "✅ 處理完成", "data": f"action=sos_done&need_id={need.id}"})
     return bubble("🆘 由您處理這筆求救", "#c0392b",
                   [f"當事人：{requester.name if requester else '未知'}",
                    f"地點：{need.address or '見導航'}",
                    f"狀況：{need.description or '未說明'}",
-                   *([_aed_line(need)] if _aed_line(need) else []),
+                   *([aed_line] if aed_line else []),
                    "到了按「已到場」，確認安全後按「處理完成」。需要送醫請撥 119。"], buttons)
 
 
@@ -165,6 +167,37 @@ def take(db: Session, need_id: str, user: User, *, via: str) -> dict:
         logger.warning("notify admins about SOS acknowledgement failed", exc_info=True)
     _tell_family(db, need, f"🙋 {role} {user.name} 已經要去看 {elder}，有消息會再通知您。")
     return {"ok": True, "need": need}
+
+
+def reassign(db: Session, need_id: str, person: User) -> dict:
+    """改派：處理人被耽擱（逾時沒到場、電話聯絡不上）時，管理員換人。
+
+    原處理人收到「已改派，不用再過去」，長者知道改由誰處理，事件紀錄寫下前後是誰。"""
+    from app.services.dispatch import _log_dispatch_event, notify_requester
+    from app.services.outbox import send_text_reliably
+    need = db.query(CommunityNeed).filter(CommunityNeed.id == str(need_id)).first()
+    if need is None or need.need_type != "sos":
+        return {"error": "找不到這筆求救"}
+    if need.status != "open":
+        return {"error": "這筆求救已經結案了。"}
+    if str(need.responder_id) == str(person.id):
+        return {"ok": True, "need": need, "already_mine": True}
+    previous = need.responder
+    need.responder_id = str(person.id)
+    need.acknowledged_at = now_utc().replace(tzinfo=None)
+    _log_dispatch_event(db, "sos_reassigned", need=need, actor_label="manager", previous_status="open",
+                        new_status="open", outcome="reassigned",
+                        details={"from": previous.name if previous else None, "to": person.name})
+    db.commit()
+    db.refresh(need)
+    elder = need.requester.name if need.requester else "居民"
+    if previous is not None and previous.line_uid and str(previous.id) != str(person.id):
+        send_text_reliably(aggregate_type="CommunityNeed", aggregate_id=str(need.id), destination=previous.line_uid,
+                           content=f"ℹ️ {elder} 的求救已改由 {person.name} 處理，您不用再過去了，謝謝您。",
+                           dedupe_key=f"sos-reassign:{need.id}:{person.id}:from:{previous.id}")
+    notify_requester(need, f"🙋 改由 {person.name} 處理您的求救，會盡快聯絡您。有生命危險請直接撥 119。")
+    _tell_family(db, need, f"🙋 {elder} 的求救改由 {person.name} 處理。")
+    return {"ok": True, "need": need, "previous": previous.name if previous else None}
 
 
 def escalate_unacknowledged(db: Session | None = None) -> int:

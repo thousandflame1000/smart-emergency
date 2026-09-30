@@ -366,3 +366,22 @@ def test_sos_reply_offers_a_cancel_shortcut(db, line_outbox):
     press("U-granny", "action=confirm_sos")
     message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
     assert [i.action.data for i in message.quick_reply.items] == ["cmd=取消求救"]
+
+
+def test_console_reassigns_a_delayed_responder(db, line_outbox):
+    from app.main import app
+    need, elder, near, mid, far, admin = _world(db)
+    client = TestClient(app)
+    press("U-far", f"action=sos_go&need_id={need.id}")
+    plain = client.post(f"/api/resources/needs/{need.id}/assign_sos?user_id={near.id}")
+    assert plain.status_code == 409, "沒有明確說要改派時不能搶走別人受理的"
+    r = client.post(f"/api/resources/needs/{need.id}/assign_sos?user_id={near.id}&replace=true")
+    assert r.status_code == 200 and "已改派 近志工（原本是 遠志工）" in r.json()["message"]
+    db.expire_all()
+    assert need.responder.name == "近志工"
+    assert any("改由 近志工 處理" in t and "不用再過去" in t for t in line_outbox.texts("U-far"))
+    assert sent_to(line_outbox, "U-near")[-1] == "由您處理這筆求救"
+    events = [e["action"] for e in client.get(f"/api/resources/needs/{need.id}/events").json()]
+    assert "sos_reassigned" in events
+    press("U-far", f"action=sos_arrived&need_id={need.id}")
+    assert "只有受理這筆求救的人" in replies(line_outbox)[-1], "被換掉的人不能再回報"

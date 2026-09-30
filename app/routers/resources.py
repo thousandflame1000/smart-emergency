@@ -465,7 +465,7 @@ def sos_candidates(need_id: str, db: Session = Depends(get_db),
 
 
 @router.post("/needs/{need_id}/assign_sos")
-def assign_sos(need_id: str, user_id: str, db: Session = Depends(get_db),
+def assign_sos(need_id: str, user_id: str, replace: bool = False, db: Session = Depends(get_db),
                _principal: dict | None = Depends(require_admin)):
     """後台指派處理人（受理）。對方綁了 LINE 就推任務卡：電話、導航、處理完成。"""
     from app.models.user import User
@@ -475,8 +475,11 @@ def assign_sos(need_id: str, user_id: str, db: Session = Depends(get_db),
     if person is None or not (person.has_role("volunteer") or person.has_role("admin")):
         raise HTTPException(400, "只能指派志工或管理員")
     result = sos.take(db, need_id, person, via="後台指派")
+    if result.get("taken_by") and replace:
+        # 已經有人受理但被耽擱：管理員明確選了「改派」才換人
+        result = sos.reassign(db, need_id, person)
     if result.get("error"):
-        raise HTTPException(404, result["error"])
+        raise HTTPException(404 if "找不到" in result["error"] else 409, result["error"])
     if not result.get("ok"):
         raise HTTPException(409, result["message"])
     pushed = bool(person.line_uid)
@@ -484,9 +487,10 @@ def assign_sos(need_id: str, user_id: str, db: Session = Depends(get_db),
         # 可靠送達：LINE 暫時失敗會由寄件佇列重試
         send_flex_reliably(aggregate_type="CommunityNeed", aggregate_id=need_id, destination=person.line_uid,
                            alt="由您處理這筆求救", contents=sos.responder_card(result["need"]),
-                           dedupe_key=f"sos-assign:{need_id}:{person.id}")
+                           dedupe_key=f"sos-assign:{need_id}:{person.id}:{result['need'].acknowledged_at}")
     note = "已傳 LINE 任務卡給對方" if pushed else "對方沒有綁定 LINE，請電話通知"
-    return {"message": f"已指派 {person.name} 處理；{note}", "need_id": need_id}
+    verb = f"已改派 {person.name}（原本是 {result['previous']}）" if result.get("previous") else f"已指派 {person.name}"
+    return {"message": f"{verb}處理；{note}", "need_id": need_id}
 
 
 @router.post("/needs/{need_id}/reported_119")

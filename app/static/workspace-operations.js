@@ -169,7 +169,8 @@ function renderOperationalSelection(item,isNode){
       else actions.insertAdjacentHTML('beforeend','<p class="muted">核准派遣僅限管理員，請聯絡管理員處理。</p>');
     }
     if(p.status==='open'&&p.need_type==='sos'){
-      if(isAdmin()){if(!p.responder)loadSosCandidates(item);
+      // 沒人受理：指派；有人受理但還沒到場：可以改派（被耽擱、聯絡不上時）
+      if(isAdmin()){if(!p.responder)loadSosCandidates(item);else if(!p.on_scene_at)loadSosCandidates(item,true);
         // 需要送醫就撥 119，同時在紀錄上留下轉報的時間
         const call=document.createElement('a');call.className='icon-button call-119';call.href='tel:119';call.innerHTML='<i data-lucide="siren"></i>通報 119';
         call.onclick=()=>{fetch('/api/resources/needs/'+encodeURIComponent(item.id.slice(8))+'/reported_119',{method:'POST'}).then(()=>{operationEvents.clear();loadOperationEvents(item);}).catch(()=>{});};
@@ -206,25 +207,28 @@ async function loadNeedContact(node){
 // 紀錄裡的操作者是系統內部代號（manager、admin:王小明），畫面上說人話
 function actorName(label){if(!label||label==='manager')return label?'後台':'系統';return label.replace(/^admin:/,'管理員：').replace(/^(志工|管理員|家屬):/,'$1：');}
 // 求救還沒人受理：列出可以指派的人（志工由近到遠，再來是管理員），指派後對方會收到 LINE 任務卡
-async function loadSosCandidates(node){
+async function loadSosCandidates(node,replace=false){
   const actions=$('operational-actions');
   const box=document.createElement('div');box.className='assign-sos';box.innerHTML='<span class="muted">讀取可指派的人…</span>';
   actions.prepend(box);
   try{
     const data=await resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/sos_candidates');
     if(state.selected?.id!==node.id||!box.isConnected)return;
-    const people=data.candidates||[];
+    const people=(data.candidates||[]).filter(c=>!replace||c.name!==node.properties.responder);
     if(!people.length){box.innerHTML='<p class="error">沒有可指派的志工或管理員，請直接撥電話或通報 119。</p>';return;}
-    box.innerHTML=`<label>指派處理人<select id="sos-assignee">${people.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}・${escapeHtml(c.role)}${c.km!=null?'・'+c.km+' km':''}${c.line?'':'・未綁 LINE'}${c.paused?'・暫停支援中':''}</option>`).join('')}</select></label>`;
-    const go=document.createElement('button');go.type='button';go.className='primary';go.innerHTML='<i data-lucide="user-round-check"></i>指派';
-    go.onclick=()=>assignSos(node,$('sos-assignee').value,$('sos-assignee').selectedOptions[0].textContent);
+    box.innerHTML=`<label>${replace?'改派給（原處理人被耽擱時）':'指派處理人'}<select id="sos-assignee">${people.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}・${escapeHtml(c.role)}${c.km!=null?'・'+c.km+' km':''}${c.line?'':'・未綁 LINE'}${c.paused?'・暫停支援中':''}</option>`).join('')}</select></label>`;
+    const go=document.createElement('button');go.type='button';go.className=replace?'':'primary';go.innerHTML=replace?'<i data-lucide="repeat"></i>改派':'<i data-lucide="user-round-check"></i>指派';
+    go.onclick=()=>assignSos(node,$('sos-assignee').value,$('sos-assignee').selectedOptions[0].textContent,replace);
     box.append(go);icons();
   }catch(e){if(box.isConnected)box.innerHTML=`<p class="error">${escapeHtml(e.message)}</p>`;}
 }
-async function assignSos(node,userId,label){
-  if(!await askConfirm('指派處理人？',`由 <strong>${escapeHtml(label)}</strong> 處理這筆求救。對方綁了 LINE 會收到任務卡（電話、導航、處理完成）。`,'指派'))return;
+async function assignSos(node,userId,label,replace=false){
+  const title=replace?'改派處理人？':'指派處理人？';
+  const body=replace?`改由 <strong>${escapeHtml(label)}</strong> 處理。原處理人 ${escapeHtml(node.properties.responder||'')} 會收到「不用再過去了」。`
+    :`由 <strong>${escapeHtml(label)}</strong> 處理這筆求救。對方綁了 LINE 會收到任務卡（電話、導航、處理完成）。`;
+  if(!await askConfirm(title,body,replace?'改派':'指派'))return;
   try{
-    const r=await fetch('/api/resources/needs/'+encodeURIComponent(node.id.slice(8))+'/assign_sos?user_id='+encodeURIComponent(userId),{method:'POST'});
+    const r=await fetch('/api/resources/needs/'+encodeURIComponent(node.id.slice(8))+'/assign_sos?user_id='+encodeURIComponent(userId)+(replace?'&replace=true':''),{method:'POST'});
     const data=await r.json();if(!r.ok||data.error)throw Error(data.error||data.detail||'指派失敗');
     operationEvents.clear();await refreshOperations({silent:true});focusOperational(node.id);message(data.message);
   }catch(e){message(e.message,true);}
@@ -319,7 +323,7 @@ async function loadOperationEvents(node){
     if(!operationEvents.has(key))operationEvents.set(key,resourceRequest('/needs/'+encodeURIComponent(node.id.slice(8))+'/events'));
     const events=await operationEvents.get(key);
     if(state.selected?.id!==node.id||nodeById(node.id)?.properties.observed_at!==node.properties.observed_at||!$('operation-events'))return;
-    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',sos_reported_119:'已轉報 119',sos_on_scene:'處理人到場',sos_cancelled:'當事人取消求救',sos_arrival_overdue:'受理後逾時未到場，已提醒管理員',welfare_check_requested:'家屬請人探視',cancel_need:'取消需求',admin_message:'管理員指示'};
+    const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',sos_reported_119:'已轉報 119',sos_on_scene:'處理人到場',sos_cancelled:'當事人取消求救',sos_reassigned:'改派處理人',sos_arrival_overdue:'受理後逾時未到場，已提醒管理員',welfare_check_requested:'家屬請人探視',cancel_need:'取消需求',admin_message:'管理員指示'};
     // 求救事件不走物資狀態（受理後仍是 open，顯示「待媒合」會誤導）；時間轉成台灣時間
     const when=t=>{const d=new Date(String(t||'').replace(' ','T')+(/[zZ]|[+-]\d\d:?\d\d$/.test(t||'')?'':'Z'));return isNaN(d)?(t||''):d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});};
     $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${e.action.startsWith('sos_')?'':escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(actorName(e.actor_label))} · ${escapeHtml(when(e.created_at))}</small></div>`).join(''):'尚無處理紀錄';
