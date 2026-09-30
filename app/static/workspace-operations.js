@@ -13,7 +13,10 @@ const SOS_LATE_MIN=5,SOS_OVERDUE_MIN=10;
 const isSos=n=>n.properties.need_type==='sos';
 function minutesSince(iso){return iso?(Date.now()-new Date(iso))/60000:0;}
 function sinceText(iso){return iso&&window.sosAlarm?sosAlarm.since(iso):'';}
-function reportedText(iso){if(!iso)return'未知';const d=new Date(iso);return(minutesSince(iso)>=1440?d.toLocaleDateString('zh-TW')+' ':'')+d.toLocaleTimeString('zh-TW',{hour:'2-digit',minute:'2-digit'})+'（'+sinceText(iso)+'）';}
+// 24 小時制；不是今天就加上日期（昨晚 20:12 跟今天 20:12 不能看起來一樣）
+function reportedText(iso){if(!iso)return'未知';const d=new Date(iso),pad=n=>String(n).padStart(2,'0');
+  const day=d.toDateString()===new Date().toDateString()?'':`${d.getMonth()+1}/${d.getDate()} `;
+  return`${day}${pad(d.getHours())}:${pad(d.getMinutes())}（${sinceText(iso)}）`;}
 // 沒人受理：5 分鐘黃、10 分鐘紅；有人受理但 20 分鐘還沒到場：黃
 const SOS_ARRIVAL_MIN=20;
 function ageClass(n){const p=n.properties;if(!isSos(n)||p.status!=='open')return'';
@@ -45,7 +48,7 @@ function renderOperations(){
   $('operation-stages').innerHTML=Object.entries(OPERATION_STAGES).map(([key,label])=>`<button data-stage="${key}" class="${key==='sos'?'sos-stage ':''}${operationStage===key&&catalogTab==='tasks'?'active':''}" aria-pressed="${operationStage===key&&catalogTab==='tasks'}">${label}<strong>${tasks.filter(n=>taskInStage(n,key)).length}</strong></button>`).join('');
   $('operation-stages').querySelectorAll('button').forEach(button=>button.onclick=()=>{operationStage=button.dataset.stage;setCatalog('tasks');renderOperations();});
   const stamp=state.graph.nodes.find(n=>n.properties.observed_at)?.properties.observed_at;
-  $('observed-at').textContent=stamp?'現況快照 · '+new Date(stamp).toLocaleString('zh-TW'):'尚未讀取平台現況';
+  $('observed-at').textContent=stamp?'現況快照 · '+new Date(stamp).toLocaleString('zh-TW',{hourCycle:'h23'}):'尚未讀取平台現況';
   renderOperationTasks();
 }
 function renderOperationTasks(){
@@ -155,7 +158,7 @@ function renderOperationalSelection(item,isNode){
     ${p.db==='need'?'<div id="need-contacts" class="contact-list"></div>':''}
     ${p.db==='need'&&p.need_type!=='sos'&&['open','suggested'].includes(p.status)?'<div id="need-candidate-summary" class="candidate-summary muted">候選載入中…</div>':''}
     <div id="operational-actions" class="actions"></div>${profile.length?'<h2>求助者狀況</h2><dl class="object-facts">'+profile.map(([k,v])=>`<dt>${escapeHtml(k)}</dt><dd>${escapeHtml(v)}</dd>`).join('')+'</dl>':''}${related.length?'<h2>關聯物件</h2><div class="related-objects">'+related.map(e=>{const other=e.source===item.id?e.target:e.source;return `<button data-related="${escapeHtml(other)}"><span>${escapeHtml(e.label)}</span>${escapeHtml(nodeById(other)?.label||other)}</button>`;}).join('')+'</div>':''}
-    ${p.db==='need'?'<h2 class="event-heading">任務紀錄</h2><div id="operation-events" class="muted">讀取中</div>':''}<p class="muted">${p.observed_at?escapeHtml(new Date(p.observed_at).toLocaleString('zh-TW')):''}</p><details><summary>來源識別碼</summary><pre>${escapeHtml(item.id)}</pre></details>`;
+    ${p.db==='need'?'<h2 class="event-heading">任務紀錄</h2><div id="operation-events" class="muted">讀取中</div>':''}<p class="muted">${p.observed_at?escapeHtml(new Date(p.observed_at).toLocaleString('zh-TW',{hourCycle:'h23'})):''}</p><details><summary>來源識別碼</summary><pre>${escapeHtml(item.id)}</pre></details>`;
   el.querySelectorAll('[data-related]').forEach(b=>b.onclick=()=>focusOperational(b.dataset.related));
   const actions=$('operational-actions');
   function button(label,icon,fn,primary=false){const b=document.createElement('button');b.type='button';b.className=primary?'primary':'';b.innerHTML=`<i data-lucide="${icon}"></i>${label}`;b.onclick=fn;actions.append(b);return b;}
@@ -328,7 +331,7 @@ async function loadOperationEvents(node){
     if(state.selected?.id!==node.id||nodeById(node.id)?.properties.observed_at!==node.properties.observed_at||!$('operation-events'))return;
     const names={propose_dispatch:'建立建議',confirm_dispatch:'核准派遣',decline_suggestion:'退回建議',task_report:'現場回報',accept_task:'志工接單',mark_delivered:'配送完成',resolve_sos:'求助已處理',sos_resolved:'求救結案',sos_acknowledged:'受理求救',sos_escalated:'逾時未受理，已再通知管理員',sos_reported_119:'已轉報 119',sos_on_scene:'處理人到場',sos_cancelled:'當事人取消求救',sos_reassigned:'改派處理人',sos_arrival_overdue:'受理後逾時未到場，已提醒管理員',welfare_check_requested:'家屬請人探視',cancel_need:'取消需求',admin_message:'管理員指示'};
     // 求救事件不走物資狀態（受理後仍是 open，顯示「待媒合」會誤導）；時間轉成台灣時間
-    const when=t=>{const d=new Date(String(t||'').replace(' ','T')+(/[zZ]|[+-]\d\d:?\d\d$/.test(t||'')?'':'Z'));return isNaN(d)?(t||''):d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});};
+    const when=t=>{const d=new Date(String(t||'').replace(' ','T')+(/[zZ]|[+-]\d\d:?\d\d$/.test(t||'')?'':'Z'));return isNaN(d)?(t||''):d.toLocaleString('zh-TW',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hourCycle:'h23'});};
     $('operation-events').innerHTML=events.length?events.map(e=>`<div class="event-row"><strong>${escapeHtml(names[e.action]||e.action)}</strong><span>${e.action.startsWith('sos_')?'':escapeHtml(NEED_STATUS[e.new_status]||e.outcome)}</span>${e.details.note||e.details.text?`<p>${escapeHtml(e.details.note||e.details.text)}</p>`:''}<small>${escapeHtml(actorName(e.actor_label))} · ${escapeHtml(when(e.created_at))}</small></div>`).join(''):'尚無處理紀錄';
   }catch(e){operationEvents.delete(key);if(state.selected?.id===node.id&&$('operation-events'))$('operation-events').textContent=e.message;}
 }

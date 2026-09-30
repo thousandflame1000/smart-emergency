@@ -3174,7 +3174,7 @@ async function loadStatus() {
   try {
     const data = await fetch('/api/system/status').then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
     document.getElementById('status-summary').textContent =
-      `需處理 ${data.error}・注意 ${data.warn}・正常 ${data.ok}　檢查於 ${new Date(data.checked_at).toLocaleTimeString('zh-TW')}`;
+      `需處理 ${data.error}・注意 ${data.warn}・正常 ${data.ok}　檢查於 ${new Date(data.checked_at).toLocaleTimeString('zh-TW',{hourCycle:'h23'})}`;
     const items = [...data.items].sort((a, b) => STATUS_LEVEL[a.level][2] - STATUS_LEVEL[b.level][2]);
     list.innerHTML = items.map(i => `<div class="status-row status-${esc(i.level)}">
       <span class="badge ${STATUS_LEVEL[i.level][1]}">${STATUS_LEVEL[i.level][0]}</span>
@@ -3206,7 +3206,7 @@ async function loadAudit() {
   try {
     const rows = await fetch('/api/dashboard/audit?limit=200').then(r => r.json());
     body.innerHTML = rows.length ? rows.map(r => `<tr>
-      <td class="muted">${esc(r.at ? new Date(r.at).toLocaleString('zh-TW') : '')}</td>
+      <td class="muted">${esc(r.at ? new Date(r.at).toLocaleString('zh-TW',{hourCycle:'h23'}) : '')}</td>
       <td>${esc(r.actor)}</td><td class="muted">${r.method === 'LINE' ? 'LINE' : '後台'}</td>
       <td title="${esc(r.path)}" style="word-break:break-all">${esc(r.action)}</td>
       <td><span class="badge ${r.status < 400 ? 'badge-green' : 'badge-red'}">${r.status < 400 ? '成功' : '失敗'}</span></td></tr>`).join('')
