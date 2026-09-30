@@ -195,7 +195,8 @@ def welfare_check(db: Session, elder: User, family: User, *, on_site: bool = Fal
     existing = db.query(CommunityNeed).filter(CommunityNeed.requester_id == elder.id, CommunityNeed.need_type == "sos",
                                               CommunityNeed.status == "open").first()
     if existing:
-        return {"existing": True, "responder": existing.responder.name if existing.responder_id and existing.responder else None}
+        return {"existing": True, "need": existing,
+                "responder": existing.responder.name if existing.responder_id and existing.responder else None}
     need = CommunityNeed(requester_id=elder.id, need_type="sos", urgency=5,
                          description=(f"志工 {family.name} 上門確認：需要協助" if on_site
                                       else f"家屬 {family.name} 聯絡不到，請附近志工去看看"),

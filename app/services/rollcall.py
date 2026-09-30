@@ -7,6 +7,7 @@
 """
 import logging
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.models.config import SystemConfig
@@ -52,15 +53,20 @@ def note(db: Session, user: User, status: str, *, via: str = "line", marked_by: 
     round_id = current_round(db)
     if not round_id or user is None or not user.has_role("elderly"):
         return False
-    row = db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id, SafetyCheck.user_id == user.id).first()
-    if row is None:
-        row = SafetyCheck(round_id=round_id, user_id=user.id, status=status, via=via, marked_by=marked_by)
-        db.add(row)
-    else:
-        row.status, row.via, row.marked_by = status, via, marked_by
-        row.responded_at = now_utc().replace(tzinfo=None)
-    db.commit()
-    return True
+    for _attempt in range(2):
+        row = db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id, SafetyCheck.user_id == user.id).first()
+        if row is None:
+            db.add(SafetyCheck(round_id=round_id, user_id=user.id, status=status, via=via, marked_by=marked_by))
+        else:
+            row.status, row.via, row.marked_by = status, via, marked_by
+            row.responded_at = now_utc().replace(tzinfo=None)
+        try:
+            db.commit()
+            return True
+        except IntegrityError:
+            # 連點兩下或家屬與本人同時回報：另一筆剛好先寫進去了，改成更新那一筆
+            db.rollback()
+    return False
 
 
 def elders(db: Session) -> list[User]:

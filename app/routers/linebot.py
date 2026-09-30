@@ -1050,9 +1050,13 @@ def _handle_rollcall_mark(event, db, user, elder_id: str, status: str) -> None:
         _say(event, f"✅ 已回報 {elder.name} 平安，謝謝您！傳「附近點名」看下一位。")
         return
     result = sos.welfare_check(db, elder, user, on_site=True)
-    need = result.get("need")
-    if need is not None:
-        sos.take(db, str(need.id), user, via="志工上門")
+    if result.get("existing") and result.get("responder") and result["responder"] != user.name:
+        # 這位長者本來就有求救、而且已經有別人在處理：不要讓志工以為「由您處理」
+        _say(event, f"🆘 已回報 {elder.name} 需要協助。這筆求救已由 {result['responder']} 處理，請跟他聯繫配合；"
+             "需要送醫請直接撥 119。")
+        return
+    # 新開的，或本來就有但還沒人受理：人已經在現場，就由他受理
+    sos.take(db, str(result["need"].id), user, via="志工上門")
     _say(event, f"🆘 已回報 {elder.name} 需要協助，管理員已收到。由您先處理；需要送醫請直接撥 119。")
 
 

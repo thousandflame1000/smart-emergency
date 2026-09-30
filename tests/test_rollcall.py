@@ -173,3 +173,27 @@ def test_volunteers_are_told_about_nearby_roll_call_in_the_emergency_broadcast(d
     _emergency(db)
     dashboard.broadcast_mode_change("emergency")
     assert any("附近點名" in t for t in sent_to(line_outbox, "U-v2"))
+
+
+def test_volunteer_reporting_help_for_an_elder_with_an_open_sos(db, line_outbox):
+    from app.models.need import CommunityNeed
+    from app.routers import linebot as lb
+    mk(db, "志工甲", ["volunteer"], "U-va", lat=23.665, lng=121.418)
+    mk(db, "志工乙", ["volunteer"], "U-vb", lat=23.665, lng=121.418)
+    elder = mk(db, "阿公", ["elderly"], "U-ag", lat=23.6652, lng=121.4182)
+    _emergency(db)
+    lb._trigger_sos(elder, db)
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    press("U-va", f"action=rc_mark&user_id={elder.id}&s=help")
+    db.refresh(need)
+    assert need.responder.name == "志工甲", "還沒人受理的既有求救，由上門的志工接手"
+    assert db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").count() == 1, "不開第二張"
+    press("U-vb", f"action=rc_mark&user_id={elder.id}&s=help")
+    assert "已由 志工甲 處理" in replies(line_outbox)[-1]
+
+
+def test_double_tap_on_the_roll_call_does_not_fail(db):
+    elder = mk(db, "阿嬤", ["elderly"], "U-tap")
+    _emergency(db)
+    assert rollcall.note(db, elder, "ok") and rollcall.note(db, elder, "ok")
+    assert _status(db) == {"阿嬤": "ok"}
