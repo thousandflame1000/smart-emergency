@@ -15,6 +15,27 @@ def board(db: Session = Depends(get_db), _principal: dict | None = Depends(requi
     return rollcall.board(db)
 
 
+@router.get("/export.csv")
+def export_csv(db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
+    """點名名單匯出成 CSV（Excel 開得起來的 UTF-8 BOM）：公所或應變中心要用試算表彙整時用。"""
+    import csv
+    import io
+    from fastapi.responses import Response
+    board_ = rollcall.board(db)
+    if not board_.get("active"):
+        last = rollcall.last_round(db)
+        board_ = rollcall.board(db, last) if last else {"people": []}
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["姓名", "狀態", "脆弱度", "電話", "地址", "回報方式", "代為確認", "回報時間（UTC）"])
+    via = {"line": "LINE", "app": "App", "family": "家屬", "console": "後台", "volunteer": "志工上門"}
+    for p in board_["people"]:
+        writer.writerow([p["name"], p["status_label"], p["vulnerability"], p["phone"], p["address"],
+                         via.get(p["via"], p["via"] or ""), p["marked_by"] or "", p["responded_at"] or ""])
+    return Response("\ufeff" + buffer.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": "attachment; filename=rollcall.csv"})
+
+
 @router.post("/remind")
 def remind(db: Session = Depends(get_db), _principal: dict | None = Depends(require_admin)):
     """再問一次還沒回的長者。"""

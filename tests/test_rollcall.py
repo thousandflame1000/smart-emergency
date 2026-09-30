@@ -280,3 +280,17 @@ def test_field_staff_report_shelter_headcount_from_line(db, line_outbox):
     db.refresh(school)
     assert school.current_load == 0, "居民不能改"
     assert db.query(AdminAudit).filter(AdminAudit.path.like("收容人數 光復國小%")).count() == 4
+
+
+def test_roll_call_exports_as_csv_that_excel_opens(db, line_outbox):
+    from app.main import app
+    from fastapi.testclient import TestClient
+    mk(db, "回了", ["elderly"], "U-csv-yes", phone="0911000111", address="大進村 1 號")
+    mk(db, "沒回", ["elderly"], "U-csv-no")
+    _emergency(db)
+    press("U-csv-yes", "action=safe")
+    r = TestClient(app).get("/api/rollcall/export.csv")
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    text = r.content.decode("utf-8")
+    assert text.startswith("\ufeff姓名,狀態"), "Excel 要有 BOM 才不會亂碼"
+    assert "回了,平安" in text and "0911000111" in text and "沒回,還沒回" in text
