@@ -209,12 +209,20 @@ def message_assignee(need_id: str, text: str, db: Session, *, actor_label: str =
         return {"error": "找不到這筆需求。"}
     resource = need.matched_resource
     volunteer = resource.owner if resource else None
-    if need.status not in ("suggested", "matched") or volunteer is None:
+    sos = need.need_type == "sos"
+    if sos:
+        # 求救沒有物資，對象是受理的處理人（救護車快到了、請在巷口等之類的現場協調）
+        resource, volunteer = None, need.responder if need.status == "open" and need.responder_id else None
+        if volunteer is None:
+            return {"error": "這筆求救還沒有人受理，請先指派處理人。"}
+    elif need.status not in ("suggested", "matched") or volunteer is None:
         return {"error": "這筆需求目前沒有指派志工，無法傳送指示。"}
     if not volunteer.line_uid:
         return {"error": f"{volunteer.name} 尚未綁定 LINE，請改用電話聯繫。"}
     item = NEED_TYPE_ZH.get(need.need_type, need.need_type)
-    content = f"📣 管理員指示｜{item}（{need.address or '地址未填'}）\n{text}\n\n傳「我的任務」可回報現況。"
+    elder = need.requester.name if sos and need.requester else ""
+    content = (f"📣 管理員指示｜{elder} 的求救（{need.address or '地址未填'}）\n{text}" if sos else
+               f"📣 管理員指示｜{item}（{need.address or '地址未填'}）\n{text}\n\n傳「我的任務」可回報現況。")
     event = _log_dispatch_event(
         db, "admin_message", need=need, resource=resource, actor_label=actor_label,
         previous_status=need.status, new_status=need.status, outcome="queued",

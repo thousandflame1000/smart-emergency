@@ -176,6 +176,7 @@ function renderOperationalSelection(item,isNode){
       loadOperationCandidates(item,proposeButton);
     }
     if(['suggested','matched'].includes(p.status)&&isAdmin())button('傳訊息給志工','message-square-text',()=>messageAssignee(item));
+    if(p.need_type==='sos'&&p.status==='open'&&p.responder&&isAdmin())button('傳訊息給處理人','message-square-text',()=>messageAssignee(item));
     if(['open','suggested','matched'].includes(p.status)&&isAdmin())loadNeedContact(item);
     loadOperationEvents(item);
   }

@@ -210,3 +210,15 @@ def test_a_failed_nearby_alert_is_retried_from_the_outbox(db, line_outbox, monke
     worker = OutboxWorker(db, worker_id="retry-test")
     sent = worker.process_next(now=row.available_at + timedelta(seconds=1))
     assert sent.status == "SENT" and sent_to(line_outbox, "U-near") == [ALERT]
+
+
+def test_console_can_message_the_sos_responder(db, line_outbox):
+    from app.main import app
+    need, elder, near, mid, far, admin = _world(db)
+    client = TestClient(app)
+    early = client.post(f"/api/resources/needs/{need.id}/message_assignee", json={"text": "救護車快到了"})
+    assert early.status_code == 409 and "還沒有人受理" in str(early.json()), "還沒人受理時沒有對象可以傳"
+    press("U-near", f"action=sos_go&need_id={need.id}")
+    r = client.post(f"/api/resources/needs/{need.id}/message_assignee", json={"text": "救護車快到了，請在巷口等"})
+    assert r.status_code == 200 and "近志工" in r.json()["message"]
+    assert any("陳阿公 的求救" in t and "巷口等" in t for t in line_outbox.texts("U-near"))
