@@ -98,7 +98,7 @@ def checks(db: Session) -> list[dict]:
     out.append(_item("version", "部署版本", "ok", commit))
 
     running = scheduler_running()
-    out.append(_item("scheduler", "排程（打卡、未回應、自動派遣）", "ok" if running else ("error" if production else "warn"),
+    out.append(_item("scheduler", "排程（打卡、未回應、求救升級、點名追蹤、自動派遣）", "ok" if running else ("error" if production else "warn"),
                      "執行中" if running else "未執行", "重新部署服務；排程停止時不會發打卡也不會升級通知。"))
 
     # 預設開放不用登入（使用者決定）；要上鎖再設 ADMIN_LINE_LOGIN=true 或 DEMO_PASSWORD
