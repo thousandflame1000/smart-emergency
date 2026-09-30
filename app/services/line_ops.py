@@ -30,6 +30,7 @@ from app.services.rich_menu import liff_url
 logger = logging.getLogger(__name__)
 
 VOLUNTEER_COMMANDS = {"我的任務", "任務"}
+AVAILABILITY_COMMANDS = {"暫停支援", "恢復支援"}
 ADMIN_COMMANDS = {"總覽", "待派", "待派需求", "待審", "待審志工", "求救單", "後台", "開啟後台", "緊急求救", "點名",
                   "緊急模式", "啟動緊急模式", "解除緊急模式"}
 FAMILY_COMMANDS = {"邀請家人", "長輩狀況", "家人狀況"}
@@ -37,7 +38,7 @@ RESIDENT_COMMANDS = {"我的需求", "進度", "求助進度", "查看進度", "
                      "我的資料", "個人資料", "修改資料", "刪除我的帳號", "刪除帳號"}
 ROLE_CENTER_COMMANDS = {"我的中心", "居民中心", "志工中心", "決策中心"}
 MAINTENANCE_COMMANDS = {"更新選單"}
-COMMAND_WORDS = (VOLUNTEER_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
+COMMAND_WORDS = (VOLUNTEER_COMMANDS | AVAILABILITY_COMMANDS | ADMIN_COMMANDS | FAMILY_COMMANDS | RESIDENT_COMMANDS
                  | ROLE_CENTER_COMMANDS | MAINTENANCE_COMMANDS)
 BIND_RE = re.compile(r"^綁定\s*(\d{6})$")
 JOIN_RE = re.compile(r"^加入\s*(\d{8})$")
@@ -166,8 +167,15 @@ def resident_center(event, db: Session, user: User) -> None:
     _flex(event, "居民服務", carousel(_resident_center_cards(user)))
 
 
-def _volunteer_center_cards() -> list[dict]:
+def _volunteer_center_cards(paused: bool = False) -> list[dict]:
     return [
+        bubble(
+            "⏸️ 暫停支援中" if paused else "🟢 可以支援", "#5f6c65" if paused else "#13795b",
+            ["附近有人求救時不會通知您。回到家或方便時請按「恢復支援」。" if paused else
+             "附近 2 公里內有人求救時會通知您（以您分享的位置計算）。人在外地時可以先暫停。"],
+            [{"label": "恢復支援", "text": "恢復支援"} if paused else {"label": "暫停支援", "text": "暫停支援"},
+             {"label": "更新我的位置", "text": "分享位置"}],
+        ),
         bubble(
             "志工任務", "#2471a3",
             ["不必先和居民建立照護關係；候選依分區、物資、距離與負載排序。"],
@@ -186,18 +194,30 @@ def _volunteer_center_cards() -> list[dict]:
     ]
 
 
+def set_availability(event, db: Session, user: User, paused: bool) -> None:
+    from app.services.sos import set_paused
+    if not is_volunteer(user):
+        _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
+        return
+    set_paused(db, user, paused)
+    _say(event, "⏸️ 已暫停：附近有人求救時先不通知您。方便時傳「恢復支援」。" if paused else
+         "🟢 已恢復：附近有人求救時會通知您。位置有變請按「分享位置」更新。")
+
+
 def volunteer_center(event, db: Session, user: User) -> None:
     if not is_volunteer(user):
         _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
         return
-    _flex(event, "志工中心", carousel(_volunteer_center_cards()))
+    from app.services.sos import paused_ids
+    _flex(event, "志工中心", carousel(_volunteer_center_cards(str(user.id) in paused_ids(db))))
 
 
 def my_center(event, db: Session, user: User) -> None:
     """Expose every role the account owns without replacing its primary menu."""
     cards = _resident_center_cards(user)
     if is_volunteer(user):
-        cards.extend(_volunteer_center_cards())
+        from app.services.sos import paused_ids
+        cards.extend(_volunteer_center_cards(str(user.id) in paused_ids(db)))
     if is_admin(user):
         stats = _admin_snapshot(db)
         cards.append(bubble(
@@ -896,6 +916,8 @@ def handle_text(event, db: Session, user: User, text: str) -> bool:
                         "請依受控維運流程單次執行。")
     elif text in VOLUNTEER_COMMANDS:
         my_tasks(event, db, user)
+    elif text in AVAILABILITY_COMMANDS:
+        set_availability(event, db, user, paused=text == "暫停支援")
     elif text in ("後台", "開啟後台"):
         # 基層員工只能拿登入連結進網頁更新物資／資源點，其他管理指令仍是管理員專用。
         if is_admin(user) or is_field_staff(user):

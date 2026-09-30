@@ -215,7 +215,7 @@ async function loadSosCandidates(node){
     if(state.selected?.id!==node.id||!box.isConnected)return;
     const people=data.candidates||[];
     if(!people.length){box.innerHTML='<p class="error">沒有可指派的志工或管理員，請直接撥電話或通報 119。</p>';return;}
-    box.innerHTML=`<label>指派處理人<select id="sos-assignee">${people.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}・${escapeHtml(c.role)}${c.km!=null?'・'+c.km+' km':''}${c.line?'':'・未綁 LINE'}</option>`).join('')}</select></label>`;
+    box.innerHTML=`<label>指派處理人<select id="sos-assignee">${people.map(c=>`<option value="${escapeHtml(c.id)}">${escapeHtml(c.name)}・${escapeHtml(c.role)}${c.km!=null?'・'+c.km+' km':''}${c.line?'':'・未綁 LINE'}${c.paused?'・暫停支援中':''}</option>`).join('')}</select></label>`;
     const go=document.createElement('button');go.type='button';go.className='primary';go.innerHTML='<i data-lucide="user-round-check"></i>指派';
     go.onclick=()=>assignSos(node,$('sos-assignee').value,$('sos-assignee').selectedOptions[0].textContent);
     box.append(go);icons();

@@ -313,3 +313,29 @@ def test_workspace_sos_shows_the_nearest_aed(db, line_outbox, monkeypatch):
     need, *_ = _world(db)
     node = next(n for n in operational_snapshot(db)["graph"]["nodes"] if n["id"] == f"db:need:{need.id}")
     assert node["properties"]["nearest_aed"].startswith("最近的 AED：活動中心")
+
+
+def test_paused_volunteers_are_not_alerted_until_they_resume(db, line_outbox):
+    from tests.test_line_hardening import say
+    from app.routers import linebot as lb
+    from app.main import app
+    elder = mk(db, "阿公", ["elderly"], "U-ag2", lat=23.6650, lng=121.4180)
+    mk(db, "外地志工", ["volunteer"], "U-away", lat=23.6660, lng=121.4180)
+    mk(db, "在家志工", ["volunteer"], "U-home", lat=23.6670, lng=121.4180)
+    mk(db, "居民", ["elderly"], "U-plain")
+    say("U-plain", "暫停支援")
+    assert "僅限志工" in replies(line_outbox)[-1]
+    say("U-away", "暫停支援")
+    assert "已暫停" in replies(line_outbox)[-1]
+    say("U-away", "志工中心")
+    card = json.dumps([m for kind, _to, m in line_outbox.sent if kind == "reply"][-1].contents.to_dict(), ensure_ascii=False)
+    assert "暫停支援中" in card and "恢復支援" in card
+    lb._trigger_sos(elder, db)
+    assert not sent_to(line_outbox, "U-away") and sent_to(line_outbox, "U-home") == [ALERT]
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    people = TestClient(app).get(f"/api/resources/needs/{need.id}/sos_candidates").json()["candidates"]
+    assert [p["name"] for p in people] == ["在家志工", "外地志工"] and people[-1]["paused"] is True
+    say("U-away", "恢復支援")
+    assert "已恢復" in replies(line_outbox)[-1]
+    from app.services import sos as sos_svc
+    assert "外地志工" in [u.name for u, _km in sos_svc.nearby_volunteers(db, need)]

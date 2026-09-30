@@ -35,6 +35,26 @@ def spot(need: CommunityNeed) -> tuple[float, float] | None:
     return None
 
 
+PAUSE_PREFIX = "volunteer_paused:"
+
+
+def paused_ids(db: Session) -> set[str]:
+    """傳了「暫停支援」的志工（人在外地、身體不便）：附近求救不叫他們。"""
+    from app.models.config import SystemConfig
+    return {row.key[len(PAUSE_PREFIX):] for row in db.query(SystemConfig).filter(SystemConfig.key.like(PAUSE_PREFIX + "%")).all()}
+
+
+def set_paused(db: Session, user: User, paused: bool) -> None:
+    from app.models.config import SystemConfig
+    key = PAUSE_PREFIX + str(user.id)
+    row = db.query(SystemConfig).filter(SystemConfig.key == key).first()
+    if paused and row is None:
+        db.add(SystemConfig(key=key, value=now_utc().isoformat()))
+    elif not paused and row is not None:
+        db.delete(row)
+    db.commit()
+
+
 def _navigate(need: CommunityNeed) -> str | None:
     where = spot(need)
     return f"https://www.google.com/maps/dir/?api=1&destination={where[0]},{where[1]}" if where else None
@@ -52,9 +72,10 @@ def nearby_volunteers(db: Session, need: CommunityNeed) -> list[tuple[User, floa
     if where is None:
         return []
     rows = []
+    paused = paused_ids(db)
     for user in db.query(User).filter(User.role_filter("volunteer"), User.is_active.is_(True),
                                       User.line_uid.isnot(None), User.lat.isnot(None)).all():
-        if user.id == need.requester_id:
+        if user.id == need.requester_id or str(user.id) in paused:
             continue
         km = haversine_km(where[0], where[1], user.lat, user.lng)
         if km <= NEARBY_KM:

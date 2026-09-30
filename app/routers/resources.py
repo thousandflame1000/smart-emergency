@@ -449,15 +449,18 @@ def sos_candidates(need_id: str, db: Session = Depends(get_db),
     need = db.query(CommunityNeed).filter(CommunityNeed.id == need_id).first()
     if need is None or need.need_type != "sos":
         raise HTTPException(404, "找不到這筆求救")
+    from app.services.sos import paused_ids
     where = spot(need)
+    paused = paused_ids(db)
     people = []
     for u in db.query(User).filter(User.is_active.is_(True)).all():
         if u.id == need.requester_id or not (u.has_role("volunteer") or u.has_role("admin")):
             continue
         km = haversine_km(where[0], where[1], u.lat, u.lng) if where and None not in (u.lat, u.lng) else None
         people.append({"id": str(u.id), "name": u.name, "role": "志工" if u.has_role("volunteer") else "管理員",
-                       "km": round(km, 1) if km is not None else None, "line": bool(u.line_uid)})
-    people.sort(key=lambda p: (p["role"] != "志工", p["km"] is None, p["km"] or 0))
+                       "km": round(km, 1) if km is not None else None, "line": bool(u.line_uid),
+                       "paused": str(u.id) in paused})
+    people.sort(key=lambda p: (p["paused"], p["role"] != "志工", p["km"] is None, p["km"] or 0))
     return {"candidates": people[:12]}
 
 
