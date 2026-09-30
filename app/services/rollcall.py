@@ -79,7 +79,7 @@ def last_round(db: Session) -> str | None:
     return row.value if row else None
 
 
-def _helped(db: Session, round_id: str, help_ids: list[str]) -> set[str]:
+def helped_ids(db: Session, round_id: str, help_ids: list[str]) -> set[str]:
     """回報需要協助、求救在這一輪裡結案、而且現在沒有未結案求救的人。
 
     需要協助一定會開求救單（或沿用點名前就開著的那張）；結案後點名若還是「需要協助」，附近點名會一直
@@ -112,7 +112,7 @@ def board(db: Session, round_id: str | None = None) -> dict:
     if not round_id:
         return {"active": False}
     replies = {str(r.user_id): r for r in db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id).all()}
-    helped = _helped(db, round_id, [uid for uid, r in replies.items() if r.status == "help"])
+    helped = helped_ids(db, round_id, [uid for uid, r in replies.items() if r.status == "help"])
     rank = {"help": 0, "pending": 1, "unwell": 2, "helped": 3, "ok": 4}
     vulnerability = vulnerability_scorer(db)
     people = []

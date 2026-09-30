@@ -120,6 +120,9 @@ def me(request: Request, db: Session = Depends(get_db)):
     round_id = rollcall.current_round(db) if user.has_role("elderly") else None
     reply = (db.query(SafetyCheck).filter(SafetyCheck.round_id == round_id, SafetyCheck.user_id == user.id).first()
              if round_id else None)
+    safety = (reply.status if reply else "pending") if round_id else None
+    if safety == "help" and rollcall.helped_ids(db, round_id, [str(user.id)]):
+        safety = "helped"  # 求救已結案：首頁不能一直顯示「已送出求救」
     return {
         "name": "" if is_placeholder_name(user.name) else user.name,
         "roles": roles,
@@ -127,7 +130,7 @@ def me(request: Request, db: Session = Depends(get_db)):
         "is_admin": "admin" in roles,
         "checkin": checkin.status if checkin else None,
         "emergency": _get_mode(db) == "emergency",
-        "safety": (reply.status if reply else "pending") if round_id else None,
+        "safety": safety,
         "has_location": user.lat is not None,
         "open_needs": db.query(CommunityNeed).filter(
             CommunityNeed.requester_id == user.id,

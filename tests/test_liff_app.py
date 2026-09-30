@@ -169,3 +169,21 @@ def test_elder_can_cancel_their_sos_in_the_app(db, client, line_outbox):
     assert db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one().status == "cancelled"
     assert client.get("/app/api/me").json()["my_sos"] is False
     assert "沒有進行中的求救" in client.post("/app/api/sos/cancel", json={}).json()["message"]
+
+
+def test_home_says_the_sos_was_handled_once_it_is_closed(db, client, line_outbox):
+    """求救結案後，App 首頁不能一直是紅字「已送出求救，請保持手機暢通」。"""
+    from app.models.config import SystemConfig
+    from app.models.need import CommunityNeed
+    from app.services import rollcall
+    elder = User(name="阿公", roles=["elderly"], line_uid="U-app-sos", lat=23.66, lng=121.42)
+    db.add(elder); db.add(SystemConfig(key="mode", value="emergency")); db.commit()
+    rollcall.start(db)
+    _open(client, "U-app-sos")
+    assert client.post("/app/api/sos", json={}).status_code == 200
+    assert client.get("/app/api/me").json()["safety"] == "help"
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    assert client.post(f"/api/resources/needs/{need.id}/resolve_sos").status_code == 200
+    assert client.get("/app/api/me").json()["safety"] == "helped"
+    assert client.post("/app/api/sos", json={}).status_code == 200      # 又需要幫忙
+    assert client.get("/app/api/me").json()["safety"] == "help"
