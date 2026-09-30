@@ -99,6 +99,14 @@ def family_alert(db: Session, tester_id: str, status: str) -> dict:
         from app.routers.linebot import _trigger_sos
         result = _trigger_sos(elder, db)
         notified = result["contacts"]
+        if not result["created"]:
+            # 上一次演練的求救還沒結案：沿用那一筆，附近志工不會再收到通知
+            return {"elder": elder.name, "notified": notified,
+                    "message": "上一次演練的求救還沒結案，這次沿用同一筆（附近志工不會再收到）。"
+                               "先在工作區按「確認已處理」或按「清除演練資料」再試。"}
+        extra = f"、附近 {result['nearby']} 位志工（你的帳號是志工時也會收到「我過去」卡片）" if result.get("nearby") else ""
+        return {"elder": elder.name, "notified": notified,
+                "message": f"長者求救，已通知 {notified} 位家屬{extra}，管理員會收到「我來處理」卡片"}
     else:
         from app.services.alert import send_alerts_for_checkin
         checkin.status = "unwell"

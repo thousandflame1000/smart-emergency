@@ -100,6 +100,10 @@ def test_one_line_account_can_receive_family_alerts_from_a_stand_in_elder(db, li
     elder = db.query(User).filter(User.name == rehearsal_kit.ELDER_NAME).one()
     assert db.query(CommunityNeed).filter(CommunityNeed.requester_id == elder.id,
                                           CommunityNeed.need_type == "sos", CommunityNeed.status == "open").count() == 1
+    # 一支手機走完志工流程：替身長者就在測試者旁邊，測試者（志工）收到「附近有人需要幫忙」
+    assert "附近 1 位志工" in r.json()["message"] and "🆘 附近有人需要幫忙" in sent_to(line_outbox, "U-me")
+    again = c.post(f"/api/dashboard/rehearsal/family-alert?tester_id={me.id}&status=help_needed").json()
+    assert "還沒結案" in again["message"], "上一次的求救沒結案時要說清楚為什麼沒有新的通知"
 
 
 def test_one_line_account_can_run_the_whole_volunteer_task_loop(db, line_outbox):
