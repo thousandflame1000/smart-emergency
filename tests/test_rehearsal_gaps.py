@@ -88,7 +88,8 @@ def test_one_line_account_can_receive_family_alerts_from_a_stand_in_elder(db, li
     assert [t["name"] for t in c.get("/api/dashboard/rehearsal/testers").json()] == ["測試者"]
 
     r = c.post(f"/api/dashboard/rehearsal/family-alert?tester_id={me.id}&status=unwell")
-    assert r.status_code == 200, r.text and r.json()["notified"] == 1
+    assert r.status_code == 200, r.text
+    assert r.json()["notified"] == 1
     assert sent_to(line_outbox, "U-me")
     # 可以重按；同一天第二次也要送得出去。
     before = len(sent_to(line_outbox, "U-me"))

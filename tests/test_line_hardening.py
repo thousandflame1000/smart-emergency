@@ -874,7 +874,7 @@ def test_form_does_not_hijack_text_and_forged_values_are_ignored(db, line_outbox
     mk(db, "長者", ["elderly"], uid="U-form3", lat=23.9, lng=121.6)
     say("U-form3", "申請物資")
     say("U-form3", "我很好")                                        # 表單開著時一般指令照常運作
-    assert any("太好了" in t or "平安" in t or "今天" in t for t in replies(line_outbox))
+    assert "✅ 收到，今天也要保重喔！" in replies(line_outbox), "表單開著時打「我很好」仍要走報平安"
     press("U-form3", "action=form&f=need&op=type&v=<script>")
     press("U-form3", "action=form&f=need&op=go")
     assert db.query(CommunityNeed).count() == 0
@@ -996,7 +996,7 @@ def test_claiming_matches_the_need_notifies_everyone_and_marks_it_accepted(db, l
     assert any("接單成功" in t for t in replies(line_outbox))
     assert any("志工" in t for t in sent_to(line_outbox, "U-cr")), "求助的人要知道有人接了"
     assert any("自行接單" in t for t in sent_to(line_outbox, "U-adm"))
-    assert any("社區支援任務" in t or "任務" in t for t in sent_to(line_outbox, "U-cv")), "志工要收到帶回報按鈕的任務卡"
+    assert any("社區支援任務" in t for t in sent_to(line_outbox, "U-cv")), "志工要收到帶回報按鈕的任務卡"
     actions = [e.action for e in db.query(DispatchEvent).order_by(DispatchEvent.created_at).all()]
     assert "manual_dispatch" in actions and "task_accept" in actions
 
