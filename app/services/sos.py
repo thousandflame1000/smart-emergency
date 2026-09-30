@@ -183,11 +183,12 @@ def escalate_unacknowledged(db: Session | None = None) -> int:
             db.close()
 
 
-def welfare_check(db: Session, elder: User, family: User) -> dict:
+def welfare_check(db: Session, elder: User, family: User, *, on_site: bool = False) -> dict:
     """家屬聯絡不到長輩：請附近志工去看看。
 
     沒有智慧型手機、或昏倒按不了求救的長者，靠家屬發現「怎麼都沒接電話」。走跟一鍵求救同一條路
-    （附近志工、後台響鈴、受理、結案），所以不另外做一套；誰提出的記在事件紀錄，受理與結案時通知他。"""
+    （附近志工、後台響鈴、受理、結案），所以不另外做一套；誰提出的記在事件紀錄，受理與結案時通知他。
+    on_site：志工點名上門發現需要協助，人已經在現場，不用再叫別的志工，也不用回頭通知他自己。"""
     from app.services.alert import notify_admins
     from app.services.dispatch import _log_dispatch_event
     from app.services.zones import resolve_zone_for_point
@@ -196,22 +197,24 @@ def welfare_check(db: Session, elder: User, family: User) -> dict:
     if existing:
         return {"existing": True, "responder": existing.responder.name if existing.responder_id and existing.responder else None}
     need = CommunityNeed(requester_id=elder.id, need_type="sos", urgency=5,
-                         description=f"家屬 {family.name} 聯絡不到，請附近志工去看看",
+                         description=(f"志工 {family.name} 上門確認：需要協助" if on_site
+                                      else f"家屬 {family.name} 聯絡不到，請附近志工去看看"),
                          address=elder.address, lat=elder.lat, lng=elder.lng,
                          zone_id=resolve_zone_for_point(db, elder.lat, elder.lng))
     db.add(need)
     db.commit()
     db.refresh(need)
     _log_dispatch_event(db, "welfare_check_requested", need=need, actor_id=str(family.id),
-                        actor_label=f"家屬:{family.name}", new_status="open", outcome="requested",
-                        details={"family_line_uid": family.line_uid})
+                        actor_label=f"{'志工' if on_site else '家屬'}:{family.name}", new_status="open",
+                        outcome="requested", details={} if on_site else {"family_line_uid": family.line_uid})
     db.commit()
-    nearby = alert_nearby(db, need)
+    nearby = 0 if on_site else alert_nearby(db, need)
     buttons = [{"label": "🙋 我來處理", "data": f"action=sos_take&need_id={need.id}", "color": "#c0392b"}]
     if tel_uri(elder.phone):
         buttons.insert(0, {"label": f"📞 撥打 {elder.name}"[:20], "uri": tel_uri(elder.phone)})
-    admins = notify_admins(db, f"👀 家屬 {family.name} 聯絡不到 {elder.name}，請人去看看。\n"
-                               f"地點：{elder.address or '未填'}", buttons=buttons)
+    headline = (f"🆘 志工 {family.name} 上門確認 {elder.name} 需要協助。" if on_site
+                else f"👀 家屬 {family.name} 聯絡不到 {elder.name}，請人去看看。")
+    admins = notify_admins(db, f"{headline}\n地點：{elder.address or '未填'}", buttons=buttons)
     return {"nearby": nearby, "admins": admins, "need": need}
 
 

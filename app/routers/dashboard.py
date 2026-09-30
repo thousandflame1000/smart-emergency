@@ -229,12 +229,16 @@ def broadcast_mode_change(mode: str) -> int:
         # 收到點名卡（我平安／需要幫忙／查詢物資）的長者，就不再重複收一般廣播
         asked = set(rollcall.ask(db)) if mode == "emergency" else set()
         uids = [u.line_uid for u in users if u.line_uid not in asked]
+        helpers = {u.line_uid for u in users if u.has_role("volunteer")}
     finally:
         db.close()
     sent = len(asked)
     for uid in uids:
         try:
-            if mode == "emergency":
+            if mode == "emergency" and uid in helpers:
+                send_text_with_commands(uid, EMERGENCY_BROADCAST + "\n\n🙋 志工：傳「附近點名」看看您附近還沒回報平安的長者。",
+                                        [("📋 附近點名", "附近點名"), ("📦 查詢物資", "查詢物資"), ("🆘 需要幫忙", "需要幫忙")])
+            elif mode == "emergency":
                 send_text_with_commands(uid, EMERGENCY_BROADCAST, [("📦 查詢物資", "查詢物資"), ("🆘 需要幫忙", "需要幫忙")])
             else:
                 send_text(uid, NORMAL_BROADCAST)

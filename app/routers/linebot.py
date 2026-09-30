@@ -1004,6 +1004,58 @@ def _question_allowed(uid: str) -> bool:
     return True
 
 
+def _reply_nearby_rollcall(event, db, user) -> None:
+    """志工看附近還沒回報的長者，上門確認後直接回報。"""
+    from app.services import rollcall
+    from app.services.line_notify import reply_flex_message
+    from app.services.line_ops import bubble, carousel
+    if not (user.has_role("volunteer") or user.has_role("admin")):
+        _say(event, "附近點名是給已核准志工使用的。想幫忙可以傳「我要當志工」。")
+        return
+    if not rollcall.current_round(db):
+        _say(event, "目前是日常模式，沒有點名。")
+        return
+    if user.lat is None:
+        _say(event, "📍 請先分享您的位置，才能列出您附近還沒回報的長者。", ask_location=True)
+        return
+    people = rollcall.nearby_unanswered(db, user)
+    if not people:
+        _say(event, f"您附近 {rollcall.NEARBY_KM:.0f} 公里內的長者都已回報 👍 謝謝您！")
+        return
+    cards = []
+    for p in people:
+        distance = f"{p['km'] * 1000:.0f} 公尺" if p["km"] < 1 else f"{p['km']:.1f} 公里"
+        buttons = [{"label": "✅ 確認平安", "data": f"action=rc_mark&user_id={p['id']}&s=ok", "color": "#13795b"},
+                   {"label": "🆘 需要協助", "data": f"action=rc_mark&user_id={p['id']}&s=help", "color": "#c0392b"},
+                   {"label": "🧭 導航", "uri": f"https://www.google.com/maps/dir/?api=1&destination={p['lat']},{p['lng']}"}]
+        if tel_uri(p["phone"]):
+            buttons.insert(0, {"label": f"📞 {p['phone']}"[:20], "uri": tel_uri(p["phone"])})
+        cards.append(bubble(f"{'🆘' if p['status'] == 'help' else '⏳'} {p['name']}", "#c0392b" if p["status"] == "help" else "#5f6c65",
+                            [p["status_label"], f"地址：{p['address'] or '未填'}（約 {distance}）", f"脆弱度 {p['vulnerability']}",
+                             "上門或電話確認後，按下方回報。"], buttons))
+    reply_flex_message(event.reply_token, f"附近還沒回報的長者 {len(people)} 位", carousel(cards))
+
+
+def _handle_rollcall_mark(event, db, user, elder_id: str, status: str) -> None:
+    """志工上門確認後回報：平安，或需要協助（需要協助時開一張求救單，走受理流程，由這位志工處理）。"""
+    from app.services import rollcall, sos
+    if not (user.has_role("volunteer") or user.has_role("admin")):
+        _say(event, "只有已核准的志工可以代為回報。")
+        return
+    elder = db.query(User).filter(User.id == elder_id).first() if elder_id else None
+    if elder is None or status not in ("ok", "help") or not rollcall.note(db, elder, status, via="volunteer", marked_by=f"志工 {user.name}"):
+        _say(event, "目前沒有進行中的點名，或找不到這位長者。")
+        return
+    if status == "ok":
+        _say(event, f"✅ 已回報 {elder.name} 平安，謝謝您！傳「附近點名」看下一位。")
+        return
+    result = sos.welfare_check(db, elder, user, on_site=True)
+    need = result.get("need")
+    if need is not None:
+        sos.take(db, str(need.id), user, via="志工上門")
+    _say(event, f"🆘 已回報 {elder.name} 需要協助，管理員已收到。由您先處理；需要送醫請直接撥 119。")
+
+
 def _reply_aeds(event, user) -> None:
     """最近的 3 個 AED：放在哪、多遠、現在有沒有開、導航。"""
     from app.services import aed
@@ -1076,6 +1128,7 @@ HELP_BASE = (
 
 
 NEARBY_WORDS = ("查詢物資", "附近物資", "物資地圖", "避難所", "附近避難所")
+ROLLCALL_NEARBY_WORDS = ("附近點名", "附近長者", "幫忙點名")
 AED_WORDS = ("AED", "aed", "找AED", "找 AED", "附近AED", "最近的AED", "電擊器", "去顫器", "心臟電擊器")
 APP_WORDS = ("打開 App", "打開App", "開啟 App", "App", "app")
 ASK_WORDS = ("急救問答", "問答")
@@ -1084,7 +1137,7 @@ FIXED_COMMANDS = {"我很好", "好", "OK", "ok", "沒事", "沒事了", "平安
                   "我的需求", "進度", "求助進度", "登記物資", "物資登記", "登記", "我的物資",
                   "取消物資", "撤回物資", "刪除物資", "分享位置", "傳位置", "更新位置",
                   "申請物資", "物資申請", "需要物資", "申請表單", "申請需求",
-                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS) | set(APP_WORDS) | set(ASK_WORDS) | set(AED_WORDS)
+                  "接單", "可接任務", "找任務"} | set(NEARBY_WORDS) | set(APP_WORDS) | set(ASK_WORDS) | set(AED_WORDS)     | set(ROLLCALL_NEARBY_WORDS)
 UNWELL_WORDS = ("身體不舒服", "我不舒服", "不舒服")
 # 長輩不會照指令打字：「今天頭好暈」「有點發燒」也是在說身體不適，要讓家人知道。
 UNWELL_HINTS = ("不舒服", "不太舒服", "頭暈", "頭很暈", "頭好暈", "暈眩", "發燒", "頭痛", "頭好痛", "肚子痛", "胃痛",
@@ -1197,6 +1250,10 @@ def _process_text(event, db, user, text) -> bool:
 
     if text in AED_WORDS:
         _reply_aeds(event, user)
+        return True
+
+    if text in ROLLCALL_NEARBY_WORDS:
+        _reply_nearby_rollcall(event, db, user)
         return True
 
     if text in NEARBY_WORDS:
@@ -1563,6 +1620,9 @@ def handle_postback(event: PostbackEvent):
 
     elif action == "family_check":
         _handle_family_check(event, db, user, data.get("elder_id", ""))
+
+    elif action == "rc_mark":
+        _handle_rollcall_mark(event, db, user, data.get("user_id", ""), data.get("s", ""))
 
     elif line_ops.handle_postback(event, db, user, action or "", data):
         pass

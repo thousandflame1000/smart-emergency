@@ -93,6 +93,29 @@ def board(db: Session) -> dict:
     return {"active": True, "started_at": round_id, "total": len(people), "counts": counts, "people": people}
 
 
+NEARBY_KM = 2.0
+
+
+def nearby_unanswered(db: Session, volunteer: User, limit: int = 5) -> list[dict]:
+    """志工附近還沒回報（或需要協助）的長者，由近到遠。災時名冊交給在地志工挨家確認，
+    跟日本「避難行動要支援者名簿」災時提供給自主防災組織是同一個道理；日常模式看不到。"""
+    from app.services.geo import haversine_km
+    if volunteer.lat is None or volunteer.lng is None:
+        return []
+    board_ = board(db)
+    if not board_.get("active"):
+        return []
+    rows = []
+    for p in board_["people"]:
+        if p["status"] not in ("pending", "help") or p["lat"] is None or p["id"] == str(volunteer.id):
+            continue
+        km = haversine_km(volunteer.lat, volunteer.lng, p["lat"], p["lng"])
+        if km <= NEARBY_KM:
+            rows.append({**p, "km": km})
+    rows.sort(key=lambda p: (p["status"] != "help", p["km"]))
+    return rows[:limit]
+
+
 def ask(db: Session, only_pending: bool = False) -> list[str]:
     """推點名卡給長者；only_pending 時只推還沒回的（「再問一次」）。回傳真的推出去的 LINE uid。"""
     from app.services.line_notify import push_flex_message

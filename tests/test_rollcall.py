@@ -135,3 +135,41 @@ def test_bulk_vulnerability_matches_the_per_person_score(db):
     for person in (lonely, cared, kid1):
         assert score(person.id) == _vulnerability_pts(person.id, db), person.name
     assert score(lonely.id) > score(cared.id)
+
+
+def test_volunteers_check_on_unanswered_elders_near_them(db, line_outbox):
+    """災時志工傳「附近點名」：列出附近還沒回報的長者，上門確認後直接回報。"""
+    from app.models.need import CommunityNeed
+    mk(db, "志工", ["volunteer"], "U-helper", lat=23.6650, lng=121.4180)
+    mk(db, "管理員", ["admin"], "U-boss")
+    mk(db, "隔壁阿嬤", ["elderly"], "U-next", lat=23.6660, lng=121.4185, address="大進村 1 號")
+    far = mk(db, "遠方阿公", ["elderly"], "U-far", lat=23.7500, lng=121.4185)
+    mk(db, "回過了", ["elderly"], "U-done", lat=23.6655, lng=121.4181)
+    mk(db, "居民", ["elderly"], "U-res", lat=23.6650, lng=121.4180)
+    say("U-helper", "附近點名")
+    assert "日常模式" in replies(line_outbox)[-1]
+    _emergency(db)
+    press("U-done", "action=safe")
+    say("U-res", "附近點名")
+    assert "給已核准志工" in replies(line_outbox)[-1]
+    say("U-helper", "附近點名")
+    message = [m for kind, _to, m in line_outbox.sent if kind == "reply"][-1]
+    import json
+    card = json.dumps(message.contents.to_dict(), ensure_ascii=False)
+    assert "隔壁阿嬤" in card and "遠方阿公" not in card and "回過了" not in card
+    elder = next(p for p in rollcall.board(db)["people"] if p["name"] == "隔壁阿嬤")
+    press("U-helper", f"action=rc_mark&user_id={elder['id']}&s=ok")
+    person = next(p for p in rollcall.board(db)["people"] if p["name"] == "隔壁阿嬤")
+    assert person["status"] == "ok" and person["marked_by"] == "志工 志工"
+    press("U-helper", f"action=rc_mark&user_id={far.id}&s=help")
+    need = db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos").one()
+    db.refresh(need)
+    assert need.requester_id == far.id and "上門確認" in need.description and need.responder.name == "志工"
+    assert any("上門確認 遠方阿公 需要協助" in t for t in sent_to(line_outbox, "U-boss"))
+
+
+def test_volunteers_are_told_about_nearby_roll_call_in_the_emergency_broadcast(db, line_outbox):
+    mk(db, "志工", ["volunteer"], "U-v2")
+    _emergency(db)
+    dashboard.broadcast_mode_change("emergency")
+    assert any("附近點名" in t for t in sent_to(line_outbox, "U-v2"))
