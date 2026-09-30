@@ -397,7 +397,11 @@ def test_two_concurrent_proposals_reserve_a_resource_once(db, entry_points):
     from app.database import SessionLocal
     from app.services.dispatch import propose_manual, manual_dispatch
     from app.models.dispatch_event import DispatchEvent
+    from app.services.inventory import set_quantity_fields
     elder, vol, res, need, point = world(db)
+    # 庫存只夠一筆：兩個請求同時搶，不管誰先誰後都只能成功一個（不能超賣）。
+    # 原本是 20 箱配兩筆 5 箱，兩筆本來就都放得下；後到的那個有沒有讀到新版本全看時序，測試時好時壞。
+    set_quantity_fields(res, "5箱")
     other = CommunityNeed(requester_id=elder.id, need_type="water", quantity="5箱", status="open")
     db.add(other); db.commit()
     ids, resource_id = [str(need.id), str(other.id)], str(res.id)
