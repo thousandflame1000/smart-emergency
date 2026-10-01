@@ -1327,6 +1327,7 @@ def _process_text(event, db, user, text) -> bool:
                          "・「緊急模式」「解除緊急模式」— 確認後切換並通知所有人\n"
                          "・「點名」— 災時長者回報情況\n・「收容」— 回報收容所人數\n"
                          "・「紀事 內容」— 記進值班紀事（災情摘要時間軸）\n・「後台」— 取得後台登入連結")
+        parts.append(f"📘 每個功能按哪個按鈕，看使用手冊：\n{settings.PUBLIC_BASE_URL.rstrip('/')}/guide")
         _say(event, "\n\n".join(parts))
         return True
 

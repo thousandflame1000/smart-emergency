@@ -179,6 +179,12 @@ def readiness():
     return {"status": "ready", "database": "ok", "scheduler": scheduler_status}
 
 
+@app.get("/guide", include_in_schema=False)
+def user_guide():
+    """使用手冊：每個功能按哪個按鈕。不用登入，LINE「操作說明」與後台選單都連到這裡。"""
+    return FileResponse(os.path.join(os.path.dirname(__file__), "static", "guide.html"), headers=_NO_CACHE)
+
+
 @app.get("/privacy", include_in_schema=False)
 def privacy_notice():
     path = os.path.join(os.path.dirname(__file__), "static", "privacy.html")

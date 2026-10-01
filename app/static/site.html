@@ -116,7 +116,8 @@ button { font:inherit; }
     { id: 'status', label: '系統狀態', icon: '🩺', view: CONSOLE, page: 'page-status' },
     { sec: '知識' },
     { id: 'ai', label: 'AI 助手', icon: '🤖', view: DASH, page: 'ai-page' },
-    { id: 'kb', label: '知識庫', icon: '🧠', view: CONSOLE, page: 'page-kb' }
+    { id: 'kb', label: '知識庫', icon: '🧠', view: CONSOLE, page: 'page-kb' },
+    { id: 'guide', label: '使用手冊', icon: '📘', view: '/guide', page: null }
   ];
   var frame = document.getElementById('view'), nav = document.getElementById('nav'), buttons = {}, frames = {}, currentId = null;
   var sidebar = document.getElementById('sidebar'), navToggle = document.getElementById('nav-toggle');

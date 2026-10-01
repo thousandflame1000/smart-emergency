@@ -33,7 +33,7 @@ from app.services import admin_audit, admin_session
 # /admin/login 是管理員用 LINE 連結換取登入 cookie 的入口，本身用簽章保護。
 # /join 是公開的掃碼加入頁：只有兩個 QR Code，沒有任何資料，讓現場的人可以直接掃碼試用。
 _EXEMPT_PREFIXES = (
-    "/webhook", "/health", "/ready", "/privacy", "/f/", "/admin/login", "/admin/qr-login", "/join", "/app"
+    "/webhook", "/health", "/ready", "/privacy", "/guide", "/f/", "/admin/login", "/admin/qr-login", "/join", "/app"
 )
 # 居民從 LINE 開的表單、加入頁與隱私頁要用到的靜態檔；不放行的話展演密碼一開，
 # 長輩手機上的表單會失去樣式，甚至跳出密碼視窗。只列這幾個，不開放整個 /static。
