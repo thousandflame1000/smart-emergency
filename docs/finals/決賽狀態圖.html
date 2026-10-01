@@ -115,7 +115,7 @@ tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)
       <span><span class="who a">A</span> 主講：只講，不碰器材</span>
       <span><span class="who b">B</span> 筆電後台：只按，不講</span>
       <span><span class="who c">C</span> 手機 B（志工兼家屬兼管理員）</span>
-      <span><span class="who j">評</span> 評審拿手機 A＝王奶奶</span>
+      <span><span class="who j">奶</span> 手機 A＝王奶奶：A 拿著自己按，螢幕轉給評審看（評審不用動手）</span>
     </div>
   </header>
 
@@ -144,11 +144,11 @@ tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)
     <div class="diagram">
 <div class="flow">
   <div class="node st-daily">日常模式</div>
-  <div class="edge"><span class="who j">評審</span><span class="btn">我很好</span></div>
+  <div class="edge"><span class="who a">A</span><span class="btn">我很好</span></div>
   <div class="node st-daily">今日平安 +1</div>
   <div class="edge"><span class="who b">B</span><span class="btn">左下「日常模式」→ 確認</span></div>
   <div class="node st-emerg">緊急模式・點名中</div>
-  <div class="edge"><span class="who j">評審</span><span class="btn">需要幫忙 → 對，我需要立即救援</span></div>
+  <div class="edge"><span class="who a">A</span><span class="btn">需要幫忙 → 對，我需要立即救援</span></div>
   <div class="node st-sos">求救・未受理（後台紅條響鈴）</div>
   <div class="edge"><span class="who c">C</span><span class="btn">🏃 我過去</span></div>
   <div class="node st-work">求救・處理中</div>
@@ -173,54 +173,54 @@ tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)
       <thead><tr>
         <th>時間</th><th>系統狀態</th>
         <th><span class="who a">A</span>主講</th><th><span class="who b">B</span>筆電後台</th>
-        <th><span class="who c">C</span>手機 B</th><th><span class="who j">評</span>評審・手機 A</th>
+        <th><span class="who c">C</span>手機 B</th><th><span class="who j">奶</span>手機 A（A 拿著）</th>
       </tr></thead>
       <tbody>
         <tr><td class="t">開場前</td><td class="state"><span class="pill st-daily">日常模式</span></td>
-          <td>站評審正面，手上不拿東西</td>
+          <td>站評審正面，手上只拿手機 A</td>
           <td>「事件處置工作區」地圖拉到光復；在畫面上點一下（才會出聲）</td>
-          <td>手機 A 解鎖、停在鄰里守望聊天室；自己拿手機 B</td>
+          <td>手機 A 解鎖、停在鄰里守望聊天室，交給 A；自己拿手機 B</td>
           <td class="idle">—</td></tr>
         <tr><td class="t">0:00<small>10 秒</small></td><td class="state"><span class="pill st-daily">日常模式</span></td>
           <td><span class="say">評審好，我們是守望相助團隊，作品是鄰里守望平台。</span></td>
-          <td class="idle">不動</td><td class="idle">站評審右前方</td><td class="idle">—</td></tr>
+          <td class="idle">不動</td><td class="idle">站 A 旁邊</td><td class="idle">—</td></tr>
         <tr><td class="t">0:10<small>35 秒</small></td><td class="state"><span class="pill st-daily">日常模式</span></td>
           <td><span class="say">光復鄉 19 人罹難……訊息有發，沒人知道誰沒收到、該先去敲誰的門。</span></td>
           <td class="idle">不動（畫面停在光復地圖）</td><td class="idle">不動</td><td class="idle">—</td></tr>
         <tr><td class="t">0:45<small>30 秒</small></td><td class="state"><span class="pill st-daily">日常模式</span><br><span class="pill st-daily" style="margin-top:4px">今日平安 +1</span></td>
-          <td><span class="say">平時長輩每天按一下「我很好」；災時同一份紀錄變成救援順序。</span><span class="cue">「請您當王奶奶，按『我很好』」</span></td>
+          <td><span class="say">平時長輩每天按一下「我很好」；災時同一份紀錄變成救援順序。</span><span class="cue">「這是王奶奶的手機，平時她每天按這個」</span></td>
           <td class="idle">不動</td>
-          <td>1:05 雙手遞手機 A：「這是王奶奶的手機」</td>
-          <td><span class="btn">選單「首頁」</span><span class="arrow">→</span><span class="btn">我很好</span><span class="see">馬上回覆「太好了」</span></td></tr>
+          <td class="idle">不動</td>
+          <td>A 按<span class="btn">選單「首頁」</span><span class="arrow">→</span><span class="btn">我很好</span>，螢幕轉給評審<span class="see">馬上回覆「太好了」</span></td></tr>
         <tr><td class="t">1:15<small>30 秒</small></td><td class="state"><span class="pill st-emerg">緊急模式<br>點名中</span></td>
           <td><span class="cue">「颱風夜，鄉公所啟動緊急模式，就這一個按鈕」</span><span class="say" style="display:block;margin-top:6px">按我平安的自動打勾；還沒回的已依脆弱度排好，最上面就是先去敲門的人。</span></td>
           <td><span class="btn">左下「日常模式」</span><span class="arrow">→</span><span class="btn">確認</span><span class="arrow">→</span><span class="btn">左欄「點名」</span><br>C 按完我平安後，再點一次<span class="btn">點名</span>更新</td>
           <td>5 秒內收到點名卡 <span class="arrow">→</span><span class="btn">✅ 我平安</span></td>
-          <td>收到「🚨 請回報是否平安」<b>先不要按</b></td></tr>
+          <td>收到「🚨 請回報是否平安」，A 轉給評審看，<b>先不要按</b></td></tr>
         <tr class="major"><td class="t">1:45<small>10 秒</small></td><td class="state"><span class="pill st-sos">求救<br>未受理</span></td>
-          <td><span class="cue">「水淹進一樓了，王奶奶，請按需要幫忙」</span></td>
+          <td><span class="cue">「水淹進一樓了，王奶奶按下需要幫忙」</span></td>
           <td>眼睛盯畫面頂端，手放在滑鼠上</td>
           <td class="idle">等</td>
-          <td>點名卡上<span class="btn">🆘 需要幫忙</span><span class="arrow">→</span><span class="btn">🆘 對，我需要立即救援</span><span class="see">已收到您的求助！已通知 1 位照護聯絡人、附近 1 位志工、管理員</span></td></tr>
+          <td>A 按點名卡上<span class="btn">🆘 需要幫忙</span><span class="arrow">→</span><span class="btn">🆘 對，我需要立即救援</span>，螢幕轉給評審<span class="see">已收到您的求助！已通知 1 位照護聯絡人、附近 1 位志工、管理員</span></td></tr>
         <tr class="major"><td class="t">1:55<small>30 秒</small></td><td class="state"><span class="pill st-sos">求救<br>未受理</span></td>
           <td>停一拍，讓 C 講</td>
           <td>紅條＋響鈴出現就按<span class="btn">查看</span><br><span class="see">2:25 還沒響：按「更新現況」，地圖先出現 SOS</span></td>
           <td>手機 B 同時響 3 次，舉給評審看：<span class="say">家屬通知、附近有人需要幫忙、管理員卡。志工這張沒有電話。</span></td>
-          <td>看 C 的手機</td></tr>
+          <td class="idle">—</td></tr>
         <tr class="major"><td class="t">2:25<small>15 秒</small></td><td class="state"><span class="pill st-sos">求救<br>未受理</span></td>
           <td><span class="say">後台同時響鈴：脆弱度、最近的 AED、家屬電話都在這；要送醫按通報 119。</span><span class="cue">「誰會去？」</span></td>
           <td>面板停住，用游標指「通報 119」（<b>不按</b>）</td>
           <td class="idle">準備按「我過去」</td><td class="idle">—</td></tr>
         <tr class="major"><td class="t">2:40<small>20 秒</small></td><td class="state"><span class="pill st-work">處理中</span></td>
-          <td><span class="say">王奶奶，您的手機又響了——有人要來了。第一個按的人負責，其他人會知道。</span></td>
+          <td><span class="say">王奶奶的手機響了——有人要來了。第一個按的人負責，其他人會知道。</span></td>
           <td>面板變「處理中：C 的名字」（沒變就按<span class="btn">更新現況</span>）</td>
           <td>附近有人需要幫忙卡<span class="arrow">→</span><span class="btn">🏃 我過去</span></td>
-          <td><span class="see">🙋 管理員 ○○ 已經在處理您的求救</span></td></tr>
+          <td>A 轉給評審看<span class="see">🙋 管理員 ○○ 已經在處理您的求救</span></td></tr>
         <tr class="major"><td class="t">3:00<small>15 秒</small></td><td class="state"><span class="pill st-daily">結案</span></td>
           <td><span class="say">10 分鐘沒人受理、20 分鐘沒到場，系統會再提醒鄉公所改派。</span></td>
           <td class="idle">不動</td>
           <td><span class="btn">📍 已到場</span><span class="arrow">→</span><span class="btn">✅ 處理完成</span></td>
-          <td><span class="see">✅ 您的緊急求助已確認處理完成</span></td></tr>
+          <td>A 轉給評審看<span class="see">✅ 您的緊急求助已確認處理完成</span></td></tr>
         <tr><td class="t">3:15<small>25 秒</small></td><td class="state"><span class="pill st-report">災情摘要</span></td>
           <td><span class="cue">「一頁往上回報縣府」</span><span class="say" style="display:block;margin-top:6px">點名、每件求救的受理／到場／結案分鐘數、時間軸；可匯出、可印成紙本。</span></td>
           <td><span class="btn">左側「災情摘要」</span><span class="arrow">→</span>捲到「一鍵求救」與「時間軸」</td>
@@ -234,14 +234,14 @@ tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)
           <td class="idle">不動</td><td class="idle">不動</td><td class="idle">—</td></tr>
         <tr><td class="t">4:40<small>10 秒</small></td><td class="state"><span class="pill st-emerg">緊急模式</span></td>
           <td><span class="say">平時一個「我很好」，災時就知道先去敲誰的門。謝謝評審。</span></td>
-          <td class="idle">不動</td><td>手機 A 留在評審手上</td><td class="idle">—</td></tr>
+          <td class="idle">不動</td><td class="idle">不動</td><td class="idle">—</td></tr>
         <tr><td class="t">4:50<small>10 秒</small></td><td class="state"><span class="pill st-buffer">緩衝</span></td>
           <td colspan="4" class="idle">不排內容。逾時部分不納入評分，4:50 一定要講完。</td></tr>
         <tr><td class="t">5:00<small>5 分鐘</small></td><td class="state"><span class="pill st-emerg">統問統答</span></td>
           <td>評審問完：「謝謝評審，我們依序回答」，照題號答</td>
           <td>技術題由 B 答；需要時示範後台</td>
-          <td>操作題由 C 答；評審可以在手機 A 按「查詢物資」看 AED</td>
-          <td>可以繼續按手機 A</td></tr>
+          <td>操作題由 C 答</td>
+          <td>需要示範時 A 按給評審看（例如「查詢物資」的 AED）</td></tr>
         <tr><td class="t">結束後</td><td class="state"><span class="pill st-daily">回到日常模式</span></td>
           <td colspan="4">B：左下「緊急模式」切回日常模式（會推播給兩支手機）；工作區若還有求救就「確認已處理」。C：收回手機 A，接行動電源。</td></tr>
       </tbody>
@@ -252,9 +252,9 @@ tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)
     <h2>交棒口令</h2>
     <p class="sub">A 講到這句話，對應的人才動手。排練時先把這六句練熟。</p>
     <div class="cues">
-      <div class="cueline"><b>1:00</b><span>「請您當王奶奶，按『我很好』」 → <span class="who c">C</span> 遞手機，<span class="who j">評</span> 按「我很好」</span></div>
+      <div class="cueline"><b>1:00</b><span>「這是王奶奶的手機，平時她每天按這個」 → <span class="who a">A</span> 自己按「我很好」，螢幕轉給評審</span></div>
       <div class="cueline"><b>1:15</b><span>「就這一個按鈕」 → <span class="who b">B</span> 切緊急模式；點名卡到了 <span class="who c">C</span> 按「我平安」</span></div>
-      <div class="cueline"><b>1:45</b><span>「王奶奶，請按需要幫忙」 → <span class="who j">評</span> 按需要幫忙並確認；<span class="who c">C</span> 等手機響</span></div>
+      <div class="cueline"><b>1:45</b><span>「王奶奶按下需要幫忙」 → <span class="who a">A</span> 自己按需要幫忙並確認；<span class="who c">C</span> 等手機響</span></div>
       <div class="cueline"><b>2:35</b><span>「誰會去？」 → <span class="who c">C</span> 按「我過去」</span></div>
       <div class="cueline"><b>3:15</b><span>「一頁往上回報縣府」 → <span class="who b">B</span> 開災情摘要</span></div>
       <div class="cueline"><b>3:40</b><span>「同一份資料也決定物資先送誰」 → <span class="who b">B</span> 回工作區點「陳金蓮・飲用水」</span></div>
@@ -265,12 +265,12 @@ tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)
     <h2>防掉鍊子檢查點</h2>
     <p class="sub">每個檢查點只看一件事；沒看到就照紅字做，不道歉、不停下來，照故事往下講。</p>
     <div class="checks">
-      <div class="check"><b class="t">1:05 我很好</b><p class="ok">評審手機 1 秒內回覆</p><p class="fix">C 拿回來自己按，A 繼續講</p></div>
-      <div class="check"><b class="t">1:20 點名卡</b><p class="ok">兩支手機 5 秒內收到「請回報是否平安」</p><p class="fix">跳過 C 的我平安，A 直接說 1:45 的口令；評審改按選單「首頁」→「需要幫忙」</p></div>
-      <div class="check"><b class="t">1:50 求救送出</b><p class="ok">評審手機寫「附近 1 位志工」</p><p class="fix">寫「附近 0 位」：C 改用管理員卡的「🙋 我來處理」，後面流程一樣</p></div>
+      <div class="check"><b class="t">1:05 我很好</b><p class="ok">手機 A 1 秒內回覆「太好了」</p><p class="fix">再按一次；還是沒有就照講，不要等</p></div>
+      <div class="check"><b class="t">1:20 點名卡</b><p class="ok">兩支手機 5 秒內收到「請回報是否平安」</p><p class="fix">跳過 C 的我平安，A 直接說 1:45 的口令，改按選單「首頁」→「需要幫忙」</p></div>
+      <div class="check"><b class="t">1:50 求救送出</b><p class="ok">手機 A 寫「附近 1 位志工」</p><p class="fix">寫「附近 0 位」：C 改用管理員卡的「🙋 我來處理」，後面流程一樣</p></div>
       <div class="check"><b class="t">1:55 手機 B</b><p class="ok">3 張卡：家屬通知、附近有人需要幫忙、管理員卡</p><p class="fix">少了就秀有收到的那張，A 照講</p></div>
       <div class="check"><b class="t">2:25 後台響鈴</b><p class="ok">頂端紅條＋鈴聲</p><p class="fix">B 按「更新現況」讓地圖先出現 SOS；紅條到了 A 補一句「響了」</p></div>
-      <div class="check"><b class="t">2:45 有人要來了</b><p class="ok">評審手機收到「已經在處理您的求救」</p><p class="fix">A：「推播有幾秒延遲，後台已經顯示處理中」，B 指面板</p></div>
+      <div class="check"><b class="t">2:45 有人要來了</b><p class="ok">手機 A 收到「已經在處理您的求救」</p><p class="fix">A：「推播有幾秒延遲，後台已經顯示處理中」，B 指面板</p></div>
       <div class="check"><b class="t">3:20 災情摘要</b><p class="ok">一鍵求救有這一筆、時間軸有受理與結案</p><p class="fix">B 按「重新整理」</p></div>
       <div class="check"><b class="t">3:45 派遣建議</b><p class="ok">面板「系統建議 ○○（評分…）」</p><p class="fix">寫「沒有可派候選」：B 改點「劉來發・食物」</p></div>
       <div class="check"><b class="t">全程 網路</b><p class="ok">手機和筆電都連得上</p><p class="fix">B 筆電改連熱點；30 秒內不行就播 60 秒備用影片，C 發紙本災情摘要</p></div>
