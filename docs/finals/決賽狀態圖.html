@@ -58,7 +58,11 @@ section { display: grid; gap: 12px; }
 
 /* 狀態變化圖 */
 .diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow-x: auto; max-width: 760px; }
-.diagram pre.mermaid { margin: 0; background: transparent; }
+.flow { display: grid; justify-items: center; gap: 0; }
+.flow .node { width: min(420px, 100%); text-align: center; font-weight: 700; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); }
+.flow .edge { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; padding: 8px 0 8px; position: relative; font-size: 13.5px; }
+.flow .edge::before { content: "↓"; font-size: 18px; color: var(--muted); margin-right: 4px; }
+
 
 /* 泳道表 */
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
@@ -138,29 +142,27 @@ tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)
     <h2>狀態變化圖</h2>
     <p class="sub">箭頭上寫的是「誰：按哪顆」。只有這些按鈕會讓系統換狀態，其他時間都只是講解。</p>
     <div class="diagram">
-<pre class="mermaid">
-stateDiagram-v2
-  direction TB
-  state "日常模式" as S0
-  state "今日平安 +1" as S1
-  state "緊急模式・點名中" as S2
-  state "求救・未受理（後台紅條響鈴）" as S3
-  state "求救・處理中" as S4
-  state "求救・已到場" as S5
-  state "求救結案・點名顯示已協助" as S6
-  state "災情摘要（只看）" as S7
-  state "派遣建議（只看，不按自動派遣）" as S8
-  [*] --> S0
-  S0 --> S1: 評審 我很好
-  S1 --> S2: B 日常模式 → 確認
-  S2 --> S3: 評審 需要幫忙 → 對，我需要立即救援
-  S3 --> S4: C 我過去
-  S4 --> S5: C 已到場
-  S5 --> S6: C 處理完成
-  S6 --> S7: B 左側災情摘要
-  S7 --> S8: B 工作區 → 需求 → 陳金蓮
-  S8 --> S0: 問答結束後 B 解除緊急模式
-</pre>
+<div class="flow">
+  <div class="node st-daily">日常模式</div>
+  <div class="edge"><span class="who j">評審</span><span class="btn">我很好</span></div>
+  <div class="node st-daily">今日平安 +1</div>
+  <div class="edge"><span class="who b">B</span><span class="btn">左下「日常模式」→ 確認</span></div>
+  <div class="node st-emerg">緊急模式・點名中</div>
+  <div class="edge"><span class="who j">評審</span><span class="btn">需要幫忙 → 對，我需要立即救援</span></div>
+  <div class="node st-sos">求救・未受理（後台紅條響鈴）</div>
+  <div class="edge"><span class="who c">C</span><span class="btn">🏃 我過去</span></div>
+  <div class="node st-work">求救・處理中</div>
+  <div class="edge"><span class="who c">C</span><span class="btn">📍 已到場</span></div>
+  <div class="node st-work">求救・已到場</div>
+  <div class="edge"><span class="who c">C</span><span class="btn">✅ 處理完成</span></div>
+  <div class="node st-daily">求救結案・點名顯示已協助</div>
+  <div class="edge"><span class="who b">B</span><span class="btn">左側「災情摘要」</span></div>
+  <div class="node st-report">災情摘要（只看）</div>
+  <div class="edge"><span class="who b">B</span><span class="btn">工作區 → 需求 → 陳金蓮・飲用水</span></div>
+  <div class="node st-report">派遣建議（只看，不按自動派遣）</div>
+  <div class="edge"><span class="who b">B</span><span class="btn">問答結束後：解除緊急模式 → 回到日常模式</span></div>
+  <div class="node st-daily">日常模式</div>
+</div>
     </div>
   </section>
 
@@ -286,7 +288,5 @@ stateDiagram-v2
   </section>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
-<script>mermaid.initialize({ startOnLoad: false }); mermaid.run({ querySelector: "pre.mermaid" });</script>
 </body>
 </html>
