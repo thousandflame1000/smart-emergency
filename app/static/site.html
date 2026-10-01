@@ -111,6 +111,9 @@ button { font:inherit; }
     { id: 'members', label: '人員管理', icon: '🧓', view: CONSOLE, page: 'page-elderly' },
     { id: 'volunteers', label: '志工申請', icon: '🙋', view: CONSOLE, page: 'page-volunteers' },
     { id: 'relations', label: '照護關係', icon: '🔗', view: CONSOLE, page: 'page-relations' },
+    { sec: '資料設定' },
+    { id: 'supplies', label: '物資與資源點', icon: '📦', view: CONSOLE, page: 'page-needs' },
+    { id: 'zones', label: '分區', icon: '🗺️', view: CONSOLE, page: 'page-zones' },
     { sec: '系統' },
     { id: 'audit', label: '操作紀錄', icon: '🧾', view: CONSOLE, page: 'page-audit' },
     { id: 'status', label: '系統狀態', icon: '🩺', view: CONSOLE, page: 'page-status' },
@@ -122,7 +125,7 @@ button { font:inherit; }
   var frame = document.getElementById('view'), nav = document.getElementById('nav'), buttons = {}, frames = {}, currentId = null;
   var sidebar = document.getElementById('sidebar'), navToggle = document.getElementById('nav-toggle');
   var navScrim = document.getElementById('nav-scrim'), navClose = document.getElementById('nav-close');
-  var iconNames={sitrep:'file-text',overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',status:'activity',workspace:'siren',ai:'messages-square',kb:'book-open'};
+  var iconNames={sitrep:'file-text',overview:'chart-no-axes-combined',elders:'heart-pulse',trends:'chart-line',members:'users',volunteers:'handshake',relations:'link',zones:'map-pinned',audit:'scroll-text',status:'activity',workspace:'siren',ai:'messages-square',kb:'book-open',supplies:'package',guide:'book-marked'};
 
   function setNav(open) {
     sidebar.classList.toggle('open', open);
