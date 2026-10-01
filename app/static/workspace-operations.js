@@ -82,9 +82,11 @@ function bindToIncidents(nodes){
   let incidents=nodes.filter(n=>n.kind==='incident');
   const needs=nodes.filter(n=>n.properties.db==='need'&&n.properties.status!=='cancelled');
   const extra=[],edges=[];
-  if(needs.length&&!incidents.length){
-    const spots=needs.filter(located);
-    const event={id:'db:incident:live',label:'即時通報事件',kind:'incident',lat:spots.length?spots.reduce((s,n)=>s+n.lat,0)/spots.length:null,lng:spots.length?spots.reduce((s,n)=>s+n.lng,0)/spots.length:null,quantity:0,available:true,source:'平台需求單彙整',properties:{db:'event',description:'工作區沒有事件物件時，彙整即時需求'},logistics:[]};
+  // 只用還在進行的需求定位：已結案的舊案會把位置拉偏（規則與 workspace_bridge.py 相同）
+  const active=needs.filter(n=>['open','suggested','matched'].includes(n.properties.status));
+  if(active.length&&!incidents.length){
+    const spots=active.filter(located);
+    const event={id:'db:incident:live',label:`即時事件（${active.length} 筆進行中需求）`,kind:'incident',lat:spots.length?spots.reduce((s,n)=>s+n.lat,0)/spots.length:null,lng:spots.length?spots.reduce((s,n)=>s+n.lng,0)/spots.length:null,quantity:0,available:true,source:'系統自動彙整，不是使用者通報',properties:{db:'event',address:spots.length?`依 ${spots.length} 筆進行中需求的位置自動定位`:'進行中的需求都還沒有位置',description:'工作區還沒有建立事件時，系統把進行中的需求歸在這裡，方便一起看、一起調度。這不是有人通報的事件；要用正式名稱，請用「新增物件 → 事件」建立。'},logistics:[]};
     incidents=[event];extra.push(event);
   }
   if(!incidents.length)return{nodes:extra,edges};
@@ -147,6 +149,7 @@ function renderOperationalSelection(item,isNode){
     ...(p.on_scene_at?[['到場',reportedText(p.on_scene_at)]]:p.responder?[['到場','還在路上']]:[]),
     ...(p.nearest_aed?[['AED',p.nearest_aed.replace(/^最近的 AED：/,'')]]:[]),['通報時間',reportedText(p.reported_at)],['狀況',p.description||'未說明'],['定位依據',p.location_source]);
   else if(p.db==='need')fields.push(['狀態',NEED_STATUS[p.status]||p.status],['通報時間',reportedText(p.reported_at)],['優先級',p.urgency],['登記數量',p.quantity_text||'未知'],['需求',p.description||'未填'],['定位依據',p.location_source]);
+  if(p.db==='event')fields.push(['說明',p.description]);
   // 原始經緯度是系統內部表示（而且會露出浮點誤差），摘要只講定位結果；
   // 要精確數值的人是在編輯，那邊本來就有緯度／經度欄位。
   if(isNode)fields.push(['地址',p.address||p.base_values?.address||'未提供'],['地圖定位',item.lat===null?'未定位':'已定位']);

@@ -222,12 +222,17 @@ def bind_to_incidents(nodes: list[Node]) -> tuple[list[Node], list[Edge]]:
     incidents = [n for n in nodes if n.kind == "incident"]
     needs = [n for n in nodes if n.properties.get("db") == "need" and n.properties.get("status") != "cancelled"]
     extra: list[Node] = []
-    if needs and not incidents:
-        spots = [n for n in needs if located(n)]
-        event = Node(id=EVENT_NODE_ID, label="即時通報事件", kind="incident",
+    # 只用還在進行的需求：已結案的舊案（可能在別的縣市）會把位置拉偏，也不該讓沒事做的工作區多一個事件
+    active = [n for n in needs if n.properties.get("status") in ("open", "suggested", "matched")]
+    if active and not incidents:
+        spots = [n for n in active if located(n)]
+        event = Node(id=EVENT_NODE_ID, label=f"即時事件（{len(active)} 筆進行中需求）", kind="incident",
                      lat=sum(n.lat for n in spots) / len(spots) if spots else None,
                      lng=sum(n.lng for n in spots) / len(spots) if spots else None,
-                     source="平台需求單彙整", properties={"db": "event", "description": "工作區沒有事件物件時，彙整即時需求"})
+                     source="系統自動彙整，不是使用者通報",
+                     properties={"db": "event",
+                                 "address": f"依 {len(spots)} 筆進行中需求的位置自動定位" if spots else "進行中的需求都還沒有位置",
+                                 "description": "工作區還沒有建立事件時，系統把進行中的需求歸在這裡，方便一起看、一起調度。這不是有人通報的事件；要用正式名稱，請用「新增物件 → 事件」建立。"})
         incidents, extra = [event], [event]
 
     def nearest(node):

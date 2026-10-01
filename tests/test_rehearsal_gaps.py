@@ -242,3 +242,24 @@ def test_deleting_a_need_the_database_refuses_answers_409_not_500(db, monkeypatc
     monkeypatch.setattr(Session, "delete", refuse)
     r = client().delete(f"/api/resources/needs/{need.id}")
     assert r.status_code == 409 and "無法刪除" in r.text
+
+
+def test_live_event_sits_on_open_needs_and_says_it_was_generated(db):
+    """自動補上的即時事件：位置只看進行中的需求（別縣市的舊案不能把它拉走），名稱與地址要說清楚是系統彙整。"""
+    from app.services.workspace import GraphDocument
+    from app.services.workspace_bridge import EVENT_NODE_ID, merge_database
+    here = mk(db, "光復居民", ["elderly"], lat=23.67, lng=121.42)
+    db.add_all([
+        CommunityNeed(requester_id=here.id, need_type="water", lat=23.67, lng=121.42, urgency=3, status="open"),
+        CommunityNeed(requester_id=here.id, need_type="sos", lat=22.75, lng=121.14, urgency=5, status="fulfilled"),
+    ])
+    db.commit()
+    merged, _ = merge_database(GraphDocument(), db)
+    event = next(n for n in merged.nodes if n.id == EVENT_NODE_ID)
+    assert (round(event.lat, 2), round(event.lng, 2)) == (23.67, 121.42), "已結案的台東舊案不能把事件拉偏"
+    assert event.label == "即時事件（1 筆進行中需求）" and "不是使用者通報" in event.source
+    assert event.properties["address"] == "依 1 筆進行中需求的位置自動定位" and "新增物件" in event.properties["description"]
+
+    db.query(CommunityNeed).filter(CommunityNeed.status == "open").update({"status": "fulfilled"}); db.commit()
+    merged, _ = merge_database(GraphDocument(), db)
+    assert not any(n.id == EVENT_NODE_ID for n in merged.nodes), "沒有進行中的需求就不需要即時事件"
