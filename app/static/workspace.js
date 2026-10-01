@@ -322,6 +322,8 @@ function renderCanvas() {
     const sel=state.selected?.id;
     for(const e of state.graph.edges){const a=nodes.get(e.source),b=nodes.get(e.target);if(!a||!b||a.lat===null||b.lat===null)continue;
       if(e.properties?.binding==='incident'&&![e.id,e.source,e.target].includes(sel))continue;
+      // 已結案、已取消的需求和停用帳號也一樣：外縣市一筆舊案會拉一條跨半張地圖的線，選到時才畫
+      if((settled(a)||settled(b))&&![e.id,e.source,e.target].includes(sel))continue;
       const color=state.selected?.id===e.id?'#eda51c':e.status==='inactive'?'#9ca9a0':critical.has(e.id)?'#9a5b9e':'#2c8fad';
       const line=L.polyline([[a.lat,a.lng],[b.lat,b.lng]],{color,weight:state.selected?.id===e.id?6:2,dashArray:e.status==='inactive'?'5 5':'7 5'}).addTo(mapLayers);
       line.bindTooltip(document.createTextNode(`${e.label} · ${STATUS[e.status]}${e.directed?' · 有方向':''}`));line.on('click',event=>{L.DomEvent.stopPropagation(event);select('edge',e.id);});
