@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>系統架構與功能</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #5b6570; --line: #d9dee4;
+  --u: #e8f0fe; --u-b: #7aa2e3; --c: #e6f6ee; --c-b: #4fae83; --a: #fff4e0; --a-b: #e0a446;
+  --d: #f1ebfb; --d-b: #9b7bd0; --x: #fde9ea; --x-b: #d77a80; --s: #eef1f4; --s-b: #8b97a3;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b; --card: #1c2026; --text: #e6e9ed; --muted: #9aa4ae; --line: #303740;
+    --u: #1d2a40; --u-b: #5b82c4; --c: #18302a; --c-b: #3f9572; --a: #352a17; --a-b: #b98a3c;
+    --d: #2a2340; --d-b: #8467b8; --x: #3a2124; --x-b: #b5646a; --s: #23282f; --s-b: #6c7782;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171b; --card: #1c2026; --text: #e6e9ed; --muted: #9aa4ae; --line: #303740;
+  --u: #1d2a40; --u-b: #5b82c4; --c: #18302a; --c-b: #3f9572; --a: #352a17; --a-b: #b98a3c;
+  --d: #2a2340; --d-b: #8467b8; --x: #3a2124; --x-b: #b5646a; --s: #23282f; --s-b: #6c7782;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.6 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 60px; }
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 19px; margin: 36px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
+h3 { font-size: 16px; margin: 20px 0 8px; }
+.sub { color: var(--muted); margin: 0 0 8px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+
+/* 架構圖 */
+.arch { display: grid; gap: 0; }
+.layer { border-radius: 10px; padding: 10px 12px; border: 1.5px solid; }
+.layer > .tag { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+.row { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.box { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; font-size: 13px; line-height: 1.45; }
+.box b { display: block; font-size: 13.5px; }
+.down { text-align: center; color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+.down::before { content: "▼ "; }
+.L-u { background: var(--u); border-color: var(--u-b); }
+.L-c { background: var(--c); border-color: var(--c-b); }
+.L-a { background: var(--a); border-color: var(--a-b); }
+.L-d { background: var(--d); border-color: var(--d-b); }
+.L-x { background: var(--x); border-color: var(--x-b); }
+.L-s { background: var(--s); border-color: var(--s-b); }
+.split { display: grid; gap: 10px; grid-template-columns: 2fr 1fr; }
+@media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+
+/* 流程 */
+.flow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 6px 0 14px; }
+.flow span { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 4px 8px; font-size: 13.5px; }
+.flow i { font-style: normal; color: var(--muted); }
+
+/* 表格 */
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+th { background: var(--s); white-space: nowrap; }
+td:first-child { font-weight: 700; white-space: nowrap; }
+@media (max-width: 720px) { td:first-child { white-space: normal; } }
+code { font-family: Consolas, monospace; font-size: 13px; background: var(--s); padding: 0 4px; border-radius: 4px; }
+ul { margin: 6px 0; padding-left: 22px; }
+li { margin: 3px 0; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>鄰里守望平台：系統架構與功能</h1>
+<p class="sub">LINE 社區防災照護系統。平時每天確認長者平安，災時切換緊急模式，負責點名、求救、派遣與物資調度。</p>
+
+<h2>一、系統架構圖</h2>
+<div class="card arch">
+
+  <div class="layer L-u">
+    <div class="tag">① 使用者（四種角色，一個帳號可兼多種）</div>
+    <div class="row">
+      <div class="box"><b>長者</b>打卡、求救、申請物資</div>
+      <div class="box"><b>家屬</b>收長者狀況與求救通知</div>
+      <div class="box"><b>志工</b>受理求救、執行派遣任務</div>
+      <div class="box"><b>管理員／基層員工</b>開緊急模式、核准派遣</div>
+    </div>
+  </div>
+  <div class="down">全部經由 LINE 進入，不用另外安裝 App</div>
+
+  <div class="layer L-c">
+    <div class="tag">② 入口（每個功能都有可按的按鈕，不需要打字）</div>
+    <div class="row">
+      <div class="box"><b>LINE 官方帳號</b>圖文選單＋卡片按鈕＋快速回覆。住民選單：首頁／服務；管理員選單：管理／首頁／服務</div>
+      <div class="box"><b>LIFF App（/app）</b>LINE 內全螢幕頁面，分首頁、物資、問答、我的四個分頁</div>
+      <div class="box"><b>網頁表單（/form）</b>機器人發出個人專屬連結，經簽章且有效期限，填寫時不必登入</div>
+      <div class="box"><b>管理後台（/）</b>電腦顯示 QR Code，管理員用 LINE 掃描即登入</div>
+    </div>
+  </div>
+  <div class="down">HTTPS／LINE Webhook</div>
+
+  <div class="split">
+    <div class="layer L-a">
+      <div class="tag">③ 應用伺服器：Python FastAPI（部署在 Railway，推上 master 即自動部署）</div>
+      <div class="row">
+        <div class="box"><b>Webhook 收件匣</b>收到訊息先存檔、立即回應 LINE，背景再處理，並以事件 ID 去除重複</div>
+        <div class="box"><b>打卡與警報</b>checkin・alert</div>
+        <div class="box"><b>緊急求救</b>sos</div>
+        <div class="box"><b>緊急點名</b>rollcall</div>
+        <div class="box"><b>派遣</b>dispatch・hungarian</div>
+        <div class="box"><b>物資與庫存</b>inventory・nearby・aed</div>
+        <div class="box"><b>事件處置工作區</b>workspace_*</div>
+        <div class="box"><b>災情摘要</b>sitrep</div>
+        <div class="box"><b>AI 急救問答</b>rag</div>
+        <div class="box"><b>隱私與稽核</b>privacy・user_deletion・admin_audit</div>
+      </div>
+    </div>
+    <div class="layer L-d">
+      <div class="tag">④ 排程器 APScheduler</div>
+      <div class="box" style="margin-bottom:6px">以 PostgreSQL 鎖確保多台主機時只有一台在跑排程</div>
+      <div class="box">
+        08:00 每日打卡推播<br>
+        每 15 分　未回應升級<br>
+        每 2 分　求救逾時檢查<br>
+        每 5 分　點名追問<br>
+        每 30 分　自動派遣建議（緊急模式時）<br>
+        每 5 秒　發送佇列／收件匣<br>
+        03:30　過期紀錄清除
+      </div>
+    </div>
+  </div>
+  <div class="down">SQLAlchemy</div>
+
+  <div class="split">
+    <div class="layer L-s">
+      <div class="tag">⑤ 資料庫 PostgreSQL</div>
+      <div class="row">
+        <div class="box">使用者・照護關係・志工申請</div>
+        <div class="box">每日打卡・警報・點名</div>
+        <div class="box">需求單・任務・派遣事件</div>
+        <div class="box">資源點・庫存・分區</div>
+        <div class="box">值班紀錄・操作稽核</div>
+        <div class="box">發送佇列・Webhook 收件匣</div>
+        <div class="box">知識庫（含向量）</div>
+      </div>
+    </div>
+    <div class="layer L-x">
+      <div class="tag">⑥ 外部服務與資料</div>
+      <div class="box" style="margin-bottom:6px"><b>LINE Messaging API</b>回覆與推播</div>
+      <div class="box" style="margin-bottom:6px"><b>Google Gemini</b>向量化＋生成回答</div>
+      <div class="box" style="margin-bottom:6px"><b>政府開放資料</b>內政部避難收容處所 5,928 處；衛福部 AED 15,937 台</div>
+      <div class="box"><b>OpenStreetMap</b>地址定位、周邊設施</div>
+    </div>
+  </div>
+</div>
+
+<h2>二、三條核心流程</h2>
+
+<h3>A. 平時：每日關懷</h3>
+<div class="flow">
+  <span>08:00 推播打卡卡片</span><i>→</i>
+  <span>長者按「我很好／不太舒服／需要幫忙」</span><i>→</i>
+  <span>1 小時未回：通知家屬</span><i>→</i>
+  <span>3 小時未回：通知志工</span><i>→</i>
+  <span>若家屬、志工都沒收到：通知管理員</span>
+</div>
+
+<h3>B. 緊急求救（SOS）</h3>
+<div class="flow">
+  <span>長者按「需要幫忙」</span><i>→</i>
+  <span>建立求救單；通知 2 公里內最多 5 名志工與管理員；後台響鈴</span><i>→</i>
+  <span>志工按「我過去」，最先按的人受理</span><i>→</i>
+  <span>「已到場」</span><i>→</i>
+  <span>「處理完成」，通知長者與家屬</span>
+</div>
+<p class="sub">逾時處理：10 分鐘沒人受理，再通知管理員一次；受理後 20 分鐘仍未到場，提醒管理員改派。</p>
+
+<h3>C. 災時：緊急模式</h3>
+<div class="flow">
+  <span>管理員開啟緊急模式</span><i>→</i>
+  <span>對全部長者發出點名</span><i>→</i>
+  <span>30、90 分鐘自動追問未回應者，並向管理員報告進度</span><i>→</i>
+  <span>依脆弱度排序待援者</span><i>→</i>
+  <span>每 30 分鐘產生派遣建議</span><i>→</i>
+  <span>管理員核准</span><i>→</i>
+  <span>志工接任務</span>
+</div>
+
+<h2>三、功能實現</h2>
+<div class="tbl">
+<table>
+<thead><tr><th>功能</th><th>使用者怎麼操作</th><th>系統怎麼實現</th></tr></thead>
+<tbody>
+<tr><td>每日平安打卡</td><td>早上收到卡片後按鈕；也能從選單按「我很好」</td><td>排程每天 08:00 推播，回覆寫入打卡表；緊急點名期間暫停推播，避免重複詢問</td></tr>
+<tr><td>未回應升級</td><td>不需操作</td><td>每 15 分鐘檢查一次：超過 1 小時通知家屬；超過 3 小時通知志工；兩者都沒有通知到人時，改通知管理員</td></tr>
+<tr><td>緊急求救</td><td>選單「需要幫忙」或 App 首頁</td><td>建立求救單，以 Haversine 公式算距離，通知 2 公里內最多 5 名志工與管理員；後台警報每分鐘重響，直到有人確認</td></tr>
+<tr><td>求救受理與結案</td><td>志工卡片依序按「我過去」→「已到場」→「處理完成」；長者可按取消</td><td>用條件式資料庫更新確保只有一人能受理（先搶先得），長者電話只顯示給受理者；結案後通知長者與家屬，並自動關閉該長者的求助警報</td></tr>
+<tr><td>緊急模式與點名</td><td>管理員：「決策中心」→「緊急模式」</td><td>對全部長者發點名卡片，30 與 90 分鐘自動追問；狀態分為平安、不適、求助、已協助、未回；家屬與志工都能看到點名結果</td></tr>
+<tr><td>脆弱度評分</td><td>後台「長者狀態」</td><td>0–28 分：近 7 天未回應或求助最多 12 分，未解除警報最多 10 分，緊急聯絡人數依多寡給 0／3／6 分</td></tr>
+<tr><td>智慧派遣</td><td>管理員選單「待派需求」或後台工作區</td><td>配對分數 ＝ 緊急度×12 ＋ 脆弱度 ＋ 類型匹配×15 ＋ 等待時數（上限 15）－ 距離（上限 25）－ 志工手上任務數×5。用匈牙利演算法求全體最佳配對；管理員核准後才派出</td></tr>
+<tr><td>物資申請與進度</td><td>選單「申請物資」「查看進度」</td><td>表單建立需求單；預留庫存時帶版本號，避免兩人同時扣同一批庫存；狀態改變時推播通知申請人</td></tr>
+<tr><td>附近查詢</td><td>選單「查詢物資」、App「物資」分頁</td><td>依距離排序，列出社區資源點與內政部收容處所；緊急模式時優先列庇護所、消防與醫療據點；不列志工個人住家座標</td></tr>
+<tr><td>AED 查詢</td><td>App「物資」分頁最上方</td><td>從衛福部 AED 資料列出最近 3 台，附放置地點、距離、開放時間與導航</td></tr>
+<tr><td>AI 急救問答</td><td>選單「急救問答」、App「問答」、後台「AI 助手」</td><td>先用 gemini-embedding-001 向量搜尋知識庫（相似度 0.70 以上取前 3 筆），再交給 gemini-2.5-flash 生成回答；20 秒逾時或失敗就改用關鍵字搜尋；每人每分鐘最多問 5 題</td></tr>
+<tr><td>家屬綁定</td><td>長者選單「邀請家人」</td><td>產生邀請碼並建立照護關係；之後長者的打卡、點名與求救結果都會推播給家屬</td></tr>
+<tr><td>志工申請與管理</td><td>「我的中心」申請；管理員「待審志工」核准</td><td>申請時機器人一次問一題，不必記格式；志工卡片有「我的任務」「附近點名」與可服務狀態切換</td></tr>
+<tr><td>事件處置工作區</td><td>後台「事件處置工作區」</td><td>把事件、需求、資源點、設施畫在地圖與關係圖上；從 OpenStreetMap 帶入周邊設施；依優先順序試算物資分配，試算不會扣庫存</td></tr>
+<tr><td>災情摘要</td><td>後台「災情摘要」</td><td>彙整點名、求救、需求與事件時間軸；值班紀錄只能新增、不能修改；時間軸可匯出 CSV，匯出時防範試算表公式注入</td></tr>
+<tr><td>分區</td><td>後台「分區」</td><td>資源與需求只在同一分區內配對，不會跨區調度</td></tr>
+<tr><td>後台登入</td><td>後台畫面掃 QR，或 LINE 按「開啟後台」</td><td>QR 碼 3 分鐘有效、只能用一次，只有管理員的 LINE 能核准；LINE 登入連結 10 分鐘有效並經簽章</td></tr>
+<tr><td>稽核與系統狀態</td><td>後台「操作紀錄」「系統狀態」</td><td>每筆後台修改都記錄操作者；系統狀態檢查資料庫、排程與 LINE 推播額度，剩餘 50 則時警告</td></tr>
+<tr><td>隱私</td><td>「我的資料」→「刪除我的帳號」</td><td>使用者可自行刪除帳號；Webhook 原始紀錄保留 30 天、發送紀錄保留 90 天，到期自動清除</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2>四、可靠性設計</h2>
+<ul>
+  <li><b>訊息不漏接</b>：LINE 訊息先存進收件匣再處理，同一事件不會處理兩次。</li>
+  <li><b>推播不遺失</b>：所有推播先排入發送佇列，失敗自動重試，最多 5 次。</li>
+  <li><b>外部服務故障不影響主功能</b>：Gemini 逾時改用關鍵字搜尋；LINE 推播失敗留在佇列中重送。</li>
+  <li><b>人工把關</b>：自動派遣只產生建議，必須由管理員核准才會派出。</li>
+  <li><b>測試</b>：pytest 自動化測試 748 項，全部通過。</li>
+</ul>
+
+<h2>五、技術棧</h2>
+<div class="tbl">
+<table>
+<tbody>
+<tr><td>後端</td><td>Python 3.12・FastAPI・SQLAlchemy・APScheduler</td></tr>
+<tr><td>資料庫</td><td>PostgreSQL（正式站）；SQLite（測試）</td></tr>
+<tr><td>前端入口</td><td>LINE Messaging API（圖文選單、Flex 卡片）・LIFF・原生 HTML／JS 後台</td></tr>
+<tr><td>AI</td><td>Google Gemini：gemini-embedding-001（3072 維）＋ gemini-2.5-flash</td></tr>
+<tr><td>演算法</td><td>匈牙利演算法（派遣配對）・Haversine（距離）・脆弱度加權評分</td></tr>
+<tr><td>部署</td><td>Railway；推上 GitHub master 後自動部署，<code>/health</code> 會回傳目前版本</td></tr>
+</tbody>
+</table>
+</div>
+
+</main>
+</body>
+</html>
