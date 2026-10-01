@@ -606,7 +606,7 @@ def test_commands_break_out_of_the_guided_application_instead_of_being_swallowed
     mk(db, "阿伯", ["elderly"], "Ua", lat=24.1, lng=120.6)
     press("Ua", "action=form&f=apply&op=wizard")
     say("Ua", "幫助")
-    assert "可用指令" in replies(line_outbox)[-1], "問卷中傳「幫助」要正常回覆指令說明"
+    assert "所有功能都在聊天室下方的選單" in replies(line_outbox)[-1], "問卷中傳「幫助」要正常回覆操作說明"
     press("Ua", "action=form&f=apply&op=wizard")
     say("Ua", "需要水")
     assert "已登記您的需求" in replies(line_outbox)[-1]
