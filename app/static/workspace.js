@@ -363,7 +363,9 @@ function renderGraph(nodes,critical) {
   }
 }
 function arrangeGraph(){cy.layout({name:cy.nodes().length>600?'grid':'cose',animate:false,randomize:false,nodeRepulsion:8000,idealEdgeLength:95,avoidOverlap:true,nodeDimensionsIncludeLabels:true}).run();fit();}
-function fit(){if(state.view==='map'){const nodes=state.graph.nodes.filter(n=>visible(n)&&n.lat!==null);if(nodes.length)map.fitBounds(nodes.map(n=>[n.lat,n.lng]),{padding:[35,35],maxZoom:16,animate:false});}else if(cy){cy.resize();cy.fit(undefined,45);if(cy.zoom()>1.3){cy.zoom(1.3);cy.center();}}}
+// 自動縮放只框還在進行的：已結案或取消的需求、停用的帳號照樣顯示，但不把地圖拉到別的縣市
+function settled(n){const p=n.properties||{};return(p.db==='need'&&(p.status==='fulfilled'||p.status==='cancelled'))||(p.db==='user'&&n.available===false);}
+function fit(){if(state.view==='map'){const placed=state.graph.nodes.filter(n=>visible(n)&&n.lat!==null),live=placed.filter(n=>!settled(n)),nodes=live.length?live:placed;if(nodes.length)map.fitBounds(nodes.map(n=>[n.lat,n.lng]),{padding:[35,35],maxZoom:16,animate:false});}else if(cy){cy.resize();cy.fit(undefined,45);if(cy.zoom()>1.3){cy.zoom(1.3);cy.center();}}}
 function setView(view){state.view=view;$('map').hidden=view!=='map';$('graph').hidden=view!=='graph';$('locate').hidden=view!=='map';
   for(const v of ['map','graph']){$('view-'+v).classList.toggle('active',v===view);$('view-'+v).setAttribute('aria-pressed',String(v===view));}renderCanvas();if(view==='map')map.invalidateSize();fit();}
 function closeObjectMenu(){$('object-menu').hidden=true;$('add-object').setAttribute('aria-expanded','false');}
