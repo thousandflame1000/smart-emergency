@@ -2184,7 +2184,8 @@ async function loadRelations() {
     ]);
 
     const elderly  = users.filter(u => u.roles.includes('elderly'));
-    const contacts = users.filter(u => !u.roles.includes('elderly'));
+    // 聯絡人只排除「只有長者身分」的人：兼任家屬、志工、管理員的人（例如單帳號演練的測試者）也要選得到
+    const contacts = users.filter(u => u.roles.some(r => r !== 'elderly'));
 
     const coveredIds = new Set(rels.map(r => r.elderly_id));
     document.getElementById('rel-elderly-id').innerHTML =
