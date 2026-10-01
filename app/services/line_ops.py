@@ -954,7 +954,8 @@ def my_profile_link(event, user: User) -> None:
     if missing:
         lines.append("目前還缺：" + "、".join(missing))
     _flex(event, "我的資料", bubble("📇 我的資料", "#1b7a44", lines,
-                                 [{"label": "填寫／修改", "uri": form_url("profile", user.line_uid)}]))
+                                 [{"label": "填寫／修改", "uri": form_url("profile", user.line_uid)},
+                                  {"label": "刪除我的帳號", "text": "刪除我的帳號"}]))
 
 
 def my_records_link(event, user: User) -> None:

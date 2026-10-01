@@ -34,3 +34,15 @@ def test_help_reply_links_to_the_guide(db, line_outbox):
     mk(db, "長者", ["elderly"], "U-help")
     say("U-help", "操作說明")
     assert settings.PUBLIC_BASE_URL.rstrip("/") + "/guide" in replies(line_outbox)[-1]
+
+
+def test_account_deletion_has_a_visible_button(db, line_outbox):
+    """刪除帳號是個資權利，不能只靠打字：「我的資料」卡片上要有按鈕，按了先確認。"""
+    import json
+    mk(db, "長者", ["elderly"], "U-del")
+    say("U-del", "我的資料")
+    card = json.dumps([m for kind, _to, m in line_outbox.sent if kind == "reply"][-1].contents.to_dict(), ensure_ascii=False)
+    assert '"label": "刪除我的帳號"' in card
+    say("U-del", "刪除我的帳號")
+    confirm = json.dumps([m for kind, _to, m in line_outbox.sent if kind == "reply"][-1].contents.to_dict(), ensure_ascii=False)
+    assert "action=delete_me" in confirm and "action=keep_me" in confirm
