@@ -22,7 +22,7 @@ from app.models.need import CommunityNeed
 from app.models.resource import CommunityResource
 from app.models.user import User
 from app.services import dispatch
-from app.services.line_notify import reply_flex_message, reply_text
+from app.services.line_notify import reply_flex_message, reply_text, reply_text_with_commands
 from app.timeutil import now_utc, today_tw
 from app.validation import tel_uri
 from app.services.rich_menu import liff_url
@@ -132,7 +132,8 @@ def my_tasks(event, db: Session, user: User) -> None:
         CommunityNeed.need_type == "sos", CommunityNeed.status == "open",
         CommunityNeed.responder_id == str(user.id)).order_by(CommunityNeed.created_at).all()]
     if not tasks and not sos_cards:
-        _say(event, "您目前沒有進行中的任務。點選單的「接單」可以挑需求，管理員派單時也會直接通知您。")
+        reply_text_with_commands(event.reply_token, "您目前沒有進行中的任務。按下面的「接單」挑附近的需求；管理員派單時也會直接通知您。",
+                                 [("接單", "接單")])
         return
     bubbles = sos_cards + [build_task_bubble(
         user.line_uid, t["description"], t["address"], t["resource_name"], need_id=t["need_id"],
@@ -259,8 +260,12 @@ def set_availability(event, db: Session, user: User, paused: bool) -> None:
         _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
         return
     set_paused(db, user, paused)
-    _say(event, "⏸️ 已暫停：附近有人求救時先不通知您。方便時傳「恢復支援」。" if paused else
-         "🟢 已恢復：附近有人求救時會通知您。位置有變請按「分享位置」更新。")
+    if paused:
+        reply_text_with_commands(event.reply_token, "⏸️ 已暫停：附近有人求救時先不通知您。方便時按下面的「恢復支援」。",
+                                 [("恢復支援", "恢復支援")])
+    else:
+        reply_text_with_commands(event.reply_token, "🟢 已恢復：附近有人求救時會通知您。位置有變請按下面的「更新我的位置」。",
+                                 [("更新我的位置", "分享位置")])
 
 
 def volunteer_center(event, db: Session, user: User) -> None:
@@ -854,7 +859,7 @@ def elder_status(event, db: Session, user: User) -> None:
     relations = db.query(CareRelation).filter(CareRelation.contact_id == user.id,
                                               CareRelation.is_active == True).all()  # noqa: E712
     if not relations:
-        _say(event, "您還沒有綁定的長輩。請長輩傳「邀請家人」取得綁定碼，再傳「綁定 碼」給我。")
+        _say(event, "您還沒有綁定的長輩。請長輩在選單「服務」→「邀請家人」把連結傳給您，點開後按送出就完成。")
         return
     from app.models.safety_check import SafetyCheck
     from app.services import rollcall
@@ -899,7 +904,8 @@ def my_needs(event, db: Session, user: User) -> None:
     needs = (db.query(CommunityNeed).filter(CommunityNeed.requester_id == user.id)
              .order_by(CommunityNeed.created_at.desc()).limit(5).all())
     if not needs:
-        _say(event, "您目前沒有提出過的需求。點選單的「申請需求」可以求助。")
+        reply_text_with_commands(event.reply_token, "您目前沒有提出過的需求。需要物資請按下面的「申請物資」。",
+                                 [("申請物資", "申請物資")])
         return
     lines = [f"{_need_label(n.need_type)}　{_status_label(n.status)}" for n in needs]
     active = [n for n in needs if n.status in ("open", "suggested", "matched")]

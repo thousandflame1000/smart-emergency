@@ -519,8 +519,12 @@ def _handle_apply(event, db, user, text) -> bool:
     prefix = next((p for p in APPLY_PREFIXES if text.startswith(p)), None)
     if prefix is None:
         return False
-    if _is_staff(user):
-        _say(event, "您已經是志工／家屬／管理員了，不用重新申請。")
+    # 家屬也可以申請當志工（核准是附加志工身分，不會拿掉家屬身分）；只有已經是志工或管理員的不用再申請
+    if user.has_role("volunteer"):
+        _say(event, "您已經是志工了，不用重新申請。志工功能在「服務」→「我的中心」。")
+        return True
+    if user.has_role("admin"):
+        _say(event, "您是管理員：要接附近求救的話，請在後台「人員管理」幫自己勾選「志工」。")
         return True
     rest = text[len(prefix):].strip()
     if not rest:
@@ -546,7 +550,8 @@ def _handle_volunteer_commands(event, db, user, text) -> bool:
 
     if text in ["登記物資", "物資登記", "登記"]:
         if not staff:
-            _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
+            reply_text_with_commands(event.reply_token, "此功能僅限志工使用。想當志工，按下面的「志工申請」。",
+                                         [("志工申請", "我要當志工")])
             return True
         _open_form(event, db, user, "res")
         return True
@@ -560,7 +565,8 @@ def _handle_volunteer_commands(event, db, user, text) -> bool:
             CommunityResource.owner_id == user.id
         ).order_by(CommunityResource.created_at.desc()).limit(5).all()
         if not my_res:
-            _say(event, "您目前沒有已登記的物資。\n傳「登記物資」開始登記。")
+            reply_text_with_commands(event.reply_token, "您目前沒有已登記的物資。按下面的「登記物資」開始登記。",
+                                     [("登記物資", "登記物資")])
         else:
             lines = ["📦 您已登記的物資（最近5項）：\n"]
             for r in my_res:
@@ -642,14 +648,16 @@ def _list_claimable(event, db, user) -> None:
     from app.services import dispatch, line_forms
     from app.services.line_notify import reply_flex_message
     if not _is_staff(user):
-        _say(event, "此功能僅限志工使用。想當志工請傳「我要當志工」。")
+        reply_text_with_commands(event.reply_token, "此功能僅限志工使用。想當志工，按下面的「志工申請」。",
+                                     [("志工申請", "我要當志工")])
         return
     found = dispatch.list_claimable(user, db)
     if not found["items"]:
         if not found["has_resources"] and found["has_registered"]:
             _say(event, "您登記的物資目前都已派出或保留中，沒有可接的單。物資補齊後請再點選單的「登記表單」登記。")
         elif not found["has_resources"]:
-            _say(event, "您目前沒有登記可提供的物資，所以沒有可接的單。請先點選單的「登記表單」登記物資。")
+            reply_text_with_commands(event.reply_token, "您目前沒有登記可提供的物資，所以沒有可接的單。請先按下面的「登記物資」。",
+                                     [("登記物資", "登記物資")])
         elif found["open_total"] == 0:
             _say(event, "目前沒有待處理的需求，辛苦了 🙏 有新需求或管理員派單時會直接通知您。")
         else:
@@ -1033,7 +1041,8 @@ def _reply_nearby_rollcall(event, db, user) -> None:
     from app.services.line_notify import reply_flex_message
     from app.services.line_ops import bubble, carousel
     if not (user.has_role("volunteer") or user.has_role("admin")):
-        _say(event, "附近點名是給已核准志工使用的。想幫忙可以傳「我要當志工」。")
+        reply_text_with_commands(event.reply_token, "附近點名是給已核准志工使用的。想幫忙，按下面的「志工申請」。",
+                                 [("志工申請", "我要當志工")])
         return
     if not rollcall.current_round(db):
         _say(event, "目前是日常模式，沒有點名。")
