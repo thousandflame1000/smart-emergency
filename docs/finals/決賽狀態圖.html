@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>決賽五分鐘狀態圖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+:root {
+  --bg: #F2F5F3; --surface: #FFFFFF; --ink: #16201B; --muted: #56655D; --line: #D6DFDA;
+  --daily: #0F7355; --daily-soft: #DFF0E8; --emerg: #8A4B0F; --emerg-soft: #FCEFDB;
+  --sos: #B3261E; --sos-soft: #FBE7E5; --work: #A0570B; --work-soft: #FFE9CC;
+  --report: #2D5E8C; --report-soft: #E3EDF7; --cue: #6B3FA0; --cue-soft: #EFE7F8;
+  --sans: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif; --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; --bg: #0F1513; --surface: #17201C; --ink: #E3EBE7; --muted: #9DAEA5; --line: #2B3833;
+    --daily: #55C89E; --daily-soft: #163428; --emerg: #F0B45E; --emerg-soft: #382A16; --sos: #FF8C82; --sos-soft: #3B1F1C;
+    --work: #F5A54A; --work-soft: #3A2810; --report: #8DB8E8; --report-soft: #1B2A3A; --cue: #C6A6F0; --cue-soft: #2A2038; }
+}
+:root[data-theme="dark"] { color-scheme: dark; --bg: #0F1513; --surface: #17201C; --ink: #E3EBE7; --muted: #9DAEA5; --line: #2B3833;
+  --daily: #55C89E; --daily-soft: #163428; --emerg: #F0B45E; --emerg-soft: #382A16; --sos: #FF8C82; --sos-soft: #3B1F1C;
+  --work: #F5A54A; --work-soft: #3A2810; --report: #8DB8E8; --report-soft: #1B2A3A; --cue: #C6A6F0; --cue-soft: #2A2038; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 15px/1.65 var(--sans); padding-inline: 16px; padding-block: 0 56px; }
+.wrap { max-width: 1240px; margin: 0 auto; display: grid; gap: 30px; }
+header { padding-top: 30px; display: grid; gap: 8px; }
+h1 { margin: 0; font-size: clamp(26px, 4.5vw, 38px); font-weight: 900; text-wrap: balance; }
+h2 { margin: 0; font-size: 21px; font-weight: 900; text-wrap: balance; }
+p { margin: 0; }
+.eyebrow { font: 600 12px/1.4 var(--mono); letter-spacing: .08em; color: var(--muted); }
+.lede { color: var(--muted); max-width: 60em; }
+section { display: grid; gap: 12px; }
+.sub { color: var(--muted); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 8px 14px; font-size: 13.5px; }
+.who { display: inline-grid; place-items: center; min-width: 26px; height: 24px; padding: 0 7px; border-radius: 5px; font: 600 13px/1 var(--mono); background: var(--bg); border: 1px solid var(--line); }
+.who.a { background: var(--daily-soft); color: var(--daily); border-color: transparent; }
+.who.b { background: var(--report-soft); color: var(--report); border-color: transparent; }
+.who.c { background: var(--work-soft); color: var(--work); border-color: transparent; }
+.who.j { background: var(--sos-soft); color: var(--sos); border-color: transparent; }
+
+/* 狀態時間軸：寬度照秒數 */
+.ribbon { display: flex; height: 54px; border-radius: 8px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+.ribbon div { min-width: 0; display: grid; place-items: center; text-align: center; font-size: 12px; font-weight: 700; line-height: 1.25; padding: 0 2px; border-right: 1px solid var(--surface); overflow: hidden; }
+.ribbon div:last-child { border-right: 0; }
+.st-daily { background: var(--daily-soft); color: var(--daily); }
+.st-emerg { background: var(--emerg-soft); color: var(--emerg); }
+.st-sos { background: var(--sos-soft); color: var(--sos); }
+.st-work { background: var(--work-soft); color: var(--work); }
+.st-report { background: var(--report-soft); color: var(--report); }
+.st-buffer { background: repeating-linear-gradient(135deg, var(--surface) 0 6px, var(--bg) 6px 12px); color: var(--muted); }
+.ticks { position: relative; height: 16px; font: 500 11px/1 var(--mono); color: var(--muted); }
+.ticks span { position: absolute; top: 0; transform: translateX(-50%); }
+.ticks span:first-child { transform: none; } .ticks span:last-child { transform: translateX(-100%); }
+
+/* 狀態變化圖 */
+.diagram { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; overflow-x: auto; max-width: 760px; }
+.diagram pre.mermaid { margin: 0; background: transparent; }
+
+/* 泳道表 */
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; min-width: 1080px; }
+th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); font-size: 14.5px; }
+th:last-child, td:last-child { border-right: 0; }
+thead th { position: sticky; top: 0; background: var(--bg); font-size: 13px; color: var(--muted); font-weight: 600; z-index: 1; }
+thead th .who { margin-right: 6px; }
+tbody tr:last-child td { border-bottom: 0; }
+td.t { font: 600 14px/1.4 var(--mono); white-space: nowrap; font-variant-numeric: tabular-nums; width: 92px; }
+td.t small { display: block; font-weight: 500; color: var(--muted); font-size: 12px; }
+td.state { width: 128px; }
+.pill { display: inline-block; font-size: 12.5px; font-weight: 700; padding: 2px 8px; border-radius: 999px; line-height: 1.4; }
+td .say { font-weight: 500; }
+td .say::before { content: "說　"; font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.btn { display: inline-block; border: 1px solid var(--line); background: var(--bg); border-radius: 6px; padding: 0 7px; font-weight: 700; font-size: 13.5px; white-space: nowrap; margin: 1px 0; }
+.arrow { color: var(--muted); margin: 0 2px; }
+.cue { display: block; margin-top: 6px; background: var(--cue-soft); color: var(--cue); border-radius: 6px; padding: 3px 8px; font-size: 13px; font-weight: 600; }
+.cue::before { content: "▶ 口令　"; }
+.idle { color: var(--muted); font-size: 13.5px; }
+.see { display: block; margin-top: 6px; font-size: 13px; color: var(--muted); }
+.see::before { content: "看到　"; font-weight: 600; }
+tr.major td { background: color-mix(in srgb, var(--sos-soft) 45%, var(--surface)); }
+
+/* 檢查點與口令 */
+.checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 10px; }
+.check { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
+.check b.t { font: 600 14px/1.3 var(--mono); }
+.check .ok { font-size: 14px; }
+.check .ok::before { content: "應該看到　"; color: var(--muted); font-size: 12px; font-weight: 600; }
+.check .fix { font-size: 14px; color: var(--sos); }
+.check .fix::before { content: "沒看到就　"; color: var(--muted); font-size: 12px; font-weight: 600; }
+.cues { display: grid; gap: 8px; }
+.cueline { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; display: grid; grid-template-columns: 70px 1fr; gap: 10px; align-items: center; }
+.cueline b { font: 600 14px/1 var(--mono); }
+.must { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
+.must .check ul { margin: 0; padding-left: 1.2em; display: grid; gap: 4px; font-size: 14.5px; }
+@media print { body { background: #fff; } .table-wrap { overflow: visible; } tr { break-inside: avoid; } .check { break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">鄰里守望平台 · 10/3 決賽 · 展演 5:00（4:50 收尾）＋ 統問統答 5:00</p>
+    <h1>決賽五分鐘狀態圖</h1>
+    <p class="lede">每一段系統在什麼狀態、誰按哪顆按鈕、聽到哪句口令接棒。五分鐘內示範：每日打卡、緊急模式與點名、一鍵求救完整閉環、後台響鈴與調度、災情摘要、脆弱度派遣演算法、全國資料與成本。</p>
+    <div class="legend">
+      <span><span class="who a">A</span> 主講：只講，不碰器材</span>
+      <span><span class="who b">B</span> 筆電後台：只按，不講</span>
+      <span><span class="who c">C</span> 手機 B（志工兼家屬兼管理員）</span>
+      <span><span class="who j">評</span> 評審拿手機 A＝王奶奶</span>
+    </div>
+  </header>
+
+  <section>
+    <h2>系統狀態時間軸</h2>
+    <p class="sub">寬度照秒數畫。顏色是系統當下的狀態，不是誰在講話。</p>
+    <div>
+      <div class="ribbon" aria-label="系統狀態時間軸">
+        <div class="st-daily" style="flex:75 1 0">日常模式</div>
+        <div class="st-emerg" style="flex:30 1 0">緊急模式<br>點名中</div>
+        <div class="st-sos" style="flex:55 1 0">求救<br>未受理</div>
+        <div class="st-work" style="flex:20 1 0">處理中</div>
+        <div class="st-daily" style="flex:15 1 0">結案</div>
+        <div class="st-report" style="flex:25 1 0">災情<br>摘要</div>
+        <div class="st-report" style="flex:30 1 0">派遣<br>演算法</div>
+        <div class="st-emerg" style="flex:40 1 0">成本・收尾<br>（仍在緊急模式）</div>
+        <div class="st-buffer" style="flex:10 1 0">緩衝</div>
+      </div>
+      <div class="ticks" aria-hidden="true"><span style="left:0">0:00</span><span style="left:20%">1:00</span><span style="left:40%">2:00</span><span style="left:60%">3:00</span><span style="left:80%">4:00</span><span style="left:100%">5:00</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>狀態變化圖</h2>
+    <p class="sub">箭頭上寫的是「誰：按哪顆」。只有這些按鈕會讓系統換狀態，其他時間都只是講解。</p>
+    <div class="diagram">
+<pre class="mermaid">
+stateDiagram-v2
+  direction TB
+  state "日常模式" as S0
+  state "今日平安 +1" as S1
+  state "緊急模式・點名中" as S2
+  state "求救・未受理（後台紅條響鈴）" as S3
+  state "求救・處理中" as S4
+  state "求救・已到場" as S5
+  state "求救結案・點名顯示已協助" as S6
+  state "災情摘要（只看）" as S7
+  state "派遣建議（只看，不按自動派遣）" as S8
+  [*] --> S0
+  S0 --> S1: 評審 我很好
+  S1 --> S2: B 日常模式 → 確認
+  S2 --> S3: 評審 需要幫忙 → 對，我需要立即救援
+  S3 --> S4: C 我過去
+  S4 --> S5: C 已到場
+  S5 --> S6: C 處理完成
+  S6 --> S7: B 左側災情摘要
+  S7 --> S8: B 工作區 → 需求 → 陳金蓮
+  S8 --> S0: 問答結束後 B 解除緊急模式
+</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>逐段泳道表</h2>
+    <p class="sub">紫色是口令：A 講到這句，對應的人才動手。沒輪到的人不動、不講話。</p>
+    <div class="table-wrap"><table>
+      <thead><tr>
+        <th>時間</th><th>系統狀態</th>
+        <th><span class="who a">A</span>主講</th><th><span class="who b">B</span>筆電後台</th>
+        <th><span class="who c">C</span>手機 B</th><th><span class="who j">評</span>評審・手機 A</th>
+      </tr></thead>
+      <tbody>
+        <tr><td class="t">開場前</td><td class="state"><span class="pill st-daily">日常模式</span></td>
+          <td>站評審正面，手上不拿東西</td>
+          <td>「事件處置工作區」地圖拉到光復；在畫面上點一下（才會出聲）</td>
+          <td>手機 A 解鎖、停在鄰里守望聊天室；自己拿手機 B</td>
+          <td class="idle">—</td></tr>
+        <tr><td class="t">0:00<small>10 秒</small></td><td class="state"><span class="pill st-daily">日常模式</span></td>
+          <td><span class="say">評審好，我們是守望相助團隊，作品是鄰里守望平台。</span></td>
+          <td class="idle">不動</td><td class="idle">站評審右前方</td><td class="idle">—</td></tr>
+        <tr><td class="t">0:10<small>35 秒</small></td><td class="state"><span class="pill st-daily">日常模式</span></td>
+          <td><span class="say">光復鄉 19 人罹難……訊息有發，沒人知道誰沒收到、該先去敲誰的門。</span></td>
+          <td class="idle">不動（畫面停在光復地圖）</td><td class="idle">不動</td><td class="idle">—</td></tr>
+        <tr><td class="t">0:45<small>30 秒</small></td><td class="state"><span class="pill st-daily">日常模式</span><br><span class="pill st-daily" style="margin-top:4px">今日平安 +1</span></td>
+          <td><span class="say">平時長輩每天按一下「我很好」；災時同一份紀錄變成救援順序。</span><span class="cue">「請您當王奶奶，按『我很好』」</span></td>
+          <td class="idle">不動</td>
+          <td>1:05 雙手遞手機 A：「這是王奶奶的手機」</td>
+          <td><span class="btn">選單「首頁」</span><span class="arrow">→</span><span class="btn">我很好</span><span class="see">馬上回覆「太好了」</span></td></tr>
+        <tr><td class="t">1:15<small>30 秒</small></td><td class="state"><span class="pill st-emerg">緊急模式<br>點名中</span></td>
+          <td><span class="cue">「颱風夜，鄉公所啟動緊急模式，就這一個按鈕」</span><span class="say" style="display:block;margin-top:6px">按我平安的自動打勾；還沒回的已依脆弱度排好，最上面就是先去敲門的人。</span></td>
+          <td><span class="btn">左下「日常模式」</span><span class="arrow">→</span><span class="btn">確認</span><span class="arrow">→</span><span class="btn">左欄「點名」</span><br>C 按完我平安後，再點一次<span class="btn">點名</span>更新</td>
+          <td>5 秒內收到點名卡 <span class="arrow">→</span><span class="btn">✅ 我平安</span></td>
+          <td>收到「🚨 請回報是否平安」<b>先不要按</b></td></tr>
+        <tr class="major"><td class="t">1:45<small>10 秒</small></td><td class="state"><span class="pill st-sos">求救<br>未受理</span></td>
+          <td><span class="cue">「水淹進一樓了，王奶奶，請按需要幫忙」</span></td>
+          <td>眼睛盯畫面頂端，手放在滑鼠上</td>
+          <td class="idle">等</td>
+          <td>點名卡上<span class="btn">🆘 需要幫忙</span><span class="arrow">→</span><span class="btn">🆘 對，我需要立即救援</span><span class="see">已收到您的求助！已通知 1 位照護聯絡人、附近 1 位志工、管理員</span></td></tr>
+        <tr class="major"><td class="t">1:55<small>30 秒</small></td><td class="state"><span class="pill st-sos">求救<br>未受理</span></td>
+          <td>停一拍，讓 C 講</td>
+          <td>紅條＋響鈴出現就按<span class="btn">查看</span><br><span class="see">2:25 還沒響：按「更新現況」，地圖先出現 SOS</span></td>
+          <td>手機 B 同時響 3 次，舉給評審看：<span class="say">家屬通知、附近有人需要幫忙、管理員卡。志工這張沒有電話。</span></td>
+          <td>看 C 的手機</td></tr>
+        <tr class="major"><td class="t">2:25<small>15 秒</small></td><td class="state"><span class="pill st-sos">求救<br>未受理</span></td>
+          <td><span class="say">後台同時響鈴：脆弱度、最近的 AED、家屬電話都在這；要送醫按通報 119。</span><span class="cue">「誰會去？」</span></td>
+          <td>面板停住，用游標指「通報 119」（<b>不按</b>）</td>
+          <td class="idle">準備按「我過去」</td><td class="idle">—</td></tr>
+        <tr class="major"><td class="t">2:40<small>20 秒</small></td><td class="state"><span class="pill st-work">處理中</span></td>
+          <td><span class="say">王奶奶，您的手機又響了——有人要來了。第一個按的人負責，其他人會知道。</span></td>
+          <td>面板變「處理中：C 的名字」（沒變就按<span class="btn">更新現況</span>）</td>
+          <td>附近有人需要幫忙卡<span class="arrow">→</span><span class="btn">🏃 我過去</span></td>
+          <td><span class="see">🙋 管理員 ○○ 已經在處理您的求救</span></td></tr>
+        <tr class="major"><td class="t">3:00<small>15 秒</small></td><td class="state"><span class="pill st-daily">結案</span></td>
+          <td><span class="say">10 分鐘沒人受理、20 分鐘沒到場，系統會再提醒鄉公所改派。</span></td>
+          <td class="idle">不動</td>
+          <td><span class="btn">📍 已到場</span><span class="arrow">→</span><span class="btn">✅ 處理完成</span></td>
+          <td><span class="see">✅ 您的緊急求助已確認處理完成</span></td></tr>
+        <tr><td class="t">3:15<small>25 秒</small></td><td class="state"><span class="pill st-report">災情摘要</span></td>
+          <td><span class="cue">「一頁往上回報縣府」</span><span class="say" style="display:block;margin-top:6px">點名、每件求救的受理／到場／結案分鐘數、時間軸；可匯出、可印成紙本。</span></td>
+          <td><span class="btn">左側「災情摘要」</span><span class="arrow">→</span>捲到「一鍵求救」與「時間軸」</td>
+          <td class="idle">不動</td><td class="idle">—</td></tr>
+        <tr><td class="t">3:40<small>30 秒</small></td><td class="state"><span class="pill st-report">派遣演算法<br>（只看）</span></td>
+          <td><span class="cue">「同一份資料也決定物資先送誰」</span><span class="say" style="display:block;margin-top:6px">脆弱度 0–28 分疊進評分，匈牙利演算法一次配好；系統只給建議，人核准才發。全台 5,928 收容所、15,937 台 AED 內建。</span></td>
+          <td><span class="btn">左側「事件處置工作區」</span><span class="arrow">→</span><span class="btn">左欄「需求」</span><span class="arrow">→</span><span class="btn">陳金蓮・飲用水</span><span class="see">系統建議 鄭建宏（評分 60・0.6 km）</span>游標指「自動派遣」（<b>不按</b>）</td>
+          <td class="idle">不動</td><td class="idle">—</td></tr>
+        <tr><td class="t">4:10<small>30 秒</small></td><td class="state"><span class="pill st-emerg">緊急模式</span></td>
+          <td><span class="say">一個 200 位長者的鄉每月約 1,800 元，每位 9 元；救援按鈕一戶約 1,500 元。導入一天；日本名簿制度證明可行。</span></td>
+          <td class="idle">不動</td><td class="idle">不動</td><td class="idle">—</td></tr>
+        <tr><td class="t">4:40<small>10 秒</small></td><td class="state"><span class="pill st-emerg">緊急模式</span></td>
+          <td><span class="say">平時一個「我很好」，災時就知道先去敲誰的門。謝謝評審。</span></td>
+          <td class="idle">不動</td><td>手機 A 留在評審手上</td><td class="idle">—</td></tr>
+        <tr><td class="t">4:50<small>10 秒</small></td><td class="state"><span class="pill st-buffer">緩衝</span></td>
+          <td colspan="4" class="idle">不排內容。逾時部分不納入評分，4:50 一定要講完。</td></tr>
+        <tr><td class="t">5:00<small>5 分鐘</small></td><td class="state"><span class="pill st-emerg">統問統答</span></td>
+          <td>評審問完：「謝謝評審，我們依序回答」，照題號答</td>
+          <td>技術題由 B 答；需要時示範後台</td>
+          <td>操作題由 C 答；評審可以在手機 A 按「查詢物資」看 AED</td>
+          <td>可以繼續按手機 A</td></tr>
+        <tr><td class="t">結束後</td><td class="state"><span class="pill st-daily">回到日常模式</span></td>
+          <td colspan="4">B：左下「緊急模式」切回日常模式（會推播給兩支手機）；工作區若還有求救就「確認已處理」。C：收回手機 A，接行動電源。</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>交棒口令</h2>
+    <p class="sub">A 講到這句話，對應的人才動手。排練時先把這六句練熟。</p>
+    <div class="cues">
+      <div class="cueline"><b>1:00</b><span>「請您當王奶奶，按『我很好』」 → <span class="who c">C</span> 遞手機，<span class="who j">評</span> 按「我很好」</span></div>
+      <div class="cueline"><b>1:15</b><span>「就這一個按鈕」 → <span class="who b">B</span> 切緊急模式；點名卡到了 <span class="who c">C</span> 按「我平安」</span></div>
+      <div class="cueline"><b>1:45</b><span>「王奶奶，請按需要幫忙」 → <span class="who j">評</span> 按需要幫忙並確認；<span class="who c">C</span> 等手機響</span></div>
+      <div class="cueline"><b>2:35</b><span>「誰會去？」 → <span class="who c">C</span> 按「我過去」</span></div>
+      <div class="cueline"><b>3:15</b><span>「一頁往上回報縣府」 → <span class="who b">B</span> 開災情摘要</span></div>
+      <div class="cueline"><b>3:40</b><span>「同一份資料也決定物資先送誰」 → <span class="who b">B</span> 回工作區點「陳金蓮・飲用水」</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>防掉鍊子檢查點</h2>
+    <p class="sub">每個檢查點只看一件事；沒看到就照紅字做，不道歉、不停下來，照故事往下講。</p>
+    <div class="checks">
+      <div class="check"><b class="t">1:05 我很好</b><p class="ok">評審手機 1 秒內回覆</p><p class="fix">C 拿回來自己按，A 繼續講</p></div>
+      <div class="check"><b class="t">1:20 點名卡</b><p class="ok">兩支手機 5 秒內收到「請回報是否平安」</p><p class="fix">跳過 C 的我平安，A 直接說 1:45 的口令；評審改按選單「首頁」→「需要幫忙」</p></div>
+      <div class="check"><b class="t">1:50 求救送出</b><p class="ok">評審手機寫「附近 1 位志工」</p><p class="fix">寫「附近 0 位」：C 改用管理員卡的「🙋 我來處理」，後面流程一樣</p></div>
+      <div class="check"><b class="t">1:55 手機 B</b><p class="ok">3 張卡：家屬通知、附近有人需要幫忙、管理員卡</p><p class="fix">少了就秀有收到的那張，A 照講</p></div>
+      <div class="check"><b class="t">2:25 後台響鈴</b><p class="ok">頂端紅條＋鈴聲</p><p class="fix">B 按「更新現況」讓地圖先出現 SOS；紅條到了 A 補一句「響了」</p></div>
+      <div class="check"><b class="t">2:45 有人要來了</b><p class="ok">評審手機收到「已經在處理您的求救」</p><p class="fix">A：「推播有幾秒延遲，後台已經顯示處理中」，B 指面板</p></div>
+      <div class="check"><b class="t">3:20 災情摘要</b><p class="ok">一鍵求救有這一筆、時間軸有受理與結案</p><p class="fix">B 按「重新整理」</p></div>
+      <div class="check"><b class="t">3:45 派遣建議</b><p class="ok">面板「系統建議 ○○（評分…）」</p><p class="fix">寫「沒有可派候選」：B 改點「劉來發・食物」</p></div>
+      <div class="check"><b class="t">全程 網路</b><p class="ok">手機和筆電都連得上</p><p class="fix">B 筆電改連熱點；30 秒內不行就播 60 秒備用影片，C 發紙本災情摘要</p></div>
+      <div class="check"><b class="t">4:30 時間</b><p class="ok">A 已經講到成本</p><p class="fix">還在 ⑥：跳過 ⑦ 的第二句，直接講成本與收尾，4:50 前結束</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>開場前一定要是這個狀態</h2>
+    <div class="must">
+      <div class="check"><b class="t">系統</b><ul><li>左下是「日常模式」</li><li>工作區狀態列「緊急求救 0」（舊求救逐筆「確認已處理」）</li><li>系統狀態 0 紅燈；LINE 推播額度剩 50 則以上</li><li>左欄「需求」裡有陳金蓮、劉來發、王秀霞、黃水金四筆待媒合，<b>排練時不要按「自動派遣」</b>（會把它們派掉）</li></ul></div>
+      <div class="check"><b class="t">帳號</b><ul><li>手機 A＝王奶奶：只有「長者」、地址大進村</li><li>手機 B：管理員＋志工＋家屬＋長者、地址中華路</li><li>照護關係：王奶奶 → 手機 B 的帳號</li><li>兩支手機今天都沒有分享位置</li></ul></div>
+      <div class="check"><b class="t">器材</b><ul><li>筆電接電、全螢幕、音量 70%、已在畫面點過一下</li><li>兩支手機電量 80% 以上、音量開、停在聊天室</li><li>熱點開好；備用影片在筆電本機；紙本災情摘要 5 份</li></ul></div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({ startOnLoad: true });</script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LINE 功能測試單</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500;600&family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+:root {
+  --bg: #F2F5F3; --surface: #FFFFFF; --ink: #16201B; --muted: #56655D; --line: #D6DFDA;
+  --accent: #0F7355; --accent-soft: #DFF0E8; --sos: #B3261E; --sos-soft: #FBE7E5; --warn: #8A4B0F; --warn-soft: #FCEFDB;
+  --sans: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif; --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { color-scheme: dark; --bg: #0F1513; --surface: #17201C; --ink: #E3EBE7; --muted: #9DAEA5; --line: #2B3833;
+    --accent: #55C89E; --accent-soft: #163428; --sos: #FF8C82; --sos-soft: #3B1F1C; --warn: #F0B45E; --warn-soft: #382A16; }
+}
+:root[data-theme="dark"] { color-scheme: dark; --bg: #0F1513; --surface: #17201C; --ink: #E3EBE7; --muted: #9DAEA5; --line: #2B3833;
+  --accent: #55C89E; --accent-soft: #163428; --sos: #FF8C82; --sos-soft: #3B1F1C; --warn: #F0B45E; --warn-soft: #382A16; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 400 15px/1.65 var(--sans); padding-inline: 16px; padding-block: 0 48px; }
+.wrap { max-width: 1000px; margin: 0 auto; display: grid; gap: 22px; }
+header { padding-top: 32px; display: grid; gap: 8px; }
+h1 { margin: 0; font-size: clamp(26px, 5vw, 36px); font-weight: 900; text-wrap: balance; }
+h2 { margin: 0; font-size: 20px; font-weight: 900; text-wrap: balance; }
+p { margin: 0; }
+.eyebrow { font: 600 12px/1.4 var(--mono); letter-spacing: .08em; color: var(--muted); }
+.lede { color: var(--muted); max-width: 46em; }
+.phones { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.phone { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; }
+.phone b { font-size: 16px; }
+.phone span { color: var(--muted); font-size: 14px; }
+.tag { display: inline-grid; place-items: center; min-width: 26px; height: 24px; padding: 0 6px; border-radius: 5px; font: 600 13px/1 var(--mono); }
+.tag.a { background: var(--sos-soft); color: var(--sos); }
+.tag.b { background: var(--accent-soft); color: var(--accent); }
+.tag.pc { background: var(--warn-soft); color: var(--warn); }
+section { display: grid; gap: 10px; }
+.pre { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 14px 18px; }
+.pre ol { margin: 0; padding-left: 1.3em; display: grid; gap: 6px; }
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { width: 100%; border-collapse: collapse; min-width: 720px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 10px; border-bottom: 1px solid var(--line); }
+th { font-size: 12.5px; font-weight: 500; color: var(--muted); background: var(--bg); }
+tr:last-child td { border-bottom: 0; }
+td.n { font: 600 14px/1.5 var(--mono); color: var(--muted); width: 40px; }
+td.who { width: 56px; }
+td.exp { color: var(--ink); }
+td.exp q { quotes: "「" "」"; background: var(--bg); border-radius: 4px; padding: 0 4px; }
+td.ok { width: 92px; white-space: nowrap; }
+td.ok label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px; }
+td.ok input { width: 18px; height: 18px; accent-color: var(--accent); }
+td.note { width: 26%; color: var(--muted); }
+tr.done td { background: var(--accent-soft); }
+.callout { background: var(--warn-soft); border-radius: 8px; padding: 10px 14px; font-size: 14px; }
+.callout b { color: var(--warn); }
+.budget { font: 600 13px/1.4 var(--mono); color: var(--muted); }
+.issues { background: var(--surface); border: 1px dashed var(--muted); border-radius: 8px; padding: 14px 18px; min-height: 140px; color: var(--muted); }
+@media print {
+  body { background: #fff; padding-block: 0; }
+  .table-wrap { overflow: visible; }
+  tr { break-inside: avoid; }
+  tr.done td { background: none; }
+}
+</style>
+</head>
+<body>
+
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">鄰里守望平台 · LINE 實機測試 · 約 25 分鐘、用掉約 10 則推播</p>
+    <h1>LINE 功能測試單</h1>
+    <p class="lede">兩支手機照順序按，<b>全部用選單和卡片上的按鈕，不用打字</b>。每步看「應該看到」，對了就打勾；不對就在「問題」欄寫下實際看到什麼。全部做完把問題欄拍照傳給我。</p>
+  </header>
+
+  <div class="phones">
+    <div class="phone"><b><span class="tag a">A</span> 學弟的手機＝王奶奶（長者）</b><span>只勾「長者」。地址：花蓮縣光復鄉大進村</span></div>
+    <div class="phone"><b><span class="tag b">B</span> 你的手機＝柳博喧</b><span>管理員＋志工＋家屬＋長者。地址：花蓮縣光復鄉中華路（已設好）。選單有「管理｜首頁｜服務」三個分頁</span></div>
+    <div class="phone"><b><span class="tag pc">後台</span> 筆電</b><span>正式站開「事件處置工作區」，先在畫面上點一下（瀏覽器規定點過才能出聲）</span></div>
+  </div>
+
+  <section>
+    <h2>開始前（5 分鐘）</h2>
+    <div class="pre">
+      <ol>
+        <li>後台左側「系統狀態」：0 紅燈；「LINE 推播額度」剩 50 則以上。</li>
+        <li>手機 A（原本叫 Ting）已改名「王奶奶」、地址大進村；照護關係「王奶奶 → 柳博喧」也已經有了。到「人員管理」看一眼確認即可。</li>
+        <li>你的帳號在「人員管理」<b>把「長者」勾回來</b>（第 12–13 步要用你的手機回報平安），「基層員工」可以取消。</li>
+        <li>確認左下是「日常模式」；工作區沒有舊的求救（有就逐筆「確認已處理」）。</li>
+        <li>兩支手機都<b>不要</b>分享位置、不要在 App 按「用我現在的位置」（會把地址改成現在所在地，附近志工就收不到）。</li>
+      </ol>
+    </div>
+  </section>
+
+  <section>
+    <h2>一、日常功能</h2>
+    <p class="budget">推播 0 則：這段都是回覆，不算額度</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>誰</th><th>做什麼</th><th>應該看到</th><th>結果</th><th>問題</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1</td><td class="who"><span class="tag a">A</span></td><td>選單「首頁」→「我很好」</td><td class="exp">馬上收到回覆（<q>太好了</q>或<q>收到</q>）；後台「總覽」今日平安 +1</td><td class="ok"><label><input type="checkbox" id="c1">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">2</td><td class="who"><span class="tag a">A</span></td><td>選單「首頁」→「查詢物資」</td><td class="exp">打開 LINE 裡的 App，最上面是最近的 AED（光復分駐所等，有導航），接著是收容所（標「內政部公告」）</td><td class="ok"><label><input type="checkbox" id="c2">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">3</td><td class="who"><span class="tag a">A</span></td><td>選單「服務」→「急救問答」，在 App 問「有人昏倒沒有呼吸怎麼辦？」</td><td class="exp">條列步驟＋來源，最後附上最近的 AED。開頭不應該是<q>⚠️ AI 生成暫時無法使用</q></td><td class="ok"><label><input type="checkbox" id="c3">OK</label></td><td class="note">App 打不開＝LINE Login channel 還沒 Published；會用 Gemini 額度，只問這一題</td></tr>
+        <tr><td class="n">4</td><td class="who"><span class="tag b">B</span></td><td>選單「管理」→「決策中心」</td><td class="exp">兩張卡：第一張有「緊急求救」「🏠 收容人數」「待派需求」；第二張有「🚨 緊急模式」</td><td class="ok"><label><input type="checkbox" id="c4">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">5</td><td class="who"><span class="tag b">B</span></td><td>選單「服務」→「我的中心」→ 按「長輩狀況」</td><td class="exp">王奶奶的卡片，顯示今天的打卡狀態，有「請附近志工去看看」</td><td class="ok"><label><input type="checkbox" id="c5">OK</label></td><td class="note"></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>二、一鍵求救（決賽重頭戲）</h2>
+    <p class="budget">推播約 5 則</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>誰</th><th>做什麼</th><th>應該看到</th><th>結果</th><th>問題</th></tr></thead>
+      <tbody>
+        <tr><td class="n">6</td><td class="who"><span class="tag a">A</span></td><td>選單「首頁」→「需要幫忙」→ 確認卡按「🆘 對，我需要立即救援」</td><td class="exp"><q>🆘 已收到您的求助！已通知您的 1 位照護聯絡人。也通知了附近 1 位志工。並已通知社區管理員。</q></td><td class="ok"><label><input type="checkbox" id="c6">OK</label></td><td class="note">「附近 0 位」＝兩支手機地址不在 2 公里內</td></tr>
+        <tr><td class="n">7</td><td class="who"><span class="tag b">B</span></td><td>看手機</td><td class="exp">幾秒內收到 3 則：家屬通知、<q>🆘 附近有人需要幫忙</q>（有距離和最近 AED，<b>沒有電話</b>）、管理員卡</td><td class="ok"><label><input type="checkbox" id="c7">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">8</td><td class="who"><span class="tag pc">後台</span></td><td>看螢幕，記下按下後幾秒響</td><td class="exp">30 秒內頂端紅條＋響鈴，地圖紅色 SOS 跳動；按「查看」跳到王奶奶：脆弱度、最近 AED、家屬電話、「通報 119」</td><td class="ok"><label><input type="checkbox" id="c8">OK</label></td><td class="note">秒數：</td></tr>
+        <tr><td class="n">9</td><td class="who"><span class="tag b">B</span></td><td>在「附近有人需要幫忙」卡按「🏃 我過去」</td><td class="exp">B 收到「由您處理這筆求救」卡（電話、導航、已到場、處理完成）；<b>A 收到</b><q>🙋 管理員 柳博喧 已經在處理您的求救</q>；B 不會再收到一則說自己受理了</td><td class="ok"><label><input type="checkbox" id="c9">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">10</td><td class="who"><span class="tag b">B</span></td><td>按「📍 已到場」，再按「✅ 處理完成」</td><td class="exp">A 收到<q>✅ 您的緊急求助已確認處理完成</q>；後台這筆變已結案，任務紀錄有受理、到場、結案時間</td><td class="ok"><label><input type="checkbox" id="c10">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">11</td><td class="who"><span class="tag a">A</span></td><td>再按一次選單「需要幫忙」並確認送出，接著按回覆下方的「我沒事了（取消求救）」→ 確認</td><td class="exp">A 收到已取消；B 與後台收到<q>王奶奶 取消了求救</q></td><td class="ok"><label><input type="checkbox" id="c11">OK</label></td><td class="note">誤按示範，可跳過省 3 則推播</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>三、緊急模式與點名</h2>
+    <p class="budget">推播約 4 則（切換兩次，各推給兩支手機）</p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>#</th><th>誰</th><th>做什麼</th><th>應該看到</th><th>結果</th><th>問題</th></tr></thead>
+      <tbody>
+        <tr><td class="n">12</td><td class="who"><span class="tag b">B</span></td><td>「決策中心」第二張卡 →「🚨 緊急模式」→ 確定啟動（或後台左下切換）</td><td class="exp">兩支手機都收到<q>🚨 請回報是否平安</q>大卡片（我平安／需要幫忙／查詢物資）</td><td class="ok"><label><input type="checkbox" id="c12">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">13</td><td class="who"><span class="tag b">B</span></td><td>按「✅ 我平安」。<b>A 先不要按</b></td><td class="exp">後台工作區左欄「點名」分頁（點一下更新）：平安 1；王奶奶在「還沒回」，名單依脆弱度排序</td><td class="ok"><label><input type="checkbox" id="c13">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">14</td><td class="who"><span class="tag b">B</span></td><td>「服務」→「我的中心」→「長輩狀況」</td><td class="exp">王奶奶卡片寫<q>⏳ 還沒回報這次是否平安</q>，有「✅ 我確認他平安」</td><td class="ok"><label><input type="checkbox" id="c14">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">15</td><td class="who"><span class="tag b">B</span></td><td>按「✅ 我確認他平安」</td><td class="exp"><q>✅ 已回報 王奶奶 這次平安，社區看得到。</q>；後台點名王奶奶變平安、標示家屬確認</td><td class="ok"><label><input type="checkbox" id="c15">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">16</td><td class="who"><span class="tag b">B</span></td><td>「服務」→「我的中心」→ 志工卡「📋 附近點名」</td><td class="exp">列出附近還沒回的長者（陳金蓮、劉來發、許阿珠、楊再興、蔡玉蘭之中），按一位的「確認平安」</td><td class="ok"><label><input type="checkbox" id="c16">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">17</td><td class="who"><span class="tag pc">後台</span></td><td>左側「災情摘要」→ 上方「值班紀事」輸入「測試：台9線坍方」→ 記錄</td><td class="exp">顯示「已記錄」；下方時間軸最上面出現這句，標「紀事」</td><td class="ok"><label><input type="checkbox" id="c17">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">18</td><td class="who"><span class="tag b">B</span></td><td>「決策中心」→「🏠 收容人數」</td><td class="exp">收容所卡片，可按 +1／+5／−1，後台同步</td><td class="ok"><label><input type="checkbox" id="c18">OK</label></td><td class="note">沒有收容所卡片就記下來</td></tr>
+        <tr><td class="n">19</td><td class="who"><span class="tag pc">後台</span></td><td>左側「災情摘要」</td><td class="exp">點名人數、一鍵求救的受理／到場／結案時間、時間軸；「匯出完整 CSV」可下載</td><td class="ok"><label><input type="checkbox" id="c19">OK</label></td><td class="note"></td></tr>
+        <tr><td class="n">20</td><td class="who"><span class="tag b">B</span></td><td>「決策中心」第二張卡 →「✅ 解除緊急模式」→ 確定（或後台切回）</td><td class="exp">兩支手機收到<q>✅ 緊急模式已解除</q></td><td class="ok"><label><input type="checkbox" id="c20">OK</label></td><td class="note">一定要切回，不然會一直在緊急模式</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>收尾</h2>
+    <div class="pre">
+      <ol>
+        <li>後台工作區「緊急求救」：剩下的逐筆「確認已處理」。</li>
+        <li>「志工申請」頁最下面演練工具 →「清除演練資料」。</li>
+        <li>「系統狀態」看推播額度剩幾則，寫在這裡：＿＿＿＿ 則。</li>
+      </ol>
+    </div>
+    <p class="callout"><b>如果哪一步跟「應該看到」不一樣：</b>先截圖，在問題欄寫下實際看到的字，繼續做下一步，不要卡住。全部做完把截圖和這張單子給我。</p>
+    <div class="issues">其他問題：</div>
+  </section>
+</div>
+
+<script>
+(function () {
+  var boxes = Array.prototype.slice.call(document.querySelectorAll('td.ok input'));
+  var saved = {};
+  try { saved = JSON.parse(localStorage.getItem('line-test-sheet') || '{}'); } catch (e) { saved = {}; }
+  function paint(box) { box.closest('tr').classList.toggle('done', box.checked); }
+  boxes.forEach(function (box) {
+    box.checked = !!saved[box.id]; paint(box);
+    box.addEventListener('change', function () {
+      saved[box.id] = box.checked; paint(box);
+      try { localStorage.setItem('line-test-sheet', JSON.stringify(saved)); } catch (e) { /* 存不了就只在這頁有效 */ }
+    });
+  });
+})();
+</script>
+
+</body>
+</html>
