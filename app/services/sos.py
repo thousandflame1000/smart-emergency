@@ -25,6 +25,25 @@ ESCALATE_MINUTES = 10  # 求救這麼久還沒人受理，再叫管理員一次
 ARRIVAL_MINUTES = 20   # 受理這麼久還沒回報到場，提醒管理員（可能被耽擱，要改派或打電話問）
 
 
+def open_sos_requesters(db: Session) -> set[str]:
+    """還有未結案求救的人。早上打卡按過「需要幫忙」的長者，求救結案或取消後就不再算「求助中」，
+    不然長者狀態、總覽、決策中心會整天掛著紅色的緊急求助。"""
+    rows = db.query(CommunityNeed.requester_id).filter(CommunityNeed.need_type == "sos",
+                                                       CommunityNeed.status == "open").all()
+    return {str(uid) for (uid,) in rows}
+
+
+def close_help_alerts(db: Session, need: CommunityNeed) -> None:
+    """求救結案或取消時，這位長者還掛著的「需要幫忙」警報一起標成已處理（總覽的未解警報才會消失）。"""
+    from app.models.alert import Alert
+    if need.requester_id is None or str(need.requester_id) in open_sos_requesters(db):
+        return
+    db.query(Alert).filter(Alert.elderly_id == need.requester_id, Alert.alert_type == "help_needed",
+                           Alert.status == "sent").update({"status": "resolved", "resolved_at": now_utc()},
+                                                          synchronize_session=False)
+    db.commit()
+
+
 def spot(need: CommunityNeed) -> tuple[float, float] | None:
     """求救的位置：求救單上的座標，沒有就用求助者登記的位置。"""
     if need.lat is not None and need.lng is not None:
@@ -411,6 +430,7 @@ def cancel_by_requester(db: Session, need_id: str, user: User) -> dict:
     _tell_family(db, need, text)
     if need.requester is not None:
         rollcall.note(db, need.requester, "ok")
+    close_help_alerts(db, need)
     return {"ok": True}
 
 

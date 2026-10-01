@@ -1131,6 +1131,8 @@ def resolve_sos(need_id: str, db: Session, *, actor_label: str = "manager") -> d
         details={},
     )
     db.commit()
+    from app.services.sos import close_help_alerts
+    close_help_alerts(db, need)
     notify_requester(
         need,
         "✅ 您的緊急求助已確認處理完成。如果您仍然需要協助，請再傳「需要幫忙」；"

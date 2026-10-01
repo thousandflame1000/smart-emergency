@@ -313,8 +313,10 @@ def _admin_snapshot(db: Session) -> dict:
     apps = db.query(VolunteerApplication).filter(VolunteerApplication.status == "pending").count()
     unanswered = db.query(DailyCheckin).filter(DailyCheckin.date == today_tw(),
                                                DailyCheckin.status.in_(["pending", "no_response"])).count()
-    helping = db.query(DailyCheckin).filter(DailyCheckin.date == today_tw(),
-                                            DailyCheckin.status == "help_needed").count()
+    from app.services.sos import open_sos_requesters
+    still_open = open_sos_requesters(db)
+    helping = sum(1 for (elder_id,) in db.query(DailyCheckin.elderly_id).filter(
+        DailyCheckin.date == today_tw(), DailyCheckin.status == "help_needed").all() if str(elder_id) in still_open)
     unwell = db.query(DailyCheckin).filter(DailyCheckin.date == today_tw(),
                                            DailyCheckin.status == "unwell").count()
     return {

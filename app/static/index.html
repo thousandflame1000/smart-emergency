@@ -218,7 +218,7 @@ tr.sos-row td{background:#fff1f3}tr.sos-row td:first-child{box-shadow:inset 3px 
 'use strict';
 const $=id=>document.getElementById(id);
 const pageTitles={overview:'總覽',elderly:'長者狀態','analytics-page':'趨勢分析','ai-page':'AI 助手'};
-const statuses={ok:['平安','b-ok'],safe:['平安','b-ok'],confirmed_safe:['已確認安全','b-ok'],no_response:['未回應','b-danger'],help_needed:['緊急求助','b-danger'],unwell:['身體不舒服','b-warning'],pending:['等待中','b-warning'],not_sent:['未發送','b-muted']};
+const statuses={ok:['平安','b-ok'],safe:['平安','b-ok'],confirmed_safe:['已確認安全','b-ok'],no_response:['未回應','b-danger'],help_needed:['緊急求助','b-danger'],help_resolved:['求助已處理','b-ok'],unwell:['身體不舒服','b-warning'],pending:['等待中','b-warning'],not_sent:['未發送','b-muted']};
 let elders=[];
 function esc(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
 function badge(status){const [label,cls]=statuses[status]||[status||'未知','b-muted'];return `<span class="badge ${cls}">${esc(label)}</span>`;}
@@ -241,7 +241,7 @@ function askConfirm(title,text,okLabel='確認'){
 function skeletonRows(count,cols){return Array.from({length:count},()=>`<tr>${Array.from({length:cols},()=>'<td><span class="skel"></span></td>').join('')}</tr>`).join('');}
 // 狀態分組：畫面上的篩選是「平安／需要關注／等待／未發送」四組，底層可能對應多個原始狀態值。
 // 緊急求助自成一組並永遠排最前面，不和未回應、不舒服或平安的人混在同一堆。
-const GROUPS={sos:['help_needed'],risk:['no_response','unwell'],pending:['pending'],not_sent:['not_sent'],ok:['ok','safe','confirmed_safe']};
+const GROUPS={sos:['help_needed'],risk:['no_response','unwell'],pending:['pending'],not_sent:['not_sent'],ok:['ok','safe','confirmed_safe','help_resolved']};
 const GROUP_LABEL={sos:'緊急求助',risk:'需要關注',pending:'等待回覆',not_sent:'未發送',ok:'平安'};
 const STATUS_RANK={help_needed:0,no_response:1,unwell:2,pending:3,not_sent:4};
 function byUrgency(rows){return rows.slice().sort((a,b)=>(STATUS_RANK[a.today_status||'not_sent']??5)-(STATUS_RANK[b.today_status||'not_sent']??5));}
@@ -297,7 +297,7 @@ function renderElderCards(rows){
   });
 }
 // 狀態顏色：地圖上唯一的資訊就是位置＋顏色，所以跟清單的徽章用同一套語意。
-const PIN={ok:'#18765a',safe:'#18765a',confirmed_safe:'#18765a',no_response:'#c9364b',help_needed:'#c9364b',pending:'#9a6500',not_sent:'#9ca9a0'};
+const PIN={ok:'#18765a',help_resolved:'#18765a',safe:'#18765a',confirmed_safe:'#18765a',no_response:'#c9364b',help_needed:'#c9364b',pending:'#9a6500',not_sent:'#9ca9a0'};
 let elderView='list',elderMap=null,elderPins=null;
 function setElderView(view){
   elderView=view;

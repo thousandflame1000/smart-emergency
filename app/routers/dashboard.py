@@ -74,10 +74,13 @@ def get_summary(db: Session = Depends(get_db)):
     """今日狀況總覽"""
     today = today_tw()
 
+    from app.services.sos import open_sos_requesters
     checkins = db.query(DailyCheckin).filter(DailyCheckin.date == today).all()
+    still_open = open_sos_requesters(db)
     status_counts = {}
     for c in checkins:
-        status_counts[c.status] = status_counts.get(c.status, 0) + 1
+        status = "help_resolved" if c.status == "help_needed" and str(c.elderly_id) not in still_open else c.status
+        status_counts[status] = status_counts.get(status, 0) + 1
 
     active_alerts = db.query(Alert).filter(Alert.status == "sent").count()
     open_needs    = db.query(CommunityNeed).filter(CommunityNeed.status == "open").count()
@@ -193,6 +196,8 @@ def list_elderly(db: Session = Depends(get_db)):
         .all()
     )
 
+    from app.services.sos import open_sos_requesters
+    still_open = open_sos_requesters(db)
     result = []
     for e in elderly:
         checkin = (
@@ -207,7 +212,9 @@ def list_elderly(db: Session = Depends(get_db)):
             "address": e.address,
             "lat":     e.lat,
             "lng":     e.lng,
-            "today_status": checkin.status if checkin else "not_sent",
+            # 早上按過需要幫忙、求救已經結案：不再是紅色的緊急求助
+            "today_status": ("help_resolved" if checkin and checkin.status == "help_needed" and str(e.id) not in still_open
+                             else checkin.status if checkin else "not_sent"),
             "responded_at": str(checkin.responded_at) if checkin and checkin.responded_at else None,
         })
 
