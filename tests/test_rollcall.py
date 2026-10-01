@@ -456,3 +456,17 @@ def test_no_morning_check_in_card_while_a_roll_call_is_running(db, monkeypatch):
     db.query(SystemConfig).filter(SystemConfig.key == "mode").update({"value": "normal"}); db.commit()
     checkin_svc.send_daily_checkins()
     assert db.query(DailyCheckin).count() == 1, "解除緊急模式後照常打卡"
+
+
+def test_emergency_commands_have_visible_buttons(db, line_outbox):
+    """不能只靠打字：附近點名、收容人數、解除緊急模式都要在卡片上按得到。"""
+    mk(db, "管理員兼志工", ["admin", "volunteer"], "U-boss2", lat=23.66, lng=121.42)
+    say("U-boss2", "決策中心")
+    card = _last_card(line_outbox)
+    assert '"label": "🏠 收容人數"' in card and '"label": "🚨 緊急模式"' in card and "解除緊急模式" not in card
+    _emergency(db)
+    say("U-boss2", "決策中心")
+    card = _last_card(line_outbox)
+    assert '"label": "✅ 解除緊急模式"' in card and '"label": "🚨 緊急模式"' not in card
+    say("U-boss2", "我的中心")
+    assert '"label": "📋 附近點名"' in _last_card(line_outbox)

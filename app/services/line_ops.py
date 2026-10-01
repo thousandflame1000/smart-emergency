@@ -182,6 +182,7 @@ def _volunteer_center_cards(paused: bool = False) -> list[dict]:
             ["附近有人求救時不會通知您。回到家或方便時請按「恢復支援」。" if paused else
              "附近 2 公里內有人求救時會通知您（以您分享的位置計算）。人在外地時可以先暫停。"],
             [{"label": "恢復支援", "text": "恢復支援"} if paused else {"label": "暫停支援", "text": "暫停支援"},
+             {"label": "📋 附近點名", "text": "附近點名"},
              {"label": "更新我的位置", "text": "分享位置"}],
         ),
         bubble(
@@ -418,6 +419,7 @@ def decision_center(event, db: Session, user: User) -> None:
              *([f"⚠️ 系統需處理：{'、'.join(stats['problems'])}"] if stats["problems"] else [])],
             [{"label": "緊急求救", "text": "求救單"},
              *([{"label": "災時點名", "text": "點名"}] if roll else []),
+             {"label": "🏠 收容人數", "text": "收容"},
              {"label": "待派需求", "text": "待派"},
              {"label": "完整總覽", "text": "總覽"}],
         ),
@@ -427,7 +429,8 @@ def decision_center(event, db: Session, user: User) -> None:
              "高風險個案先由緊急求救與待派需求進入處置。"],
             [{"label": "待審志工", "text": "待審"},
              {"label": "開啟後台", "text": "後台"},
-             {"label": "🚨 緊急模式", "text": "緊急模式"},
+             ({"label": "✅ 解除緊急模式", "text": "解除緊急模式"} if roll
+              else {"label": "🚨 緊急模式", "text": "緊急模式"}),
              {"label": "操作說明", "text": "幫助"}],
         ),
     ]))
