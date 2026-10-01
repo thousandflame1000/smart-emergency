@@ -208,3 +208,37 @@ def test_cleanup_closes_the_stand_in_sos_so_the_console_stops_ringing(db, line_o
     assert db.query(CommunityNeed).filter(CommunityNeed.need_type == "sos", CommunityNeed.status == "open").count() == 0
     assert c.get("/api/dashboard/summary").json()["open_sos"] == [], "清掉演練後後台不能再響"
     assert not db.query(User).filter(User.name.like(rehearsal_kit.MARK + "%"), User.is_active == True).count()  # noqa: E712
+
+
+def test_cleanup_disables_stand_ins_when_the_database_refuses_an_unexpected_way(db, line_outbox, monkeypatch):
+    """正式站「清除演練資料」曾回 500、整個按鈕失效：刪除遇到任何資料庫錯誤都改成停用替身。"""
+    from sqlalchemy.exc import OperationalError
+    from app.services import user_deletion
+    me = mk(db, "測試者", ["volunteer", "admin"], "U-me", lat=23.66, lng=121.42)
+    c = client()
+    assert c.post(f"/api/dashboard/rehearsal/family-alert?tester_id={me.id}&status=unwell").status_code == 200
+
+    def refuse(_db, _user):
+        raise OperationalError("DELETE FROM users", {}, Exception("server closed the connection"))
+    monkeypatch.setattr(user_deletion, "delete_user_data", refuse)
+    r = c.post("/api/dashboard/rehearsal/cleanup")
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    assert not db.query(User).filter(User.name.like(rehearsal_kit.MARK + "%"), User.is_active == True).count()  # noqa: E712
+
+
+def test_deleting_a_need_the_database_refuses_answers_409_not_500(db, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    from sqlalchemy.orm import Session
+    elder = mk(db, "阿嬤", ["elderly"], None)
+    need = CommunityNeed(requester_id=elder.id, need_type="water", status="cancelled")
+    db.add(need); db.commit()
+    real_delete = Session.delete
+
+    def refuse(self, obj):
+        if isinstance(obj, CommunityNeed):
+            raise OperationalError("DELETE FROM community_needs", {}, Exception("constraint"))
+        return real_delete(self, obj)
+    monkeypatch.setattr(Session, "delete", refuse)
+    r = client().delete(f"/api/resources/needs/{need.id}")
+    assert r.status_code == 409 and "無法刪除" in r.text

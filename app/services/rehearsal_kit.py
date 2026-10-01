@@ -158,7 +158,11 @@ def cleanup(db: Session) -> dict:
         try:
             delete_user_data(db, user)
             removed += 1
-        except UserDeletionBlocked:
+        except Exception as exc:
+            # 有稽核紀錄刪不掉是預期的；其他資料庫錯誤（正式站曾因此回 500，按鈕整個失效）也一樣改成停用，
+            # 演練一定清得掉，原因留在日誌裡查
+            if not isinstance(exc, UserDeletionBlocked):
+                log.exception("rehearsal cleanup could not delete stand-in %s; disabling instead", user.id)
             db.rollback()
             user.is_active = False
             db.query(CareRelation).filter(CareRelation.elderly_id == user.id).delete(synchronize_session=False)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 import json
@@ -401,6 +401,12 @@ def delete_need(need_id: str, db: Session = Depends(get_db), _principal: dict | 
         # 這裡明確接住轉成乾淨的錯誤，不要再重演一次。
         db.rollback()
         raise HTTPException(status_code=409, detail="這筆需求仍有派遣稽核紀錄關聯，無法刪除，只能取消。")
+    except SQLAlchemyError:
+        # 正式站曾對「媒合後取消」的需求回 500；資料庫拒絕刪除時一律回清楚的訊息，原因寫進日誌
+        import logging
+        logging.getLogger(__name__).exception("deleting need %s failed", need_id)
+        db.rollback()
+        raise HTTPException(status_code=409, detail="這筆需求有關聯紀錄，無法刪除；已取消的需求會在 7 天後從工作區消失。")
     return {"message": "已永久刪除"}
 
 
