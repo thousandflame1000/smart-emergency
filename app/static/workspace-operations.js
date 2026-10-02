@@ -40,7 +40,7 @@ function taskInStage(node,stage){
 function setCatalog(tab){
   catalogTab=tab;$('objects').hidden=tab!=='objects';$('operation-tasks').hidden=tab!=='tasks';$('operation-resources').hidden=tab!=='resources';$('operation-rollcall').hidden=tab!=='rollcall';
   for(const key of ['objects','tasks','resources','rollcall'])$('catalog-'+key).classList.toggle('active',tab===key);
-  document.querySelector('.object-add').hidden=tab!=='objects';
+  document.querySelector('.object-add').hidden=tab==='rollcall';  // 點名是名單，不在這裡新增物件
   $('catalog-title').textContent={objects:'物件',tasks:'需求與任務',resources:'物資回報',rollcall:'災時點名'}[tab];renderObjects();
   if(tab==='rollcall')loadRollcall();
 }
