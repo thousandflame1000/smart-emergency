@@ -22,6 +22,7 @@ EMBED_MODEL        = "gemini-embedding-001"   # 3072-dim
 GENERATE_MODEL     = "gemini-2.5-flash"
 SIMILARITY_THRESHOLD = 0.70
 TOP_K              = 3
+MAX_CONTEXT        = 5   # 一次問兩三件事（燒燙傷以及中風）時，每件事的段落都要進得來
 _client_instance = None
 GEMINI_TIMEOUT_MS = 20_000
 
@@ -112,7 +113,9 @@ def query(question: str) -> dict:
     except Exception:
         log.exception("Gemini embedding failed; falling back to keyword search")
         return _keyword_answer(question)
-    results = _search(embedding)
+    # 向量搜尋取「整句最像的」，問兩件事時前幾名常被同一件事佔滿；
+    # 關鍵字搜尋是逐段比標題，每件事都撈得到。兩邊合併，關鍵字命中的放前面。
+    results = _merge(_keyword_search(question), _search(embedding))
 
     if not results:
         return {
@@ -127,6 +130,7 @@ def query(question: str) -> dict:
 只能根據以下提供的資料回答，不可超出範圍、不可自行推測。
 回答要簡短、具體、實用，適合在緊急情況下用手機快速閱讀，控制在 300 字以內。
 回答會顯示在 LINE，不支援 Markdown：不要用 **、#、* 這類符號，用純文字與 1. 2. 3. 條列。
+問題如果同時問好幾件事，每一件分開回答。
 若資料不足，請如實說明並建議撥打 1966 或 119。
 
 參考資料：
@@ -243,6 +247,16 @@ def sync_builtin_documents() -> dict:
 # ──────────────────────────────────────────────
 # 向量搜尋（SQLite 版：numpy cosine）
 # ──────────────────────────────────────────────
+def _merge(*groups: list[dict]) -> list[dict]:
+    seen, merged = set(), []
+    for group in groups:
+        for row in group:
+            if row["content"] not in seen:
+                seen.add(row["content"])
+                merged.append(row)
+    return merged[:MAX_CONTEXT]
+
+
 def _search(query_embedding: list[float]) -> list[dict]:
     db = SessionLocal()
     try:

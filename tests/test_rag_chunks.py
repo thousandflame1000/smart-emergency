@@ -230,3 +230,29 @@ def test_gemini_client_has_a_request_timeout(monkeypatch):
     monkeypatch.setattr(rag_svc.genai, "Client", FakeClient)
     rag_svc._client()
     assert seen["http_options"].timeout == rag_svc.GEMINI_TIMEOUT_MS <= 30_000
+
+
+def test_two_topics_in_one_question_both_reach_the_ai(db, monkeypatch):
+    """「燒燙傷以及中風怎麼辦」：向量前幾名被燒燙傷佔滿時，中風的段落仍要交給 AI，不能回「資料中沒有中風」。"""
+    from app.config import settings
+    from app.models.knowledge import KnowledgeChunk
+    from app.services import rag
+    _seed_kb(db)
+    burn = "【燒燙傷：沖、脫、泡、蓋、送】\n1. 沖：立刻用流動的冷水沖 15 到 30 分鐘。"
+    db.add(KnowledgeChunk(content=burn, source="急救指引：燒燙傷", category="first_aid"))
+    db.commit()
+    monkeypatch.setattr(settings, "EXTERNAL_AI_ENABLED", True)
+    monkeypatch.setattr(rag, "_embed", lambda text: [1.0])
+    monkeypatch.setattr(rag, "_search", lambda embedding: [{"content": burn, "source": "急救指引：燒燙傷"}])
+    prompts = []
+
+    class Models:
+        def generate_content(self, model, contents):
+            prompts.append(contents)
+            return type("R", (), {"text": "ok"})()
+
+    monkeypatch.setattr(rag, "_client", lambda: type("C", (), {"models": Models()})())
+    result = rag.query("燒燙傷 以及 中風怎麼辦")
+    assert result["has_answer"] and result["chunks_used"] == 2
+    assert "燒燙傷" in prompts[0] and "FAST" in prompts[0]
+    assert set(result["sources"]) == {"急救指引：燒燙傷", "急救指引"}
