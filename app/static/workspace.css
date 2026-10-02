@@ -126,8 +126,9 @@ footer { min-height: 35px; display: flex; gap: 16px; align-items: center; justif
 .rc.ok, .rc-chip.ok { background:#e2f2e9; color:#13603f; } .rc.warn, .rc-chip.warn { background:#fff3d6; color:#8a4b0f; }
 .rc.urgent, .rc-chip.urgent { background:#ffe8e4; color:#a52d20; } .rc.pending, .rc-chip.pending { background:#eceff1; color:#37474f; }
 .rollcall-actions { display:grid; gap:6px; margin-bottom:6px; } .rollcall-since { margin:4px 0 0; font-size:12px; } .rollcall-actions button, .rollcall-actions a { width:100%; white-space:normal; text-align:center; }
-.rollcall-row { display:flex; align-items:center; gap:4px; border-bottom:1px solid #eef1ee; }
-.rollcall-row .rc-person { flex:1; min-width:0; border:0; border-radius:0; justify-content:flex-start; text-align:left; white-space:normal; padding:8px 2px; background:transparent; }
+/* 側欄只有 180–220px：姓名獨佔一行，撥號與標記平安放到下一行靠右，姓名不會被擠成直排 */
+.rollcall-row { display:flex; flex-wrap:wrap; align-items:center; justify-content:flex-end; gap:4px; padding-bottom:6px; border-bottom:1px solid #eef1ee; }
+.rollcall-row .rc-person { flex:1 1 100%; min-width:0; border:0; border-radius:0; justify-content:flex-start; text-align:left; white-space:normal; padding:8px 2px; background:transparent; }
 .rollcall-row > button:not(.rc-person), .rollcall-row > a { flex:none; width:auto; font-size:12px; padding:4px 8px; }
 .rc-chip { flex:none; padding:2px 6px; border-radius:4px; font-size:11px; min-width:44px; text-align:center; }
 .task-text { min-width:0; overflow-wrap:anywhere; } .task-text small { display:block; color:var(--muted); margin-top:3px; font-size:11px; }
