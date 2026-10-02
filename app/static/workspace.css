@@ -114,8 +114,10 @@ footer { min-height: 35px; display: flex; gap: 16px; align-items: center; justif
 .operations-bar .sos-stage { color:#9f3024; background:#fff0ed; }
 .operations-bar .sos-stage.active { color:#fff; background:var(--red); }
 #observed-at { margin-left:auto; }
-.catalog-tabs { margin-top:12px; } .catalog-tabs button { flex:1; min-width:0; padding:6px 4px; }
-.tab-count { margin-left:4px; padding:0 6px; border-radius:9px; background:#b3261e; color:#fff; font-size:11px; line-height:17px; }
+/* 側欄只有 180–220px：四個分頁等寬，數字貼在右上角，不擠開文字 */
+.catalog-tabs { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:16px 0 0; }
+.catalog-tabs button { position:relative; min-width:0; padding:6px 2px; font-size:13px; }
+.tab-count { position:absolute; top:-8px; right:-3px; z-index:1; min-width:17px; padding:0 4px; border-radius:9px; background:#b3261e; color:#fff; font-size:11px; line-height:17px; text-align:center; }
 /* 災時點名 */
 .rollcall-summary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; margin:6px 0 8px; }
 .rollcall-summary .rc { display:flex; justify-content:space-between; padding:6px 8px; border-radius:5px; font-size:12px; border:1px solid transparent; min-height:auto; }
@@ -123,7 +125,7 @@ footer { min-height: 35px; display: flex; gap: 16px; align-items: center; justif
 .rollcall-summary .rc b { font-size:15px; } .rollcall-summary .rc.wide { grid-column:1 / -1; }
 .rc.ok, .rc-chip.ok { background:#e2f2e9; color:#13603f; } .rc.warn, .rc-chip.warn { background:#fff3d6; color:#8a4b0f; }
 .rc.urgent, .rc-chip.urgent { background:#ffe8e4; color:#a52d20; } .rc.pending, .rc-chip.pending { background:#eceff1; color:#37474f; }
-.rollcall-actions { display:grid; gap:6px; margin-bottom:6px; } .rollcall-since { margin:4px 0 0; font-size:12px; } .rollcall-actions button, .rollcall-actions a { width:100%; }
+.rollcall-actions { display:grid; gap:6px; margin-bottom:6px; } .rollcall-since { margin:4px 0 0; font-size:12px; } .rollcall-actions button, .rollcall-actions a { width:100%; white-space:normal; text-align:center; }
 .rollcall-row { display:flex; align-items:center; gap:4px; border-bottom:1px solid #eef1ee; }
 .rollcall-row .rc-person { flex:1; min-width:0; border:0; border-radius:0; justify-content:flex-start; text-align:left; white-space:normal; padding:8px 2px; background:transparent; }
 .rollcall-row > button:not(.rc-person), .rollcall-row > a { flex:none; width:auto; font-size:12px; padding:4px 8px; }

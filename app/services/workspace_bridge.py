@@ -49,7 +49,7 @@ def _aed_for(need, requester) -> str | None:
     return one_line(lat, lng)
 
 
-CLOSED_VISIBLE_DAYS = 7      # 已完成／已取消的需求在即時現況上保留幾天
+CLOSED_VISIBLE_DAYS = 1      # 已完成／已取消的需求只留最近 24 小時（同災情摘要的範圍），舊演練與他處的歷史不上地圖
 CHECKIN_HISTORY_DAYS = 30    # 即時現況看的打卡範圍（脆弱度只看 7 天，最近一次打卡通常在幾天內）
 CARE_RELATION_ZH = {"family": "家屬", "volunteer": "志工", "neighbor": "鄰居", "other": "聯絡人"}
 
