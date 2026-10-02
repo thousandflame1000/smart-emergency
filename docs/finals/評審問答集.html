@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>設計願景與問答集</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #5b6570; --line: #d9dee4; --soft: #eef1f4;
+  --l1: #2f8f5b; --l2: #3b7dd8; --l3: #7a5bd0; --l4: #c8871c; --l5: #d0592b; --l6: #b3261e;
+  --ok: #e6f6ee; --no: #fde9ea;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171b; --card: #1c2026; --text: #e6e9ed; --muted: #9aa4ae; --line: #303740; --soft: #23282f;
+    --ok: #18302a; --no: #3a2124;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171b; --card: #1c2026; --text: #e6e9ed; --muted: #9aa4ae; --line: #303740; --soft: #23282f;
+  --ok: #18302a; --no: #3a2124;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 15px/1.65 "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif; }
+main { max-width: 880px; margin: 0 auto; padding: 24px 16px 64px; }
+h1 { font-size: 24px; margin: 0 0 4px; }
+h2 { font-size: 20px; margin: 40px 0 12px; padding-bottom: 6px; border-bottom: 2px solid var(--line); }
+h3 { font-size: 16px; margin: 22px 0 8px; }
+p { margin: 8px 0; }
+.sub { color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin: 10px 0; }
+.pitch { border-left: 4px solid var(--l1); font-size: 16px; }
+.tbl { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; background: var(--card); font-size: 14px; }
+th, td { border: 1px solid var(--line); padding: 7px 9px; text-align: left; vertical-align: top; }
+th { background: var(--soft); white-space: nowrap; }
+ul, ol { margin: 6px 0; padding-left: 22px; } li { margin: 3px 0; }
+.toc { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+.toc a { text-decoration: none; color: #fff; padding: 4px 10px; border-radius: 14px; font-size: 13px; font-weight: 700; }
+.bar { position: sticky; top: 0; z-index: 2; background: var(--bg); padding: 8px 0; display: flex; gap: 8px; flex-wrap: wrap; }
+.bar button { font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--text); cursor: pointer; }
+.lv { border-radius: 10px; padding: 2px 0 6px; }
+.lv-head { display: flex; align-items: center; gap: 10px; margin: 36px 0 8px; }
+.lv-head .badge { color: #fff; font-weight: 800; padding: 3px 10px; border-radius: 6px; font-size: 14px; white-space: nowrap; }
+.lv-head h2 { margin: 0; border: 0; padding: 0; }
+details { background: var(--card); border: 1px solid var(--line); border-left-width: 4px; border-radius: 8px; margin: 8px 0; }
+summary { cursor: pointer; padding: 10px 12px; font-weight: 700; list-style: none; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸ "; color: var(--muted); }
+details[open] summary::before { content: "▾ "; }
+.ans { padding: 0 14px 12px 14px; }
+.ans .say { background: var(--ok); border-radius: 6px; padding: 8px 10px; margin: 4px 0 8px; }
+.ans .dont { background: var(--no); border-radius: 6px; padding: 6px 10px; margin: 8px 0 0; font-size: 14px; }
+.ans .show { color: var(--muted); font-size: 14px; }
+.L1 { border-left-color: var(--l1); } .B1 { background: var(--l1); }
+.L2 { border-left-color: var(--l2); } .B2 { background: var(--l2); }
+.L3 { border-left-color: var(--l3); } .B3 { background: var(--l3); }
+.L4 { border-left-color: var(--l4); } .B4 { background: var(--l4); }
+.L5 { border-left-color: var(--l5); } .B5 { background: var(--l5); }
+.L6 { border-left-color: var(--l6); } .B6 { background: var(--l6); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>設計願景與評審問題集</h1>
+<p class="sub">回答前先講一句結論，再指給評審看畫面。所有數字都來自系統或計畫書的出處，不要臨場加碼。</p>
+
+<h2>一、設計願景：社會資本</h2>
+
+<h3>30 秒版本（開場或被問「你們的理念」時用）</h3>
+<div class="card pitch">
+慈濟在賑災現場最常遇到的狀況是：物資送到了社區，卻不知道該先送給誰。<br>
+研究告訴我們，決定一個社區災後能多快站起來的，不是倉庫裡有多少物資，而是平常人與人之間的連結，也就是<b>社會資本</b>。<br>
+所以我們做的不是另一個物資系統，而是<b>把鄰里關係變成災時找得到人、救得到人的能力</b>：平常每天按一個按鈕，讓家人、鄰居志工和公所一直看得見每一位長者；災難來時，同一份資料直接告訴我們誰最孤立、誰沒有回應、誰離他最近可以趕過去。
+</div>
+
+<h3>三個證據（被追問「為什麼是社會資本」時用）</h3>
+<div class="tbl"><table>
+<tr><th>證據</th><th>內容</th><th>跟我們的關係</th></tr>
+<tr><td>Aldrich &amp; Meyer (2015)<br><span class="sub">計畫書引用 [2]</span></td><td>回顧東日本大地震、卡崔娜颶風等案例：社區復原快慢的關鍵是平時的人際連結，不是物資儲備量。</td><td>系統的核心設計就是平時累積連結，災時拿來用。</td></tr>
+<tr><td>阪神大地震</td><td>日本防災宣導常引用：從倒塌房屋被救出的人，大多數是自己、家人或鄰居救出來的，靠消防等公部門救出的只占少數。</td><td>第一個趕到的通常是鄰居，所以求救先通知 2 公里內的志工。</td></tr>
+<tr><td>1995 芝加哥熱浪<br><span class="sub">Klinenberg《Heat Wave》</span></td><td>死亡集中在獨居、跟外界沒有往來的長者。</td><td>脆弱度把「沒有照顧聯絡人」直接加分，最孤立的人最先被看見。</td></tr>
+</table></div>
+<p class="sub">只講「大多數」、「集中在」，不要背精確百分比，以免被追問出處。</p>
+
+<h3>三種社會資本，系統各自怎麼做（這張表最能接住「社會資本」）</h3>
+<div class="tbl"><table>
+<tr><th>類型</th><th>指的是</th><th>系統怎麼建立、怎麼使用</th></tr>
+<tr><td><b>結合型</b><br>bonding</td><td>家人、親近的人</td><td>「邀請家人」綁定照護關係；打卡 1 小時沒回先通知家屬；點名結果、求救進度都推播給家屬。</td></tr>
+<tr><td><b>橋接型</b><br>bridging</td><td>社區裡不同群體之間的連結，例如鄰居志工</td><td>求救通知 2 公里內最多 5 名志工；志工用「附近點名」上門確認；長者和家屬也能從 LINE 直接申請成為志工。</td></tr>
+<tr><td><b>連結型</b><br>linking</td><td>與公部門、資源的連結</td><td>公所、管理員開啟緊急模式並核准派遣；一鍵通報 119；內建內政部收容所與衛福部 AED 資料。</td></tr>
+</table></div>
+
+<h3>願景的四個重點</h3>
+<ol>
+  <li><b>把「缺乏社會資本」變成可以計算的優先順序。</b>脆弱度 0–28 分，其中照顧聯絡人 0 人加 6 分、1 人加 3 分。最孤立的人在派遣時被排在前面。</li>
+  <li><b>平時養、災時用。</b>每天打卡同時維持「有人在注意你」的連結，也讓資料保持在最新狀態。災時不必臨時發問卷、重新登記。</li>
+  <li><b>科技不取代人。</b>每一次通報的終點都是一個人去敲門。系統只負責回答三件事：誰該去、去哪裡、誰先。</li>
+  <li><b>人做最後決定。</b>派遣只產生建議，必須由管理員核准。系統定位是電腦輔助決策工具。</li>
+</ol>
+
+<h3>計畫書其他要對齊的說法</h3>
+<ul>
+  <li>主題：慈善類主題一「以賑災為主，研發備災、賑災所需相關產品」。打卡定位為<b>備災資料基礎建設</b>。</li>
+  <li>SDGs：3（健康與福祉）、11.5（降低災害死亡與損失）、11.b（綜合性防災政策）。</li>
+  <li>推廣三階段：原型展示（目前）→ 社區試辦 → 接軌政府系統。</li>
+  <li>誠實邊界：目前是原型、尚無試辦數據；脆弱度權重是初始的啟發式設定，要靠試辦資料校正。<b>計畫書自己寫了這件事，被問時大方承認。</b></li>
+</ul>
+
+<h2>二、問題集（由易到難）</h2>
+<div class="bar">
+  <button type="button" onclick="document.querySelectorAll('details').forEach(d=>d.open=true)">全部展開</button>
+  <button type="button" onclick="document.querySelectorAll('details').forEach(d=>d.open=false)">全部收合（練習用）</button>
+</div>
+<div class="toc">
+  <a href="#lv1" class="B1">Lv1 暖身</a><a href="#lv2" class="B2">Lv2 實用操作</a><a href="#lv3" class="B3">Lv3 價格市場</a>
+  <a href="#lv4" class="B4">Lv4 技術可靠</a><a href="#lv5" class="B5">Lv5 理念深挖</a><a href="#lv6" class="B6">Lv6 極難陷阱</a>
+</div>
+
+<!-- Lv1 -->
+<div class="lv-head" id="lv1"><span class="badge B1">Lv1</span><h2>暖身：一定會問</h2></div>
+
+<details class="L1"><summary>1. 用一句話說你們在做什麼？</summary><div class="ans">
+<div class="say">用長者已經在用的 LINE，平時每天確認長者平安，災時用同一份資料決定先救誰、派誰去。</div></div></details>
+
+<details class="L1"><summary>2. 使用者是誰？</summary><div class="ans">
+<div class="say">四種角色：獨居長者、家屬、社區志工、管理員（公所、社工、里長）。一個帳號可以同時有多種身分。</div></div></details>
+
+<details class="L1"><summary>3. 為什麼用 LINE？</summary><div class="ans">
+<div class="say">長者已經會用，不用另外裝 App、不用帳號密碼。全部操作都是按鈕，不必打字。</div></div></details>
+
+<details class="L1"><summary>4. 跟「賑災」主題有什麼關係？不是長照嗎？</summary><div class="ans">
+<div class="say">我們做的是賑災。平時打卡是備災的資料基礎：災時要知道誰住哪裡、誰最脆弱、誰最近狀況不好，這份名單必須平常就保持新鮮。</div>
+<div class="dont">不要說「我們兩種都做」，聽起來會像四不像。</div></div></details>
+
+<details class="L1"><summary>5. 現在做到什麼程度？</summary><div class="ans">
+<div class="say">系統已經部署在雲端，LINE 官方帳號正式上線，今天就是現場直接操作。目前是原型，下一步是找一個村辦公室試辦。</div></div></details>
+
+<!-- Lv2 -->
+<div class="lv-head" id="lv2"><span class="badge B2">Lv2</span><h2>實用與操作</h2></div>
+
+<details class="L2"><summary>6. 長者要學什麼？</summary><div class="ans">
+<div class="say">加 LINE 好友就好。選單有三顆大按鈕：「我很好」、「需要幫忙」、「查詢物資」。</div></div></details>
+
+<details class="L2"><summary>7. 災害發生時，系統實際做什麼？</summary><div class="ans">
+<div class="say">
+① 管理員切成緊急模式，每位長者收到「請回報是否平安」。<br>
+② 沒回的人依脆弱度排序，志工用「附近點名」上門確認。<br>
+③ 30、90 分鐘系統自動再問一次，並向管理員回報進度。<br>
+④ 有人按「需要幫忙」，2 公里內的志工收到通知，第一個按「我過去」的人受理，後台同時響鈴。</div>
+<p class="show">→ 現場示範：點名、求救流程</p></div></details>
+
+<details class="L2"><summary>8. 長者沒回應怎麼辦？</summary><div class="ans">
+<div class="say">沒回不等於平安。1 小時沒回通知家屬，3 小時沒回通知志工上門；如果家屬和志工都沒收到通知，就改通知管理員。</div></div></details>
+
+<details class="L2"><summary>9. 沒有智慧型手機的長者呢？</summary><div class="ans">
+<div class="say">他們一樣在點名名單上，畫面會標示「未綁 LINE」，旁邊有撥號鍵。志工打電話或上門後，可以替他回報平安或需要協助。</div>
+<div class="dont">計畫書寫的「語音回撥打卡」是中期方向，還沒做，不要說成已完成。</div></div></details>
+
+<details class="L2"><summary>10. 志工要做什麼？</summary><div class="ans">
+<div class="say">志工只要依序按卡片上的三個按鈕：「我過去」、「已到場」、「處理完成」。長者的電話只會給受理的那一位志工。</div></div></details>
+
+<details class="L2"><summary>11. 跟縣市的緊急救援按鈕有什麼不同？</summary><div class="ans">
+<div class="say">救援按鈕要買設備，一戶一個月約 NT$1,500（新竹縣一般戶自付 NT$450，占三成）。我們用長者原本就在用的 LINE，同一筆預算可以照顧更多人。需要 24 小時偵測的高風險個案，仍建議搭配救援按鈕，兩者互補，不是取代。</div></div></details>
+
+<!-- Lv3 -->
+<div class="lv-head" id="lv3"><span class="badge B3">Lv3</span><h2>價格、市場、量產</h2></div>
+
+<details class="L3"><summary>12. 一個社區一個月要花多少錢？</summary><div class="ans">
+<div class="say">以一個鄉 200 位長者計算，每月約 NT$1,800，平均每位長者約 NT$9。最大的成本是 LINE 推播（每天打卡約 6,000 則／月）；使用者按按鈕後的回覆不收費。一次災害大約多 370 則推播。</div>
+<p class="show">→ 出處與逐項計算：docs/COST.md</p></div></details>
+
+<details class="L3"><summary>13. 誰會買單？</summary><div class="ans">
+<div class="say">公所、社區發展協會、長照據點（全台超過 4,700 處 C 據點）。日本已有「要援護者名簿」制度，平時的長者資料在災時提供給在地防災組織，證明這個做法在制度上被接受。</div></div></details>
+
+<details class="L3"><summary>14. 換一個鄉鎮要多久？</summary><div class="ans">
+<div class="say">開 LINE 官方帳號並部署，半天；匯入長者名冊、設定管理員，半天；再辦一到兩次社區說明會。收容所和 AED 不用自己建，系統已經內建全國 5,928 處收容所和 15,937 台 AED。</div>
+<p class="show">→ 可以現場用評審所在的位置示範「查詢物資」</p></div></details>
+
+<details class="L3"><summary>15. 長者為什麼願意每天打卡？會不會用幾天就不用了？</summary><div class="ans">
+<div class="say">每天只要按一下，而且有人會回應：沒按，家人就會收到通知。打卡同時是一種「有人在注意你」的關心。實際回應率要等試辦才知道，這會是我們第一個追蹤的數字。</div></div></details>
+
+<details class="L3"><summary>16. 為什麼歷屆得獎多是硬體，你們只有軟體？實體在哪裡？</summary><div class="ans">
+<div class="say">長者手上的手機就是硬體，不必再買任何設備。軟體複製到下一個鄉鎮幾乎沒有成本，量產難易是我們最大的優勢。今天現場就是真機操作。</div></div></details>
+
+<!-- Lv4 -->
+<div class="lv-head" id="lv4"><span class="badge B4">Lv4</span><h2>技術與可靠性</h2></div>
+
+<details class="L4"><summary>17. 斷網怎麼辦？（必考）</summary><div class="ans">
+<div class="say"><b>一句結論：系統不靠長者有網路。長者沒回應，本身就會觸發有人去找他。</b><br>
+① <b>長者斷網或沒電：</b>沒回的人在點名名單上排最前面，志工照順序上門，再用自己的手機替他回報。<br>
+② <b>整區斷網：</b>颱風有預警，斷網前就開緊急模式先點名，再把未回名單匯出 CSV（含地址、電話、脆弱度）印成紙本，挨家挨戶走。<br>
+③ 伺服器在雲端，不在災區。公所或避難所只要有一台能上網的設備，例如行動基地台車，就能繼續調度。網路恢復後，推播自動重送。</div>
+<div class="dont">不要說：能離線、有簡訊備援、有 mesh 網路，這三個都沒做。</div></div></details>
+
+<details class="L4"><summary>18. LINE 當機怎麼辦？</summary><div class="ans">
+<div class="say">電腦後台不依賴 LINE，管理員照樣可以調度。重要通知先存進佇列，LINE 恢復後自動重送，最多 5 次。</div></div></details>
+
+<details class="L4"><summary>19. 停電怎麼辦？</summary><div class="ans">
+<div class="say">做法跟斷網一樣：手機有電就能用；沒電的長者會出現在沒回的名單上，由志工上門確認。平時匯出的紙本名單也能派上用場。</div></div></details>
+
+<details class="L4"><summary>20. AI 會不會亂講急救知識？</summary><div class="ans">
+<div class="say">AI 只根據知識庫裡的官方 SOP 回答（美國心臟學會 AHA、消防署、衛福部），相似度不夠就不硬答，會建議撥打 1966 或 119。AI 只回答問題，不參與調度。AI 斷線時，系統改用關鍵字搜尋，直接摘錄 SOP 原文。</div></div></details>
+
+<details class="L4"><summary>21. 派遣是 AI 決定的嗎？</summary><div class="ans">
+<div class="say">不是。用匈牙利演算法計算全體最佳配對，計分項目有緊急度、脆弱度、物資類型、距離和志工手上的任務量，每一分都講得出來源。結果只是建議，一定要管理員核准。</div></div></details>
+
+<details class="L4"><summary>22. 怎麼證明系統真的能跑？</summary><div class="ans">
+<div class="say">今天現場就在操作正式系統。另有 748 項自動化測試；匈牙利演算法另外用窮舉法驗證過確實是最佳解。</div></div></details>
+
+<!-- Lv5 -->
+<div class="lv-head" id="lv5"><span class="badge B5">Lv5</span><h2>理念深挖：社會資本</h2></div>
+
+<details class="L5"><summary>23. 你們說的社會資本是什麼？系統裡哪裡有？</summary><div class="ans">
+<div class="say">社會資本就是人與人之間的連結，以及這些連結帶來的互助。社會資本分三種，系統各有對應：<br>
+<b>結合型</b>：家人綁定，長者有狀況先找家人。<br>
+<b>橋接型</b>：鄰居志工，求救先通知 2 公里內的志工。<br>
+<b>連結型</b>：公所、119、政府資料。</div>
+<p class="show">→ 用上面那張三型表回答</p></div></details>
+
+<details class="L5"><summary>24. 按一個按鈕，算什麼社會資本？</summary><div class="ans">
+<div class="say">按鈕本身不是社會資本，按鈕之後來的人才是。長者沒按，家人會收到通知；長者按了「需要幫忙」，鄰居志工會上門。系統做的是讓這些關係在需要的時候被叫得動。</div></div></details>
+
+<details class="L5"><summary>25. 用科技管理關懷，會不會讓人更少見面，反而削弱社會資本？</summary><div class="ans">
+<div class="say">我們刻意讓每一次通報的終點都是「一個人去敲門」，而不是系統自動結案。系統不取代上門關懷，只是讓有限的人力先去最需要的地方。而且長者、家屬都能從 LINE 直接申請當志工，系統同時也是社區招募互助的入口。</div></div></details>
+
+<details class="L5"><summary>26. 用「照顧聯絡人數」代表社會資本，不會太簡化嗎？</summary><div class="ans">
+<div class="say">會，它只是一個代理指標。我們用它來找出「最孤立、最容易被遺漏的人」，這點有芝加哥熱浪的研究支持。它不是在測量整個社區的社會資本有多少。權重目前是初始設定，試辦時會根據實際回訪結果校正。</div></div></details>
+
+<details class="L5"><summary>27. 怎麼知道社會資本有沒有提升？</summary><div class="ans">
+<div class="say">目前還沒有試辦數據，這是誠實的答案。試辦時會追蹤四個數字：<br>
+① 每位長者綁定的家屬和志工人數；<br>
+② 長者沒回應到有人上門的時間；<br>
+③ 災時點名的完成率；<br>
+④ 志工人數的成長。<br>
+這四個數字系統本來就有記錄，不需要另外收集。</div></div></details>
+
+<details class="L5"><summary>28. 脆弱度權重為什麼是 4、5、6 分？</summary><div class="ans">
+<div class="say">這是初始的啟發式設定，反映「照顧網絡薄弱的人災時風險較高」這個假設，不是實驗結果。計畫書裡也寫明了這一點。試辦會記錄派遣結果和回訪狀況，再用資料校正。</div>
+<div class="dont">不要硬掰權重有理論依據。</div></div></details>
+
+<!-- Lv6 -->
+<div class="lv-head" id="lv6"><span class="badge B6">Lv6</span><h2>極難、陷阱題</h2></div>
+
+<details class="L6"><summary>29. 沒有試辦數據，憑什麼說有效？</summary><div class="ans">
+<div class="say">我們不說已經證明有效。我們能證明的是兩件事：<br>
+① <b>做法有制度先例</b>：日本的要援護者名簿、我孫子市用 LINE 做安否確認，都已經正式運作。<br>
+② <b>系統做得到</b>：今天現場可以操作完整流程。<br>
+有沒有效要靠試辦來驗證，這也是比賽之後的第一件事。</div></div></details>
+
+<details class="L6"><summary>30. 脆弱度高的人先救，其他人是不是就要等？公平嗎？</summary><div class="ans">
+<div class="say">有三點：<br>
+① <b>緊急求救不排隊</b>：按「需要幫忙」會直接通知附近志工，先到先受理，不經過脆弱度排序。<br>
+② 物資派遣的評分裡，<b>緊急度的權重最大（12–60 分），脆弱度最多 28 分</b>，所以真正緊急的人不會被脆弱度蓋過。<br>
+③ 最後由管理員核准，可以手動改派。<br>
+資源有限時，排序本來就一定會發生；我們讓排序看得見、講得出理由。</div></div></details>
+
+<details class="L6"><summary>31. 系統派錯人、送錯物資出了事，誰負責？</summary><div class="ans">
+<div class="say">系統定位是電腦輔助決策工具，跟消防指揮調度系統一樣：每一筆建議都要有職權的管理員核准，畫面上也會顯示評分依據。所有後台操作都有紀錄，查得到誰在什麼時間做了什麼。</div></div></details>
+
+<details class="L6"><summary>32. 平時的健康資料，災時交給陌生志工，不怕個資外洩？</summary><div class="ans">
+<div class="say">志工要經過管理員核准。附近志工收到求救時只看得到姓名和地點，電話只給受理的那一位。點名名單只在緊急模式期間提供給志工，解除後就不再提供。使用者也可以自己刪除帳號，技術紀錄保留 30 到 90 天後自動清除。</div></div></details>
+
+<details class="L6"><summary>33. 社區本來就沒有志工、社會資本很薄弱，系統還有用嗎？</summary><div class="ans">
+<div class="say">系統變不出人，這點我們承認。但越是這樣的地方越需要它：<br>
+① 管理員至少看得到「誰最孤立、誰沒回應」，公部門的人力可以先投入那裡；<br>
+② LINE 裡就能申請當志工，系統本身就是招募入口。<br>
+系統沒辦法創造社會資本，但能讓有限的社會資本不被浪費。</div></div></details>
+
+<details class="L6"><summary>34. 大規模災害時大家同時求救，系統會不會掛？</summary><div class="ans">
+<div class="say">LINE 訊息先存再處理，不會因為瞬間湧入而遺失；求救單在後台依等待時間排列，一眼看得到。真正的瓶頸是人力，不是系統，所以才需要依脆弱度排序，讓有限的人先去最需要的地方。</div>
+<div class="dont">不要說「可以承受幾萬人」，我們沒做過壓力測試。</div></div></details>
+
+<details class="L6"><summary>35. 跟日本的要援護者名簿有什麼不同？是不是抄的？</summary><div class="ans">
+<div class="say">理念相同，這正好證明方向對。差別有兩點：<br>
+① 名簿通常是定期更新的名冊；我們每天都在更新，誰昨天沒回、誰最近求助過，今天就反映在排序上。<br>
+② 名簿只是一份名單；我們把名單直接接到點名、求救和派遣。</div>
+<div class="dont">不要說程式碼或演算法參考了國外系統。</div></div></details>
+
+<details class="L6"><summary>36. LINE 改收費、改政策或停止服務怎麼辦？</summary><div class="ans">
+<div class="say">核心資料和計算都在我們自己的伺服器上，LINE 只是入口。電腦後台和網頁表單本來就不依賴 LINE。要加其他通道，只需要多接一個入口，核心不用改。</div>
+<div class="dont">不要說已經有其他通道。</div></div></details>
+
+<details class="L6"><summary>37. 政府已經編列預算做獨居長者數位化，你們的空間在哪裡？</summary><div class="ans">
+<div class="say">政府的長照、防災、志工調度系統分屬不同單位，彼此不互通。我們補的是中間那一層：讓平時的長照資料，在災時能直接被防災和志工調度使用。我們也不要求對方換掉原本的系統，可以用 API 或 CSV 交換資料。</div></div></details>
+
+<h2>三、被問倒時</h2>
+<div class="card">
+<p>誠實說「這個目前還沒做」，接著說下一步會怎麼做。千萬不要硬掰。</p>
+<p><b>目前還沒做的</b>（被問到時這樣答）：</p>
+<ul>
+  <li>試辦與實際數據 → 比賽後找一個村辦公室試辦</li>
+  <li>離線、簡訊、語音回撥 → 計畫書列為中期方向</li>
+  <li>中央氣象署警報自動建議啟動緊急模式 → 下一步</li>
+  <li>硬體按鈕、跌倒偵測 → 系統已經有受理流程，硬體只是多一個觸發來源</li>
+  <li>多個單位共用同一個後台 → 下一步</li>
+  <li>壓力測試、異地備援 → 正式導入前補上</li>
+</ul>
+</div>
+
+</main>
+</body>
+</html>
